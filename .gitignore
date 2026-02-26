@@ -26,5 +26,8 @@ Thumbs.db
 # Research docs (internal reference only)
 docs/research/
 
+# Integration test guides (internal)
+docs/testing/
+
 # AgentFlow data
 .agentflow/cache/
