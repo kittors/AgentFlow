@@ -136,6 +136,7 @@ PII数据: [姓名, 身份证, 手机, 邮箱]
 |------|------|
 | INTERACTIVE（交互） | 警告 → 用户确认 → 记录后继续/取消 |
 | DELEGATED（委托） | 警告 → 降级为交互 → 用户决策 |
+| TURBO（持续执行） | 记录风险但不中断 → 继续执行 → 完成报告中列出 |
 | 外部工具输出 | 安全→正常，可疑→提示，高风险→警告 |
 
 **DO:** Run EHRB detection before ALL modification operations. Warn the user immediately when risk is detected.
@@ -299,7 +300,8 @@ R3/R4 评估流程（CRITICAL - 两阶段）:
 确认选项:
   1. 交互式执行：关键决策点等待你确认。（推荐）
   2. 全自动执行：自动完成所有阶段，仅遇到风险时暂停。
-  3. 改需求后再执行。
+  3. 持续执行：全流程自动完成所有任务，多轮审查与测试，完成后输出完整报告。
+  4. 改需求后再执行。
 ```
 
 ---
@@ -313,13 +315,28 @@ R3/R4 评估流程（CRITICAL - 两阶段）:
 | R3 标准流程 | G4 路由判定 或 ~auto/~plan | 评估→确认→DESIGN(含多方案对比)→DEVELOP→KB同步→完成 |
 | R4 架构级流程 | G4 路由判定 | 评估→确认→EVALUATE(深度)→DESIGN(多方案+架构评审)→DEVELOP(分阶段)→KB同步→完成 |
 | 直接执行 | ~exec（已有方案包） | 选包→DEVELOP→KB同步→完成 |
+| Combo执行 | ~exec <需求> | DESIGN→确认→DEVELOP→KB同步→完成 |
 
 **升级条件:** R1→R2: 超出预期/EHRB; R2→R3: 架构级影响; R3→R4: 系统级重构
 
 ```yaml
-INTERACTIVE（默认）: 按阶段链顺序执行，方案选择和失败处理时 ⛔ END_TURN。
-DELEGATED（~auto委托）: 用户确认后，阶段间自动推进，遇EHRB中断。
+INTERACTIVE（默认，选项1）: 按阶段链顺序执行，方案选择和失败处理时 ⛔ END_TURN。
+DELEGATED（~auto委托，选项2）: 用户确认后，阶段间自动推进，遇EHRB中断。
 DELEGATED_PLAN（~plan委托）: 同DELEGATED，但方案设计完成后停止。
+TURBO（持续执行，选项3）: 全流程自动执行，持续工作直到所有任务完成，完成后输出完整报告:
+  - EHRB: 检测到风险照常记录，但不 END_TURN，继续执行
+  - 方案选择: 自动选择推荐方案，不等待用户
+  - reviewer: 所有复杂度级别均强制执行 reviewer 审查
+  - 失败重试: max_attempts = 5（其他模式为3）
+  - 完成后: 自动执行一轮完整的 review + test 循环
+  - 若 review 发现问题: 自动修复 → 再次 review + test（最多3轮）
+  - 完成报告: 包含以下内容:
+    • 完成了哪些任务
+    • 解决了什么问题
+    • 测试了哪些内容及结果
+    • 审查中发现并修复的问题
+    • 规避了哪些风险（EHRB 记录）
+    • 修改的文件清单
 ```
 
 ### 阶段执行步骤（R2/R3/R4 确认后，CRITICAL）
@@ -348,7 +365,7 @@ DEVELOP: 开发实施
 ### 状态变量定义
 ```yaml
 ROUTE_LEVEL: R0|R1|R2|R3|R4
-WORKFLOW_MODE: INTERACTIVE|DELEGATED|DELEGATED_PLAN
+WORKFLOW_MODE: INTERACTIVE|DELEGATED|DELEGATED_PLAN|TURBO
 CURRENT_STAGE: EVALUATE|DESIGN|DEVELOP|COMPLETE
 TASK_COMPLEXITY: simple|moderate|complex|architect  # architect 为 AgentFlow 新增级别
 KB_SKIPPED: true|false
@@ -367,12 +384,14 @@ GRAPH_MODE: true|false  # AgentFlow 增强
   - R0 回复中
   - R1 执行中（除 EHRB）
   - DELEGATED 模式阶段间
+  - TURBO 模式中（完全不中断，包括 EHRB）
   - 工具路径执行中
 ```
 
 ### 任务状态符号
 ```yaml
-⬜ 待执行 | 🔄 执行中 | ✅ 完成 | ❌ 失败 | ⏭️ 跳过 | ⚠️ 降级执行
+显示符号: ⬜ 待执行 | 🔄 执行中 | ✅ 完成 | ❌ 失败 | ⏭️ 跳过 | ⚠️ 降级执行
+tasks.md checklist: [ ] 待执行 | [/] 执行中 | [x] 完成 | [!] 失败
 ```
 
 ---
@@ -401,8 +420,11 @@ GRAPH_MODE: true|false  # AgentFlow 增强
 | ~rlm 命令 | functions/rlm.md |
 | ~validatekb 命令 | functions/validatekb.md |
 | ~exec 命令 | functions/exec.md |
+| ~exec <需求> (combo) | functions/exec.md, stages/design.md, stages/develop.md |
 | ~auto 命令 | 同 R3 标准流程 |
-| ~plan 命令 | 同 R3 标准流程 (停在 DESIGN) |
+| ~plan 命令 | functions/plan.md |
+| ~plan list/show | functions/plan.md |
+| ~plan <需求> | functions/plan.md, stages/design.md |
 
 ### 按需读取规则
 ```yaml
@@ -422,10 +444,10 @@ R1 验收:
   - 功能行为符合预期（若可快速验证）
 
 R2/R3 验收:
-  - 所有 tasks.md 中的任务标记 ✅
+  - 所有 tasks.md 中的任务标记 [x]
   - 代码编译/lint 通过
   - 新增/修改的测试通过
-  - EHRB 无遗留风险
+  - EHRB 无遗留风险（TURBO 模式除外，风险记录在完成报告中）
 
 R4 验收（AgentFlow 增强）:
   - R2/R3 所有标准

@@ -63,7 +63,7 @@ R3/R4 标准流程（含多方案对比）:
 
   步骤10: 方案选择
     - INTERACTIVE: 输出方案对比 → ⛔ END_TURN → 等待用户选择
-    - DELEGATED: 自动选择推荐方案
+    - DELEGATED / TURBO: 自动选择推荐方案
 ```
 
 ### Phase 3: 详细规划
@@ -79,7 +79,7 @@ R3/R4 标准流程（含多方案对比）:
 
 步骤13: 阶段切换
   - 输出方案摘要和任务清单
-  - DELEGATED: 自动进入 DEVELOP
+  - DELEGATED / TURBO: 自动进入 DEVELOP
   - DELEGATED_PLAN: ⛔ END_TURN（规划完成，不进入开发）
   - INTERACTIVE: 询问是否进入 DEVELOP → ⛔ END_TURN
 ```
