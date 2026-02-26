@@ -1,0 +1,11 @@
+{
+    "venvPath": ".",
+    "venv": ".venv",
+    "pythonVersion": "3.12",
+    "include": [
+        "agentflow",
+        "tests"
+    ],
+    "reportMissingImports": false,
+    "reportMissingModuleSource": false
+}

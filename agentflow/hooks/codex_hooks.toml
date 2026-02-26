@@ -1,0 +1,3 @@
+# Codex CLI hooks for AgentFlow
+[notify]
+command = "agentflow --check-update --silent"

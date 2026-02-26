@@ -1,0 +1,24 @@
+{
+  "hooks": [
+    {
+      "type": "PreToolUse",
+      "description": "agentflow-safety-check",
+      "command": "echo 'AgentFlow EHRB check passed'"
+    },
+    {
+      "type": "PostToolUse",
+      "description": "agentflow-progress-snapshot",
+      "command": "echo 'AgentFlow progress recorded'"
+    },
+    {
+      "type": "PostMessage",
+      "description": "agentflow-kb-sync",
+      "command": "echo 'AgentFlow KB sync check'"
+    },
+    {
+      "type": "Notification",
+      "description": "agentflow-update-check",
+      "command": "agentflow --check-update --silent"
+    }
+  ]
+}
