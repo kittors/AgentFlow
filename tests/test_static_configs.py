@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).parent.parent
 AGENTFLOW_DIR = PROJECT_ROOT / "agentflow"
 
@@ -39,9 +38,11 @@ class TestTOMLConfigs:
     def _import_tomllib(self):
         try:
             import tomllib
+
             self.tomllib = tomllib
         except ModuleNotFoundError:
             import tomli as tomllib  # type: ignore
+
             self.tomllib = tomllib
 
     def test_codex_hooks_valid_toml(self):
@@ -85,12 +86,15 @@ class TestMarkdownFiles:
         content = f.read_text()
         assert len(content) > 50
 
-    @pytest.mark.parametrize("subdir,min_files", [
-        ("functions", 5),
-        ("services", 3),
-        ("stages", 2),
-        ("rules", 3),
-    ])
+    @pytest.mark.parametrize(
+        "subdir,min_files",
+        [
+            ("functions", 5),
+            ("services", 3),
+            ("stages", 2),
+            ("rules", 3),
+        ],
+    )
     def test_subdir_has_md_files(self, subdir, min_files):
         d = AGENTFLOW_DIR / subdir
         assert d.exists(), f"{subdir}/ missing"
@@ -115,10 +119,21 @@ class TestMarkdownFiles:
         files = list(d.glob("*.md"))
         assert len(files) >= 1
 
-    @pytest.mark.parametrize("function_name", [
-        "init", "scan", "review", "plan", "exec", "auto",
-        "status", "graph", "memory", "dashboard",
-    ])
+    @pytest.mark.parametrize(
+        "function_name",
+        [
+            "init",
+            "scan",
+            "review",
+            "plan",
+            "exec",
+            "auto",
+            "status",
+            "graph",
+            "memory",
+            "dashboard",
+        ],
+    )
     def test_function_md_nonempty(self, function_name):
         f = AGENTFLOW_DIR / "functions" / f"{function_name}.md"
         assert f.exists(), f"functions/{function_name}.md missing"

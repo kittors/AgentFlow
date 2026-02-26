@@ -6,9 +6,7 @@ updating the project knowledge base accordingly.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from datetime import datetime
 
 
 def find_project_root(start: Path | None = None) -> Path | None:
@@ -46,12 +44,14 @@ def scan_modules(project_root: Path, source_dirs: list[str] | None = None) -> li
                 ts_files = list(child.rglob("*.ts"))
                 all_files = py_files + ts_files
                 if all_files:
-                    modules.append({
-                        "name": child.name,
-                        "path": str(child.relative_to(project_root)),
-                        "file_count": len(all_files),
-                        "files": [str(f.relative_to(project_root)) for f in all_files],
-                    })
+                    modules.append(
+                        {
+                            "name": child.name,
+                            "path": str(child.relative_to(project_root)),
+                            "file_count": len(all_files),
+                            "files": [str(f.relative_to(project_root)) for f in all_files],
+                        }
+                    )
     return modules
 
 

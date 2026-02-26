@@ -6,8 +6,8 @@ Provides create, list, prune, and export operations for session memory.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 def get_sessions_dir(project_root: Path) -> Path:
@@ -60,12 +60,14 @@ def list_sessions(project_root: Path) -> list[dict]:
     sessions: list[dict] = []
     for f in sorted(sessions_dir.glob("*.md"), reverse=True):
         stat = f.stat()
-        sessions.append({
-            "id": f.stem,
-            "path": str(f),
-            "size_bytes": stat.st_size,
-            "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
-        })
+        sessions.append(
+            {
+                "id": f.stem,
+                "path": str(f),
+                "size_bytes": stat.st_size,
+                "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            }
+        )
     return sessions
 
 

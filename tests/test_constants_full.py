@@ -1,9 +1,6 @@
 """Comprehensive tests for _constants.py — path helpers, CLI detection, install method."""
 
-from pathlib import Path
 from unittest import mock
-
-import pytest
 
 from agentflow._constants import (
     AGENTFLOW_MARKER,
@@ -21,7 +18,6 @@ from agentflow._constants import (
     is_agentflow_file,
     msg,
 )
-
 
 # ── Path helpers ──────────────────────────────────────────────────────────────
 

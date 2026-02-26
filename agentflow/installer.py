@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
-import sys
 import shutil
+import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +23,7 @@ from ._constants import (
 )
 
 # ── Windows file-locking safe operations ──────────────────────────────────────
+
 
 def _safe_remove(path: Path) -> bool:
     """Remove a file or directory, handling Windows file-locking.
@@ -44,8 +45,7 @@ def _safe_remove(path: Path) -> bool:
         aside = path.parent / f"{path.name}._agentflow_old_{ts}"
         try:
             path.rename(aside)
-            print(msg(f"  ⚠️ 文件被锁定，已重命名: {aside.name}",
-                      f"  ⚠️ File locked, renamed aside: {aside.name}"))
+            print(msg(f"  ⚠️ 文件被锁定，已重命名: {aside.name}", f"  ⚠️ File locked, renamed aside: {aside.name}"))
             return True
         except Exception:
             print(msg(f"  ⚠️ 无法移除: {path}", f"  ⚠️ Cannot remove: {path}"))
@@ -108,8 +108,12 @@ def _deploy_rules_file(target: str, cli_dir: Path) -> bool:
     source_agents_md = get_agents_md_path()
 
     if not source_agents_md.exists():
-        print(msg(f"  ⚠️ 找不到 AGENTS.md 源文件: {source_agents_md}",
-                  f"  ⚠️ AGENTS.md source not found: {source_agents_md}"))
+        print(
+            msg(
+                f"  ⚠️ 找不到 AGENTS.md 源文件: {source_agents_md}",
+                f"  ⚠️ AGENTS.md source not found: {source_agents_md}",
+            )
+        )
         return False
 
     content = source_agents_md.read_text(encoding="utf-8")
@@ -120,12 +124,10 @@ def _deploy_rules_file(target: str, cli_dir: Path) -> bool:
 
     if rules_file.exists() and not is_agentflow_file(rules_file):
         backup = backup_user_file(rules_file)
-        print(msg(f"  📦 已备份原文件: {backup.name}",
-                  f"  📦 Backed up existing file: {backup.name}"))
+        print(msg(f"  📦 已备份原文件: {backup.name}", f"  📦 Backed up existing file: {backup.name}"))
 
     _safe_write(rules_file, content)
-    print(msg(f"  ✅ {config['rules_file']} 已部署",
-              f"  ✅ {config['rules_file']} deployed"))
+    print(msg(f"  ✅ {config['rules_file']} 已部署", f"  ✅ {config['rules_file']} deployed"))
     return True
 
 
@@ -148,8 +150,7 @@ def _deploy_module_dir(target: str, cli_dir: Path) -> bool:
             shutil.copy2(source_path, dest)
             deployed += 1
 
-    print(msg(f"  ✅ 模块目录已部署 ({deployed} 个子模块)",
-              f"  ✅ Module directory deployed ({deployed} submodules)"))
+    print(msg(f"  ✅ 模块目录已部署 ({deployed} 个子模块)", f"  ✅ Module directory deployed ({deployed} submodules)"))
     return True
 
 
@@ -189,10 +190,7 @@ def _deploy_hooks(target: str, cli_dir: Path) -> bool:
 
             existing_hooks: list = existing.get("hooks", [])
             new_hooks: list = hooks_config.get("hooks", [])
-            existing_hooks = [
-                h for h in existing_hooks
-                if not h.get("description", "").startswith(PLUGIN_DIR_NAME)
-            ]
+            existing_hooks = [h for h in existing_hooks if not h.get("description", "").startswith(PLUGIN_DIR_NAME)]
             existing_hooks.extend(new_hooks)
             existing["hooks"] = existing_hooks
 
@@ -200,8 +198,7 @@ def _deploy_hooks(target: str, cli_dir: Path) -> bool:
                 json.dumps(existing, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-            print(msg(f"  ✅ Hooks 已部署 ({len(new_hooks)} 个)",
-                      f"  ✅ Hooks deployed ({len(new_hooks)})"))
+            print(msg(f"  ✅ Hooks 已部署 ({len(new_hooks)} 个)", f"  ✅ Hooks deployed ({len(new_hooks)})"))
 
     elif target == "codex":
         hooks_src = hooks_dir / "codex_hooks.toml"
@@ -214,66 +211,8 @@ def _deploy_hooks(target: str, cli_dir: Path) -> bool:
     return True
 
 
-def _deploy_codex_agents(cli_dir: Path) -> bool:
-    """Deploy AgentFlow agent roles to Codex CLI (multi-agent support).
-
-    Prompts the user whether to enable multi-agent, then:
-    1. Deploys reviewer.toml and architect.toml to ~/.codex/agents/
-    2. Merges [agents] role definitions into ~/.codex/config.toml
-    3. Enables [features] multi_agent = true
-    """
-    try:
-        import tomllib
-    except ModuleNotFoundError:
-        import tomli as tomllib  # type: ignore[no-redef]
-
-    config_file = cli_dir / "config.toml"
-
-    # Check if multi-agent is already enabled
-    already_enabled = False
-    if config_file.exists():
-        try:
-            existing = tomllib.loads(config_file.read_text(encoding="utf-8"))
-            already_enabled = existing.get("features", {}).get("multi_agent", False)
-        except Exception:
-            pass
-
-    if already_enabled:
-        print(msg("  ℹ️  多代理已启用，更新角色配置...",
-                  "  ℹ️  Multi-agent already enabled, updating roles..."))
-    elif not sys.stdin.isatty():
-        # Non-interactive mode (e.g. tests, piped input): skip prompt
-        return True
-    else:
-        # Ask user with detailed explanation
-        print()
-        print(msg("  ┌─────────────────────────────────────────────────┐",
-                  "  ┌─────────────────────────────────────────────────┐"))
-        print(msg("  │  🤖 多代理协作 (Multi-Agent, 实验性)            │",
-                  "  │  🤖 Multi-Agent Collaboration (Experimental)    │"))
-        print(msg("  └─────────────────────────────────────────────────┘",
-                  "  └─────────────────────────────────────────────────┘"))
-        print(msg("  开启后的能力:",
-                  "  When enabled:"))
-        print(msg("    • reviewer 子代理 — 自动并行审查代码安全性和质量",
-                  "    • reviewer agent — parallel code security & quality review"))
-        print(msg("    • architect 子代理 — 评估架构方案，对比多种设计",
-                  "    • architect agent — evaluate architecture, compare designs"))
-        print(msg("    • 多个子代理可并行工作，大幅加速复杂任务",
-                  "    • Multiple agents work in parallel, speeding up complex tasks"))
-        print(msg("  适用场景: 大型重构、多模块开发、代码审查",
-                  "  Best for: large refactors, multi-module dev, code review"))
-        print(msg("  注意: 此功能为实验性，可随时通过 /experimental 关闭",
-                  "  Note: Experimental feature, can be disabled via /experimental"))
-        print()
-        answer = input(msg("  是否启用多代理？(y/N): ",
-                           "  Enable multi-agent? (y/N): ")).strip().lower()
-        if answer not in ("y", "yes", "是"):
-            print(msg("  ⏭️  跳过多代理配置（后续可通过 /experimental 手动开启）",
-                      "  ⏭️  Skipped (enable later via /experimental in Codex)"))
-            return True
-
-    # 1. Deploy agent role TOML files
+def _deploy_agent_toml_files(cli_dir: Path) -> None:
+    """Deploy reviewer.toml and architect.toml to the Codex agents directory."""
     agents_src = get_agentflow_module_path() / "agents"
     agents_dest = cli_dir / "agents"
     agents_dest.mkdir(parents=True, exist_ok=True)
@@ -283,21 +222,25 @@ def _deploy_codex_agents(cli_dir: Path) -> bool:
         if src.exists():
             shutil.copy2(src, agents_dest / role_file)
 
-    print(msg("  ✅ 子代理角色已部署 (reviewer, architect)",
-              "  ✅ Agent roles deployed (reviewer, architect)"))
+    print(msg("  ✅ 子代理角色已部署 (reviewer, architect)", "  ✅ Agent roles deployed (reviewer, architect)"))
 
-    # 2. Merge agent config into config.toml
+
+def _merge_codex_config(config_file: Path) -> None:
+    """Merge [agents] role definitions and [features] multi_agent into config.toml."""
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
+
     config_text = ""
     if config_file.exists():
         config_text = config_file.read_text(encoding="utf-8")
 
-    # Parse existing config to check what's there
     try:
         existing = tomllib.loads(config_text)
     except Exception:
         existing = {}
 
-    # Build new sections to append (only if not already present)
     additions: list[str] = []
 
     # Enable multi_agent feature
@@ -306,21 +249,19 @@ def _deploy_codex_agents(cli_dir: Path) -> bool:
         if "features" not in existing:
             additions.append("\n[features]\nmulti_agent = true")
         else:
-            # features section exists but multi_agent is not set
-            config_text = config_text.replace("[features]",
-                                              "[features]\nmulti_agent = true")
+            config_text = config_text.replace("[features]", "[features]\nmulti_agent = true")
 
     # Add agent role definitions
     agents = existing.get("agents", {})
     if "reviewer" not in agents:
         additions.append(
-            '\n[agents.reviewer]\n'
+            "\n[agents.reviewer]\n"
             'description = "AgentFlow code reviewer: security, correctness, test quality analysis."\n'
             'config_file = "agents/reviewer.toml"'
         )
     if "architect" not in agents:
         additions.append(
-            '\n[agents.architect]\n'
+            "\n[agents.architect]\n"
             'description = "AgentFlow architect: architectural evaluation, dependency analysis."\n'
             'config_file = "agents/architect.toml"'
         )
@@ -329,27 +270,124 @@ def _deploy_codex_agents(cli_dir: Path) -> bool:
         config_text += "\n" + "\n".join(additions) + "\n"
         _safe_write(config_file, config_text)
 
-    print(msg("  ✅ 多代理配置已写入 config.toml",
-              "  ✅ Multi-agent config written to config.toml"))
+    print(msg("  ✅ 多代理配置已写入 config.toml", "  ✅ Multi-agent config written to config.toml"))
+
+
+def _prompt_multi_agent(config_file: Path) -> bool:
+    """Prompt the user to enable multi-agent and check existing state.
+
+    Returns ``True`` if multi-agent should be configured, ``False`` to skip.
+    """
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    if config_file.exists():
+        try:
+            existing = tomllib.loads(config_file.read_text(encoding="utf-8"))
+            if existing.get("features", {}).get("multi_agent", False):
+                print(msg("  ℹ️  多代理已启用，更新角色配置...", "  ℹ️  Multi-agent already enabled, updating roles..."))
+                return True
+        except Exception:
+            pass
+
+    if not sys.stdin.isatty():
+        return False
+
+    print()
+    print(
+        msg(
+            "  ┌─────────────────────────────────────────────────┐",
+            "  ┌─────────────────────────────────────────────────┐",
+        )
+    )
+    print(
+        msg(
+            "  │  🤖 多代理协作 (Multi-Agent, 实验性)            │",
+            "  │  🤖 Multi-Agent Collaboration (Experimental)    │",
+        )
+    )
+    print(
+        msg(
+            "  └─────────────────────────────────────────────────┘",
+            "  └─────────────────────────────────────────────────┘",
+        )
+    )
+    print(msg("  开启后的能力:", "  When enabled:"))
+    print(
+        msg(
+            "    • reviewer 子代理 — 自动并行审查代码安全性和质量",
+            "    • reviewer agent — parallel code security & quality review",
+        )
+    )
+    print(
+        msg(
+            "    • architect 子代理 — 评估架构方案，对比多种设计",
+            "    • architect agent — evaluate architecture, compare designs",
+        )
+    )
+    print(
+        msg(
+            "    • 多个子代理可并行工作，大幅加速复杂任务",
+            "    • Multiple agents work in parallel, speeding up complex tasks",
+        )
+    )
+    print(
+        msg("  适用场景: 大型重构、多模块开发、代码审查", "  Best for: large refactors, multi-module dev, code review")
+    )
+    print(
+        msg(
+            "  注意: 此功能为实验性，可随时通过 /experimental 关闭",
+            "  Note: Experimental feature, can be disabled via /experimental",
+        )
+    )
+    print()
+    answer = input(msg("  是否启用多代理？(y/N): ", "  Enable multi-agent? (y/N): ")).strip().lower()
+    if answer not in ("y", "yes", "是"):
+        print(
+            msg(
+                "  ⏭️  跳过多代理配置（后续可通过 /experimental 手动开启）",
+                "  ⏭️  Skipped (enable later via /experimental in Codex)",
+            )
+        )
+        return False
+    return True
+
+
+def _deploy_codex_agents(cli_dir: Path) -> bool:
+    """Deploy AgentFlow agent roles to Codex CLI (multi-agent support).
+
+    Prompts the user whether to enable multi-agent, then:
+    1. Deploys reviewer.toml and architect.toml to ~/.codex/agents/
+    2. Merges [agents] role definitions into ~/.codex/config.toml
+    3. Enables [features] multi_agent = true
+    """
+    config_file = cli_dir / "config.toml"
+
+    if not _prompt_multi_agent(config_file):
+        return True
+
+    _deploy_agent_toml_files(cli_dir)
+    _merge_codex_config(config_file)
     return True
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+
 def install(target: str) -> bool:
     """Install AgentFlow to a single CLI target."""
     if target not in CLI_TARGETS:
         print(msg(f"  ❌ 未知目标: {target}", f"  ❌ Unknown target: {target}"))
-        print(msg(f"  可用目标: {', '.join(CLI_TARGETS)}",
-                  f"  Available: {', '.join(CLI_TARGETS)}"))
+        print(msg(f"  可用目标: {', '.join(CLI_TARGETS)}", f"  Available: {', '.join(CLI_TARGETS)}"))
         return False
 
     config = CLI_TARGETS[target]
     cli_dir = Path.home() / config["dir"]
 
     if not cli_dir.exists():
-        print(msg(f"  ⚠️ {target} 目录不存在: {cli_dir}",
-                  f"  ⚠️ {target} directory not found: {cli_dir}"))
+        print(msg(f"  ⚠️ {target} 目录不存在: {cli_dir}", f"  ⚠️ {target} directory not found: {cli_dir}"))
         print(msg(f"  请先安装 {target}。", f"  Please install {target} first."))
         return False
 
@@ -379,16 +417,24 @@ def install_all() -> bool:
         print(msg("  未检测到任何已安装的 CLI。", "  No CLIs detected."))
         return False
 
-    print(msg(f"  检测到 {len(detected)} 个 CLI: {', '.join(detected)}",
-              f"  Detected {len(detected)} CLIs: {', '.join(detected)}"))
+    print(
+        msg(
+            f"  检测到 {len(detected)} 个 CLI: {', '.join(detected)}",
+            f"  Detected {len(detected)} CLIs: {', '.join(detected)}",
+        )
+    )
 
     success = 0
     for target in detected:
         if install(target):
             success += 1
 
-    print(msg(f"\n  完成: {success}/{len(detected)} 个目标安装成功",
-              f"\n  Done: {success}/{len(detected)} targets installed"))
+    print(
+        msg(
+            f"\n  完成: {success}/{len(detected)} 个目标安装成功",
+            f"\n  Done: {success}/{len(detected)} targets installed",
+        )
+    )
     return success > 0
 
 
@@ -406,8 +452,7 @@ def uninstall(target: str) -> bool:
     rules_file = cli_dir / config["rules_file"]
     if rules_file.exists() and is_agentflow_file(rules_file):
         _safe_remove(rules_file)
-        print(msg(f"  ✅ {config['rules_file']} 已移除",
-                  f"  ✅ {config['rules_file']} removed"))
+        print(msg(f"  ✅ {config['rules_file']} 已移除", f"  ✅ {config['rules_file']} removed"))
 
     plugin_dir = cli_dir / PLUGIN_DIR_NAME
     if plugin_dir.exists():
@@ -436,10 +481,7 @@ def uninstall(target: str) -> bool:
             try:
                 settings = json.loads(settings_file.read_text(encoding="utf-8"))
                 hooks = settings.get("hooks", [])
-                settings["hooks"] = [
-                    h for h in hooks
-                    if not h.get("description", "").startswith(PLUGIN_DIR_NAME)
-                ]
+                settings["hooks"] = [h for h in hooks if not h.get("description", "").startswith(PLUGIN_DIR_NAME)]
                 settings_file.write_text(
                     json.dumps(settings, indent=2, ensure_ascii=False),
                     encoding="utf-8",

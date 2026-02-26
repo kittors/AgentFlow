@@ -6,10 +6,8 @@ and recent session history.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from datetime import datetime, timezone
-
+from pathlib import Path
 
 _HTML_TEMPLATE = """\
 <!DOCTYPE html>
@@ -30,7 +28,8 @@ _HTML_TEMPLATE = """\
   .header {{ text-align: center; margin-bottom: 2rem; }}
   .header h1 {{ font-size: 1.8rem; margin-bottom: 0.5rem; }}
   .header .subtitle {{ color: var(--muted); }}
-  .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }}
+  .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+           gap: 1rem; margin-bottom: 2rem; }}
   .card {{ background: var(--surface); border: 1px solid var(--border);
            border-radius: 8px; padding: 1.2rem; }}
   .card .label {{ color: var(--muted); font-size: 0.85rem; margin-bottom: 0.3rem; }}

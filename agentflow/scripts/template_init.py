@@ -9,20 +9,30 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-
 # ── Project type detection ────────────────────────────────────────────────────
 
 _INDICATORS: dict[str, list[str]] = {
     "frontend": [
-        "package.json", "vite.config.ts", "next.config.js", "next.config.ts",
-        "nuxt.config.ts", "angular.json", "svelte.config.js",
+        "package.json",
+        "vite.config.ts",
+        "next.config.js",
+        "next.config.ts",
+        "nuxt.config.ts",
+        "angular.json",
+        "svelte.config.js",
     ],
     "backend": [
-        "requirements.txt", "Pipfile", "go.mod", "Cargo.toml",
-        "pom.xml", "build.gradle",
+        "requirements.txt",
+        "Pipfile",
+        "go.mod",
+        "Cargo.toml",
+        "pom.xml",
+        "build.gradle",
     ],
     "python": [
-        "pyproject.toml", "setup.py", "setup.cfg",
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
     ],
     "fullstack": [],  # detected by combination
 }

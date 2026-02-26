@@ -8,8 +8,8 @@ cached sub-agent results.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 def get_cache_dir(project_root: Path) -> Path:
@@ -66,12 +66,14 @@ def list_cache(project_root: Path) -> list[dict]:
     entries: list[dict] = []
     for f in sorted(cache_dir.iterdir()):
         if f.is_file() and not f.name.startswith("."):
-            entries.append({
-                "key": f.stem,
-                "type": f.suffix.lstrip("."),
-                "size_bytes": f.stat().st_size,
-                "path": str(f),
-            })
+            entries.append(
+                {
+                    "key": f.stem,
+                    "type": f.suffix.lstrip("."),
+                    "size_bytes": f.stat().st_size,
+                    "path": str(f),
+                }
+            )
     return entries
 
 

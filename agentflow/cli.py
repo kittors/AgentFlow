@@ -13,6 +13,7 @@ from ._constants import CLI_TARGETS, msg
 
 # ── Interactive main menu ─────────────────────────────────────────────────────
 
+
 def _divider(width: int = 40) -> None:
     print("─" * width)
 
@@ -90,8 +91,7 @@ def _interactive_main() -> None:
 
         print()
         try:
-            pause = input(msg("按 Enter 返回主菜单，输入 0 退出: ",
-                              "Press Enter to return, 0 to exit: ")).strip()
+            pause = input(msg("按 Enter 返回主菜单，输入 0 退出: ", "Press Enter to return, 0 to exit: ")).strip()
             if pause == "0":
                 return
         except (EOFError, KeyboardInterrupt):
@@ -102,27 +102,51 @@ def _interactive_main() -> None:
 
 # ── Usage ─────────────────────────────────────────────────────────────────────
 
+
 def print_usage() -> None:
     """Print usage information."""
     print("AgentFlow - Multi-CLI Agent Workflow System")
     print()
     print(msg("用法:", "Usage:"))
-    print(msg("  agentflow install <target>    安装到指定 CLI",
-              "  agentflow install <target>    Install to a specific CLI"))
-    print(msg("  agentflow install --all       安装到所有已检测的 CLI",
-              "  agentflow install --all       Install to all detected CLIs"))
-    print(msg("  agentflow uninstall <target>  从指定 CLI 卸载",
-              "  agentflow uninstall <target>  Uninstall from a specific CLI"))
-    print(msg("  agentflow uninstall --all     从所有已安装的 CLI 卸载",
-              "  agentflow uninstall --all     Uninstall from all installed CLIs"))
-    print(msg("  agentflow update              更新到最新版本",
-              "  agentflow update              Update to latest version"))
-    print(msg("  agentflow clean               清理已安装目标的缓存",
-              "  agentflow clean               Clean caches from installed targets"))
-    print(msg("  agentflow status              查看安装状态",
-              "  agentflow status              Show installation status"))
-    print(msg("  agentflow version             查看版本",
-              "  agentflow version             Show version"))
+    print(
+        msg(
+            "  agentflow install <target>    安装到指定 CLI",
+            "  agentflow install <target>    Install to a specific CLI",
+        )
+    )
+    print(
+        msg(
+            "  agentflow install --all       安装到所有已检测的 CLI",
+            "  agentflow install --all       Install to all detected CLIs",
+        )
+    )
+    print(
+        msg(
+            "  agentflow uninstall <target>  从指定 CLI 卸载",
+            "  agentflow uninstall <target>  Uninstall from a specific CLI",
+        )
+    )
+    print(
+        msg(
+            "  agentflow uninstall --all     从所有已安装的 CLI 卸载",
+            "  agentflow uninstall --all     Uninstall from all installed CLIs",
+        )
+    )
+    print(
+        msg(
+            "  agentflow update              更新到最新版本", "  agentflow update              Update to latest version"
+        )
+    )
+    print(
+        msg(
+            "  agentflow clean               清理已安装目标的缓存",
+            "  agentflow clean               Clean caches from installed targets",
+        )
+    )
+    print(
+        msg("  agentflow status              查看安装状态", "  agentflow status              Show installation status")
+    )
+    print(msg("  agentflow version             查看版本", "  agentflow version             Show version"))
     print()
     print(msg("目标:", "Targets:"))
     for name in CLI_TARGETS:
@@ -131,6 +155,7 @@ def print_usage() -> None:
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
+
 
 def main() -> None:
     """Main entry point."""
@@ -153,6 +178,7 @@ def main() -> None:
 
     if cmd == "--check-update":
         from .version_check import check_update
+
         rest_args = sys.argv[2:] if len(sys.argv) > 2 else []  # type: ignore[index]
         silent = "--silent" in rest_args
         check_update(cache_ttl_hours=24, show_version=not silent)
@@ -188,17 +214,32 @@ def main() -> None:
     elif cmd == "update":
         branch = sys.argv[2] if len(sys.argv) >= 3 else None
         update(branch)
-    elif cmd == "clean":
-        clean()
-    elif cmd == "status":
-        status()
-    elif cmd == "version":
-        from .version_check import check_update
-        check_update(show_version=True)
     else:
-        print(msg(f"未知命令: {cmd}", f"Unknown command: {cmd}"))
-        print_usage()
-        sys.exit(1)
+        # Dict dispatch for simple commands
+        def _cmd_clean() -> None:
+            clean()
+
+        def _cmd_status() -> None:
+            status()
+
+        def _cmd_version() -> None:
+            from .version_check import check_update
+
+            check_update(show_version=True)
+
+        simple_commands = {
+            "clean": _cmd_clean,
+            "status": _cmd_status,
+            "version": _cmd_version,
+        }
+
+        handler = simple_commands.get(cmd)  # type: ignore[arg-type]
+        if handler:
+            handler()
+        else:
+            print(msg(f"未知命令: {cmd}", f"Unknown command: {cmd}"))
+            print_usage()
+            sys.exit(1)
 
 
 if __name__ == "__main__":

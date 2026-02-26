@@ -1,12 +1,8 @@
 """Tests for updater.py — update, status, clean."""
 
-from pathlib import Path
 from unittest import mock
 
-import pytest
-
 from agentflow._constants import CLI_TARGETS, PLUGIN_DIR_NAME
-
 
 # ── update() ──────────────────────────────────────────────────────────────────
 
@@ -133,8 +129,8 @@ class TestClean:
         assert any(word in out for word in ("No", "无", "Nothing", "未"))
 
     def test_clean_with_cache(self, capsys, tmp_path):
-        from agentflow.updater import clean
         from agentflow._constants import AGENTFLOW_MARKER
+        from agentflow.updater import clean
 
         # Simulate codex install with cache
         cli_dir = tmp_path / ".codex"

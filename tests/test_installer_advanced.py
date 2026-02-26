@@ -1,7 +1,6 @@
 """Advanced tests for installer.py — deploy functions, safe write/remove, hooks, codex agents."""
 
 import json
-import shutil
 from pathlib import Path
 from unittest import mock
 

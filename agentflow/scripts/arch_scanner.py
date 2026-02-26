@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 # ── Thresholds ────────────────────────────────────────────────────────────────
 
 LARGE_FILE_LINES = 500
@@ -41,12 +40,14 @@ def scan_large_files(project_root: Path, source_dirs: list[str] | None = None) -
             if lines > LARGE_FILE_LINES:
                 issues.append(f"lines={lines} (>{LARGE_FILE_LINES})")
             if issues:
-                results.append({
-                    "file": str(f.relative_to(project_root)),
-                    "size_bytes": size,
-                    "lines": lines,
-                    "issues": issues,
-                })
+                results.append(
+                    {
+                        "file": str(f.relative_to(project_root)),
+                        "size_bytes": size,
+                        "lines": lines,
+                        "issues": issues,
+                    }
+                )
     return results
 
 
@@ -155,23 +156,27 @@ def scan_long_functions(project_root: Path, source_dirs: list[str] | None = None
                 if match:
                     # Check previous function
                     if current_func and (i - func_start) > MAX_FUNCTION_LINES:
-                        results.append({
-                            "file": str(f.relative_to(project_root)),
-                            "function": current_func,
-                            "lines": i - func_start,
-                            "start_line": func_start + 1,
-                        })
+                        results.append(
+                            {
+                                "file": str(f.relative_to(project_root)),
+                                "function": current_func,
+                                "lines": i - func_start,
+                                "start_line": func_start + 1,
+                            }
+                        )
                     current_func = match.group(2)
                     func_start = i
 
             # Check last function
             if current_func and (len(lines) - func_start) > MAX_FUNCTION_LINES:
-                results.append({
-                    "file": str(f.relative_to(project_root)),
-                    "function": current_func,
-                    "lines": len(lines) - func_start,
-                    "start_line": func_start + 1,
-                })
+                results.append(
+                    {
+                        "file": str(f.relative_to(project_root)),
+                        "function": current_func,
+                        "lines": len(lines) - func_start,
+                        "start_line": func_start + 1,
+                    }
+                )
 
     return results
 

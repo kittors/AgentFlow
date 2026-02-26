@@ -2,11 +2,6 @@
 
 from unittest import mock
 
-import pytest
-
-from agentflow._constants import CLI_TARGETS
-
-
 # ── interactive_install ───────────────────────────────────────────────────────
 
 

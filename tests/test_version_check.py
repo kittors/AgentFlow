@@ -2,11 +2,7 @@
 
 import json
 import time
-from pathlib import Path
 from unittest import mock
-
-import pytest
-
 
 # ── Cache operations ──────────────────────────────────────────────────────────
 
@@ -107,10 +103,14 @@ class TestCheckUpdate:
         from agentflow.version_check import check_update
 
         cache_file = tmp_path / "version_cache.json"
-        cache_file.write_text(json.dumps({
-            "latest": "1.0.0",
-            "timestamp": time.time(),
-        }))
+        cache_file.write_text(
+            json.dumps(
+                {
+                    "latest": "1.0.0",
+                    "timestamp": time.time(),
+                }
+            )
+        )
 
         with (
             mock.patch("importlib.metadata.version", return_value="1.0.0"),
@@ -125,10 +125,14 @@ class TestCheckUpdate:
         from agentflow.version_check import check_update
 
         cache_file = tmp_path / "version_cache.json"
-        cache_file.write_text(json.dumps({
-            "latest": "2.0.0",
-            "timestamp": time.time(),
-        }))
+        cache_file.write_text(
+            json.dumps(
+                {
+                    "latest": "2.0.0",
+                    "timestamp": time.time(),
+                }
+            )
+        )
 
         with (
             mock.patch("importlib.metadata.version", return_value="1.0.0"),
@@ -144,10 +148,14 @@ class TestCheckUpdate:
 
         cache_file = tmp_path / "version_cache.json"
         cache_dir = tmp_path / "cache_dir"
-        cache_file.write_text(json.dumps({
-            "latest": "1.0.0",
-            "timestamp": time.time(),
-        }))
+        cache_file.write_text(
+            json.dumps(
+                {
+                    "latest": "1.0.0",
+                    "timestamp": time.time(),
+                }
+            )
+        )
 
         with (
             mock.patch("importlib.metadata.version", return_value="1.0.0"),
