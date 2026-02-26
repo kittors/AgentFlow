@@ -29,5 +29,11 @@ docs/research/
 # Integration test guides (internal)
 docs/testing/
 
+# Test reports & coverage
+tests/reports/
+htmlcov/
+.coverage
+coverage.xml
+
 # AgentFlow data
 .agentflow/cache/
