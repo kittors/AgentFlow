@@ -51,7 +51,7 @@ class TestMainInstall:
                     main()
                 except SystemExit:
                     pass
-                m.assert_called_once_with("codex")
+                m.assert_called_once_with("codex", "full")
 
     def test_install_all(self):
         with mock.patch("sys.argv", ["agentflow", "install", "--all"]):

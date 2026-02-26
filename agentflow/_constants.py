@@ -22,6 +22,10 @@ __all__ = [
     "AGENTFLOW_MARKER",
     "HOOKS_FINGERPRINT",
     "CODEX_NOTIFY_CMD",
+    # profile system
+    "PROFILES",
+    "DEFAULT_PROFILE",
+    "VALID_PROFILES",
     # locale helpers
     "detect_locale",
     "msg",
@@ -60,8 +64,33 @@ AGENTFLOW_MARKER: str = "AGENTFLOW_ROUTER:"
 HOOKS_FINGERPRINT: str = "AgentFlow"
 CODEX_NOTIFY_CMD: str = "agentflow --check-update --silent"
 
+# ── Profile system ────────────────────────────────────────────────────────────
+
+# Each profile defines which core extension modules to append to the base
+# AGENTS.md.  The base AGENTS.md (G1-G5) is always included.
+PROFILES: dict[str, list[str]] = {
+    "lite": [],  # Core AGENTS.md only (~310 lines, minimal token usage)
+    "standard": [  # + common rules, module loading, acceptance criteria
+        "common.md",
+        "module_loading.md",
+        "acceptance.md",
+    ],
+    "full": [  # All modules (equivalent to pre-split behavior)
+        "common.md",
+        "module_loading.md",
+        "acceptance.md",
+        "subagent.md",
+        "attention.md",
+        "hooks.md",
+    ],
+}
+
+DEFAULT_PROFILE: str = "full"
+VALID_PROFILES: tuple[str, ...] = tuple(PROFILES.keys())
+
 
 # ── Locale detection ──────────────────────────────────────────────────────────
+
 
 def detect_locale() -> str:
     """Detect system locale.  Returns ``'zh'`` for Chinese locales, ``'en'``
@@ -79,6 +108,7 @@ def detect_locale() -> str:
     if sys.platform == "win32":
         try:
             import ctypes  # noqa: WPS433
+
             lcid = ctypes.windll.kernel32.GetUserDefaultUILanguage()  # type: ignore[attr-defined]
             if (lcid & 0xFF) == 0x04:
                 return "zh"
@@ -96,6 +126,7 @@ def msg(zh: str, en: str) -> str:
 
 
 # ── File identification & backup ──────────────────────────────────────────────
+
 
 def is_agentflow_file(file_path: str | Path) -> bool:
     """Return ``True`` if *file_path* was created by AgentFlow."""
@@ -125,6 +156,7 @@ def backup_user_file(file_path: str | Path) -> Path:
 
 # ── Package resource helpers ──────────────────────────────────────────────────
 
+
 def get_package_root() -> Path:
     """Return the repository / package root directory."""
     return Path(__file__).parent.parent
@@ -146,6 +178,7 @@ def get_agentflow_module_path() -> Path:
 
 
 # ── CLI detection ─────────────────────────────────────────────────────────────
+
 
 def detect_installed_clis() -> list[str]:
     """Detect which CLI config directories exist on disk."""

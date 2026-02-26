@@ -93,6 +93,7 @@ class TestMarkdownFiles:
             ("services", 3),
             ("stages", 2),
             ("rules", 3),
+            ("core", 6),
         ],
     )
     def test_subdir_has_md_files(self, subdir, min_files):

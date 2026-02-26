@@ -12,7 +12,10 @@ from pathlib import Path
 from ._constants import (
     AGENTFLOW_MARKER,
     CLI_TARGETS,
+    DEFAULT_PROFILE,
     PLUGIN_DIR_NAME,
+    PROFILES,
+    VALID_PROFILES,
     backup_user_file,
     detect_installed_clis,
     get_agentflow_module_path,
@@ -93,7 +96,7 @@ def _get_source_files() -> dict[str, Path]:
     module_path = get_agentflow_module_path()
     sources: dict[str, Path] = {}
 
-    for subdir_name in ("stages", "services", "rules", "rlm", "functions", "templates", "hooks", "agents"):
+    for subdir_name in ("stages", "services", "rules", "rlm", "functions", "templates", "hooks", "agents", "core"):
         subdir = module_path / subdir_name
         if subdir.exists():
             sources[subdir_name] = subdir
@@ -101,7 +104,36 @@ def _get_source_files() -> dict[str, Path]:
     return sources
 
 
-def _deploy_rules_file(target: str, cli_dir: Path) -> bool:
+def _build_agents_md_for_profile(profile: str) -> str:
+    """Read the base AGENTS.md and append core extension modules per profile.
+
+    The base AGENTS.md contains G1-G5 (core rules).  The profile determines
+    which G6-G12 extension modules from ``agentflow/core/`` are appended.
+    """
+    source_agents_md = get_agents_md_path()
+    content = source_agents_md.read_text(encoding="utf-8")
+
+    marker_line = f"<!-- {AGENTFLOW_MARKER} v1.0.0 -->\n"
+    if AGENTFLOW_MARKER not in content:
+        content = marker_line + content
+
+    # Append core extension modules for this profile
+    core_dir = get_agentflow_module_path() / "core"
+    modules = PROFILES.get(profile, PROFILES[DEFAULT_PROFILE])
+
+    if modules and core_dir.exists():
+        content += "\n\n---\n\n"
+        content += f"<!-- PROFILE:{profile} — Extended modules appended below -->\n\n"
+        for mod_file in modules:
+            mod_path = core_dir / mod_file
+            if mod_path.exists():
+                mod_content = mod_path.read_text(encoding="utf-8")
+                content += mod_content + "\n\n"
+
+    return content
+
+
+def _deploy_rules_file(target: str, cli_dir: Path, profile: str = DEFAULT_PROFILE) -> bool:
     """Deploy the rules file (AGENTS.md / CLAUDE.md / etc.) to the CLI config directory."""
     config = CLI_TARGETS[target]
     rules_file = cli_dir / config["rules_file"]
@@ -116,18 +148,19 @@ def _deploy_rules_file(target: str, cli_dir: Path) -> bool:
         )
         return False
 
-    content = source_agents_md.read_text(encoding="utf-8")
-
-    marker_line = f"<!-- {AGENTFLOW_MARKER} v1.0.0 -->\n"
-    if AGENTFLOW_MARKER not in content:
-        content = marker_line + content
+    content = _build_agents_md_for_profile(profile)
 
     if rules_file.exists() and not is_agentflow_file(rules_file):
         backup = backup_user_file(rules_file)
         print(msg(f"  📦 已备份原文件: {backup.name}", f"  📦 Backed up existing file: {backup.name}"))
 
     _safe_write(rules_file, content)
-    print(msg(f"  ✅ {config['rules_file']} 已部署", f"  ✅ {config['rules_file']} deployed"))
+    profile_label = f" [profile={profile}]" if profile != DEFAULT_PROFILE else ""
+    print(
+        msg(
+            f"  ✅ {config['rules_file']} 已部署{profile_label}", f"  ✅ {config['rules_file']} deployed{profile_label}"
+        )
+    )
     return True
 
 
@@ -376,11 +409,21 @@ def _deploy_codex_agents(cli_dir: Path) -> bool:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def install(target: str) -> bool:
-    """Install AgentFlow to a single CLI target."""
+def install(target: str, profile: str = DEFAULT_PROFILE) -> bool:
+    """Install AgentFlow to a single CLI target.
+
+    Args:
+        target: CLI target name (codex, claude, gemini, etc.).
+        profile: Deployment profile — ``lite``, ``standard``, or ``full``.
+    """
     if target not in CLI_TARGETS:
         print(msg(f"  ❌ 未知目标: {target}", f"  ❌ Unknown target: {target}"))
         print(msg(f"  可用目标: {', '.join(CLI_TARGETS)}", f"  Available: {', '.join(CLI_TARGETS)}"))
+        return False
+
+    if profile not in VALID_PROFILES:
+        print(msg(f"  ❌ 未知 Profile: {profile}", f"  ❌ Unknown profile: {profile}"))
+        print(msg(f"  可用 Profile: {', '.join(VALID_PROFILES)}", f"  Available profiles: {', '.join(VALID_PROFILES)}"))
         return False
 
     config = CLI_TARGETS[target]
@@ -391,10 +434,11 @@ def install(target: str) -> bool:
         print(msg(f"  请先安装 {target}。", f"  Please install {target} first."))
         return False
 
-    print(msg(f"\n  正在安装到 {target}...", f"\n  Installing to {target}..."))
+    profile_label = f" (profile={profile})" if profile != DEFAULT_PROFILE else ""
+    print(msg(f"\n  正在安装到 {target}{profile_label}...", f"\n  Installing to {target}{profile_label}..."))
 
     ok = True
-    ok = ok and _deploy_rules_file(target, cli_dir)
+    ok = ok and _deploy_rules_file(target, cli_dir, profile)
     ok = ok and _deploy_module_dir(target, cli_dir)
     ok = ok and _deploy_skill_md(target, cli_dir)
     ok = ok and _deploy_hooks(target, cli_dir)
@@ -410,7 +454,7 @@ def install(target: str) -> bool:
     return ok
 
 
-def install_all() -> bool:
+def install_all(profile: str = DEFAULT_PROFILE) -> bool:
     """Install AgentFlow to all detected CLIs."""
     detected = detect_installed_clis()
     if not detected:
@@ -426,7 +470,7 @@ def install_all() -> bool:
 
     success = 0
     for target in detected:
-        if install(target):
+        if install(target, profile):
             success += 1
 
     print(

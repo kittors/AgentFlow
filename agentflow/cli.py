@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 from importlib.metadata import version as get_version
 
-from ._constants import CLI_TARGETS, msg
+from ._constants import CLI_TARGETS, DEFAULT_PROFILE, VALID_PROFILES, msg
 
 # ── Interactive main menu ─────────────────────────────────────────────────────
 
@@ -148,6 +148,15 @@ def print_usage() -> None:
     )
     print(msg("  agentflow version             查看版本", "  agentflow version             Show version"))
     print()
+    print(msg("选项:", "Options:"))
+    profiles_str = ", ".join(VALID_PROFILES)
+    print(
+        msg(
+            f"  --profile=<{profiles_str}>  选择部署 Profile (默认: {DEFAULT_PROFILE})",
+            f"  --profile=<{profiles_str}>  Deployment profile (default: {DEFAULT_PROFILE})",
+        )
+    )
+    print()
     print(msg("目标:", "Targets:"))
     for name in CLI_TARGETS:
         print(f"  {name}")
@@ -189,16 +198,26 @@ def main() -> None:
         sys.exit(0)
 
     if cmd == "install":
-        if len(sys.argv) < 3:
+        # Parse --profile from remaining args
+        rest_args = sys.argv[2:]
+        profile = DEFAULT_PROFILE
+        non_profile_args: list[str] = []
+        for arg in rest_args:
+            if arg.startswith("--profile="):
+                profile = arg.split("=", 1)[1]
+            else:
+                non_profile_args.append(arg)
+
+        if not non_profile_args:
             if not interactive_install():
                 sys.exit(1)
         else:
-            target = sys.argv[2]
+            target = non_profile_args[0]
             if target == "--all":
-                if not install_all():
+                if not install_all(profile):
                     sys.exit(1)
             else:
-                if not install(target):
+                if not install(target, profile):
                     sys.exit(1)
     elif cmd == "uninstall":
         if len(sys.argv) < 3:

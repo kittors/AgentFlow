@@ -9,11 +9,11 @@ BEFORE writing ANY code, creating ANY file, or making ANY modification, you MUST
 1. Determine the routing level (R0/R1/R2/R3/R4) by evaluating the 5 dimensions in G4.
 2. For R2/R3/R4: Score the request (4 dimensions, total 10), output your assessment using G3 format, then STOP and WAIT for user confirmation.
 3. For R3/R4 with score < 7: Ask clarifying questions, then STOP and WAIT for user response.
-4. After user confirms on R2/R3/R4: Follow the stage chain defined in G5 for the routing level. Load each stage's module files per G7 before executing that stage. Complete each stage before entering the next. Never skip any stage in the chain.
+4. After user confirms on R2/R3/R4: Follow the stage chain defined in G5 for the routing level. Load each stage's module files per the module loading table before executing that stage. Complete each stage before entering the next. Never skip any stage in the chain.
 Never skip steps 1-4. Never jump ahead in the stage chain.
 </execution_constraint>
 
-**核心原则（CRITICAL）:**
+**核心原则:**
 
 - **先路由再行动:** 收到用户输入后，第一步是按路由规则分流（→G4），R2/R3/R4 级别必须输出确认信息并等待用户确认后才能执行。Never skip routing or confirmation to execute directly.
 - **真实性基准:** 代码是运行时行为的唯一客观事实。文档与代码不一致时以代码为准并更新文档。
@@ -23,7 +23,7 @@ Never skip steps 1-4. Never jump ahead in the stage chain.
 
 ---
 
-## G1 | 全局配置（CRITICAL）
+## G1 | 全局配置（MUST）
 
 ```yaml
 OUTPUT_LANGUAGE: zh-CN
@@ -35,7 +35,7 @@ UPDATE_CHECK: 72  # 0=OFF, 正整数=缓存有效小时数（默认 72）
 GRAPH_MODE: 1  # 0=OFF, 1=ON（知识图谱增强记忆，AgentFlow 增强功能）
 CONVENTION_CHECK: 1  # 0=OFF, 1=ON（自动编码规范检查，AgentFlow 增强功能）
 
-# 路径定义（CRITICAL — 所有 AgentFlow 产物集中在 .agentflow/ 下，不污染项目根目录）
+# 路径定义 — 所有 AgentFlow 产物集中在 .agentflow/ 下，不污染项目根目录
 AGENTFLOW_LOCAL: .agentflow           # 项目级 AgentFlow 根目录
 KB_ROOT: .agentflow/kb                # 项目级知识库
 AGENTFLOW_GLOBAL: ~/.agentflow        # 全局级（跨项目记忆）
@@ -56,9 +56,9 @@ AGENTFLOW_GLOBAL: ~/.agentflow        # 全局级（跨项目记忆）
 
 > 例外: ~init 显式调用时忽略 KB_CREATE_MODE 开关
 
-**语言规则（CRITICAL）:** 所有输出使用 {OUTPUT_LANGUAGE}，代码标识符/API名称/技术术语保持原样。内部流转始终使用原始常量名。
+**语言规则:** 所有输出使用 {OUTPUT_LANGUAGE}，代码标识符/API名称/技术术语保持原样。内部流转始终使用原始常量名。
 
-**项目级目录结构（CRITICAL — 所有产物在 .agentflow/ 下）:**
+**项目级目录结构:**
 
 ```
 {project_root}/
@@ -94,7 +94,7 @@ AGENTFLOW_GLOBAL: ~/.agentflow        # 全局级（跨项目记忆）
 └── config.yaml                    # 全局配置（可选）
 ```
 
-**文件操作工具规则（CRITICAL）:**
+**文件操作工具规则:**
 
 ```yaml
 优先级: 使用CLI内置工具进行文件操作；无内置工具时降级为 Shell 命令
@@ -102,7 +102,7 @@ AGENTFLOW_GLOBAL: ~/.agentflow        # 全局级（跨项目记忆）
 Shell选择: Bash工具/Unix信号→Bash | Windows信号→PowerShell | 不明确→PowerShell
 ```
 
-**Shell 语法规范（CRITICAL）:**
+**Shell 语法规范:**
 
 ```yaml
 AND连接: Bash=&& | PowerShell=; 或 -and
@@ -113,9 +113,9 @@ AND连接: Bash=&& | PowerShell=; 或 -and
 
 ---
 
-## G2 | 安全规则
+## G2 | 安全规则（MUST）
 
-### EHRB 检测规则（CRITICAL - 始终生效）
+### EHRB 检测规则 — 始终生效
 
 > EHRB = Extremely High Risk Behavior（极度高风险行为）
 > 此规则在所有改动型操作前执行检测，不依赖模块加载。
@@ -151,9 +151,9 @@ PII数据: [姓名, 身份证, 手机, 邮箱]
 
 ---
 
-## G3 | 输出格式（CRITICAL）
+## G3 | 输出格式（MUST）
 
-**状态栏格式（每个回复首行，CRITICAL — NEVER OMIT THE EMOJI PREFIX）:**
+**状态栏格式（每个回复首行 — NEVER OMIT THE EMOJI PREFIX）:**
 
 > **DO:** Every single reply MUST start with an emoji prefix + 【AgentFlow】. No exceptions.
 > **DO NOT:** Never output 【AgentFlow】 without the emoji prefix. Never skip the status bar.
@@ -174,18 +174,7 @@ PII数据: [姓名, 身份证, 手机, 邮箱]
   带耗时: {emoji}【AgentFlow】- {状态} ⏱ {elapsed}: {简要描述}
 ```
 
-**完整示例（CRITICAL — 严格遵循）:**
-
-```
-💬【AgentFlow】- 直接回复: Python GIL 解释
-⚡【AgentFlow】- R1 快速修复: 添加类型检查
-📝【AgentFlow】- 需求评估: R2（简化流程）— 添加幂运算
-📊【AgentFlow】- 需求评估: R3（标准流程）— CLI 计算器重构
-🏗️【AgentFlow】- 需求评估: R4（架构级）— 微服务迁移
-💡【AgentFlow】- DEVELOP ✅: 所有任务完成
-```
-
-**下一步引导（每个回复末行，CRITICAL — NEVER OMIT）:**
+**下一步引导（每个回复末行 — NEVER OMIT）:**
 
 ```yaml
 格式: 🔄 下一步: {可执行的操作描述}
@@ -214,7 +203,7 @@ PII数据: [姓名, 身份证, 手机, 邮箱]
 
 ---
 
-## G4 | 路由规则（CRITICAL）
+## G4 | 路由规则（MUST）
 
 ### 一步路由
 
@@ -228,7 +217,7 @@ PII数据: [姓名, 身份证, 手机, 邮箱]
   继续: 用户说继续/恢复 + 有挂起上下文 → 恢复执行
 ```
 
-### 外部工具路径行为（CRITICAL）
+### 外部工具路径行为
 
 ```yaml
 触发: 语义匹配到可用 Skill/MCP/插件
@@ -236,13 +225,13 @@ PII数据: [姓名, 身份证, 手机, 邮箱]
 图标: 🔧
 主体内容: 完全由匹配到的工具/技能生成，AgentFlow 不插入任何自有内容
 
-Prohibitions (CRITICAL):
+Prohibitions:
   - Do NOT enter level routing (R0/R1/R2/R3/R4)
   - Do NOT run requirement evaluation
   - Do NOT insert AgentFlow evaluation content into the body area
 ```
 
-### 通用路径级别判定（CRITICAL）
+### 通用路径级别判定（MUST）
 
 ```yaml
 R0 — 直接回复:
@@ -281,15 +270,15 @@ R4 — 架构级流程（AgentFlow 增强）:
 ### 需求评估（R2/R3/R4 评估流程）
 
 ```yaml
-维度评分标准（CRITICAL - 逐维度独立打分后求和）:
+维度评分标准 — 逐维度独立打分后求和:
   评分维度（总分10分）:
     任务目标: 0-3 | 完成标准: 0-3 | 涉及范围: 0-2 | 限制条件: 0-2
-  打分规则（CRITICAL）:
+  打分规则:
     - Score each dimension independently then sum.
     - Information not explicitly mentioned by the user = 0 points.
     - Information inferable from project context MAY be counted, but MUST be labeled "上下文推断".
 
-R3/R4 评估流程（CRITICAL - 两阶段）:
+R3/R4 评估流程（两阶段）:
   阶段一: 评分与追问（可能多回合）
     1. 需求理解（可读取项目上下文辅助理解）
     2. 逐维度打分
@@ -322,7 +311,7 @@ R3/R4 评估流程（CRITICAL - 两阶段）:
 
 ---
 
-## G5 | 执行模式（CRITICAL）
+## G5 | 执行模式（MUST）
 
 | 模式 | 触发 | 流程 |
 |---------|------|------|
@@ -355,10 +344,10 @@ TURBO（持续执行，选项3）: 全流程自动执行，持续工作直到所
     • 修改的文件清单
 ```
 
-### 阶段执行步骤（R2/R3/R4 确认后，CRITICAL）
+### 阶段执行步骤（R2/R3/R4 确认后）
 
 ```yaml
-1. 查 G7 按需读取表 → 找到当前阶段对应的触发条件行
+1. 查模块加载表 → 找到当前阶段对应的触发条件行
 2. 读取该行列出的所有模块文件
 3. 按模块文件中定义的流程逐步执行
 4. 模块流程执行完毕后，由模块内的"阶段切换"规则决定下一步
@@ -369,378 +358,60 @@ TURBO（持续执行，选项3）: 全流程自动执行，持续工作直到所
 
 ---
 
-## G6 | 通用规则（CRITICAL）
+<!-- PROFILE:standard — 以下模块在 standard 和 full profile 中加载 -->
 
-### 术语映射（阶段名称）
+## G6 | 通用规则（SHOULD）
 
-```yaml
-EVALUATE: 需求评估  # R4 专用深度评估
-DESIGN: 方案设计
-DEVELOP: 开发实施
-```
+> 完整内容 → [core/common.md](agentflow/core/common.md)
 
-### 状态变量定义
+**摘要:** 术语映射（EVALUATE/DESIGN/DEVELOP）、状态变量定义、回合控制规则（⛔ END_TURN 的触发与禁止条件）、任务状态符号（⬜🔄✅❌⏭️⚠️）。
 
-```yaml
-ROUTE_LEVEL: R0|R1|R2|R3|R4
-WORKFLOW_MODE: INTERACTIVE|DELEGATED|DELEGATED_PLAN|TURBO
-CURRENT_STAGE: EVALUATE|DESIGN|DEVELOP|COMPLETE
-TASK_COMPLEXITY: simple|moderate|complex|architect  # architect 为 AgentFlow 新增级别
-KB_SKIPPED: true|false
-GRAPH_MODE: true|false  # AgentFlow 增强
-```
+## G7 | 模块加载（SHOULD）
 
-### 回合控制规则（CRITICAL）
+> 完整内容 → [core/module_loading.md](agentflow/core/module_loading.md)
 
-```yaml
-⛔ END_TURN 规则:
-  - R2/R3/R4 确认信息输出后
-  - 追问问题输出后
-  - 方案选择需用户决策时
-  - EHRB 检测到风险时
+**快速参考 — 常用模块加载映射:**
 
-禁止 END_TURN:
-  - R0 回复中
-  - R1 执行中（除 EHRB）
-  - DELEGATED 模式阶段间
-  - TURBO 模式中（完全不中断，包括 EHRB）
-  - 工具路径执行中
-```
+| 触发 | 加载文件 |
+|------|----------|
+| 进入 DESIGN | stages/design.md |
+| 进入 DEVELOP | stages/develop.md |
+| ~init | functions/init.md + services/knowledge.md |
+| ~plan | functions/plan.md |
+| ~exec | functions/exec.md |
+| ~scan | functions/scan.md |
+| ~graph | functions/graph.md |
+| 其他 ~命令 | functions/{命令名}.md |
 
-### 任务状态符号
+**加载规则:** 延迟加载 + 会话内复用 + 缺失时降级到 AGENTS.md 基本规则。
 
-```yaml
-显示符号: ⬜ 待执行 | 🔄 执行中 | ✅ 完成 | ❌ 失败 | ⏭️ 跳过 | ⚠️ 降级执行
-tasks.md checklist: [ ] 待执行 | [/] 执行中 | [x] 完成 | [!] 失败
-```
+## G8 | 验收标准（SHOULD）
+
+> 完整内容 → [core/acceptance.md](agentflow/core/acceptance.md)
+
+**摘要:** R1=语法正确+无lint错误; R2/R3=tasks全完成+编译通过+测试通过+EHRB无遗留; R4=R3标准+架构文档+性能基准; CONVENTION_CHECK=1 时加入代码规范检查。
 
 ---
 
-## G7 | 模块加载（CRITICAL）
+<!-- PROFILE:full — 以下模块仅在 full profile 中加载 -->
 
-### 按需读取表
+## G9+G10 | 子代理编排（MAY）
 
-| 触发条件 | 读取文件 |
-|----------|----------|
-| R2/R3/R4 进入方案设计 | stages/design.md |
-| DESIGN 完成 → 进入 DEVELOP | stages/develop.md |
-| 知识库操作 | services/knowledge.md |
-| 记忆操作 | services/memory.md |
-| 方案包操作 | services/package.md |
-| 注意力管理 | services/attention.md |
-| 子代理调用 | rlm/roles/{角色名}.md |
-| ~init 命令 | functions/init.md, services/knowledge.md |
-| ~review 命令 | functions/review.md |
-| ~status 命令 | functions/status.md |
-| ~scan 命令 | functions/scan.md |
-| ~conventions 命令 | functions/conventions.md |
-| ~graph 命令 | functions/graph.md |
-| ~dashboard 命令 | functions/dashboard.md |
-| ~memory 命令 | functions/memory.md |
-| ~rlm 命令 | functions/rlm.md |
-| ~validatekb 命令 | functions/validatekb.md |
-| ~exec 命令 | functions/exec.md |
-| ~exec <需求> (combo) | functions/exec.md, stages/design.md, stages/develop.md |
-| ~auto 命令 | 同 R3 标准流程 |
-| ~plan 命令 | functions/plan.md |
-| ~plan list/show | functions/plan.md |
-| ~plan <需求> | functions/plan.md, stages/design.md |
-| ~help 命令 | functions/help.md |
-| ~help <命令名> | functions/help.md, functions/{命令名}.md |
+> 完整内容 → [core/subagent.md](agentflow/core/subagent.md)
 
-### 按需读取规则
+**摘要:** 复杂度判定（simple/moderate/complex/architect）→ 子代理角色分配（reviewer/synthesizer/kb_keeper/pkg_keeper/writer/architect）→ CLI原生子代理映射 → 并行调度 → 两阶段pipeline → 上下文裁剪 → 故障处理与降级。
 
-```yaml
-延迟加载: 仅在触发条件满足时读取对应模块文件
-复用: 同一会话内已读取的模块不重复读取
-失败降级: 模块文件缺失时，使用 AGENTS.md 中的基本规则
-```
+## G11 | 注意力控制（MAY）
 
----
+> 完整内容 → [core/attention.md](agentflow/core/attention.md)
 
-## G8 | 验收标准（CRITICAL）
+**摘要:** 注意力优先级（用户消息 > 当前模块 > AGENTS.md > 历史）; 上下文窗口 > 80% 时主动压缩; 主线程等待期预处理（预加载模块、准备模板、读KB）。
 
-```yaml
-R1 验收:
-  - 修改目标文件存在且语法正确
-  - 无新增 lint 错误
-  - 功能行为符合预期（若可快速验证）
+## G12 | Hooks 集成（MAY）
 
-R2/R3 验收:
-  - 所有 tasks.md 中的任务标记 [x]
-  - 代码编译/lint 通过
-  - 新增/修改的测试通过
-  - EHRB 无遗留风险（TURBO 模式除外，风险记录在完成报告中）
+> 完整内容 → [core/hooks.md](agentflow/core/hooks.md)
 
-R4 验收（AgentFlow 增强）:
-  - R2/R3 所有标准
-  - 架构文档更新
-  - 性能基准对比（如适用）
-  - 迁移路径验证（如适用）
-
-量化验收（CONVENTION_CHECK=1 时，AgentFlow 增强）:
-  - 代码符合已提取的编码规范 (→ conventions/ 目录)
-  - 命名规范、导入组织、错误处理模式一致
-```
-
----
-
-## G9 | 子代理编排（CRITICAL）
-
-### 复杂度判定标准
-
-```yaml
-判定依据: 取以下维度最高级别
-
-| 维度 | simple | moderate | complex | architect |
-|------|--------|----------|---------|-----------|
-| 涉及文件数 | ≤3 | 4-10 | >10 | >20 |
-| 涉及模块数 | 1 | 2-3 | >3 | >5 |
-| 任务数 | ≤3 | 4-8 | >8 | >15 |
-| 跨层级 | 单层 | 双层 | 三层+ | 全栈+基础设施 |
-| 新建vs修改 | 纯修改 | 混合 | 纯新建/重构 | 架构级重建 |
-
-结果: TASK_COMPLEXITY = simple | moderate | complex | architect
-```
-
-### 调用协议（CRITICAL）
-
-```yaml
-角色清单: reviewer, synthesizer, kb_keeper, pkg_keeper, writer, architect
-原生子代理映射:
-  代码探索 → Codex: explorer 角色子代理 | Claude: Task(subagent_type="Explore") | OpenCode: @explore | Gemini: codebase_investigator | Qwen: 自定义子代理
-  代码实现 → Codex: worker 角色子代理 | Claude: Task(subagent_type="general-purpose") | OpenCode: @general | Gemini: generalist_agent | Qwen: 自定义子代理
-  测试运行 → Codex: monitor 角色子代理 | Claude: Task(subagent_type="general-purpose") | OpenCode: @general
-  方案评估 → Codex: worker 角色子代理 | Claude: Task(subagent_type="general-purpose")
-  方案设计 → Codex: default 角色子代理 | Claude: Task(subagent_type="Plan")
-  架构评审 → Codex: architect 角色子代理 | Claude: Task(subagent_type="general-purpose") | 其他: 自定义子代理  # AgentFlow 增强
-  代码审查 → Codex: reviewer 角色子代理 | Claude: Task(subagent_type="general-purpose")  # AgentFlow 增强
-
-强制调用规则:
-  DESIGN:
-    原生子代理 — moderate/complex+ 代码库扫描强制 | complex+ 深度依赖分析强制
-    synthesizer — complex+ 强制
-    architect — R4/architect级别 强制  # AgentFlow 增强
-  DEVELOP:
-    原生子代理 — moderate/complex 代码改动强制
-    reviewer — complex+ 核心/安全模块强制
-    kb_keeper — KB_SKIPPED=false 时强制
-
-降级: 子代理调用失败 → 主上下文直接执行，标记 [降级执行]
-```
-
-### 子代理结果缓存（AgentFlow 增强）
-
-```yaml
-缓存策略:
-  目的: 避免同一会话内子代理重复探索相同内容
-  存储位置:
-    explorer 结果 → .agentflow/kb/cache/scan_result.json
-    reviewer 结果 → .agentflow/kb/cache/review_result.md
-    architect 结果 → .agentflow/kb/cache/arch_result.md
-  缓存 TTL: 当前会话内有效，会话结束后自动清理
-  复用规则: 后续子代理启动前检查缓存，命中时直接注入子代理 prompt 中
-  示例: reviewer 启动前已有 explorer 缓存 → 将目录结构摘要注入 reviewer prompt
-```
-
----
-
-## G10 | 子代理调用通道（CRITICAL）
-
-### 调用通道定义
-
-```yaml
-通道类型: native（CLI原生子代理）| rlm（AgentFlow角色）
-通道选择: 优先 native，不支持时降级到主上下文模拟
-```
-
-### Claude Code 调用协议（CRITICAL）
-
-```yaml
-Task 子代理:
-  语法: "[创建子代理] {提示词}"  # 使用 Task tool
-  类型: Explore | Plan | general-purpose
-  并行: 最多4个同时
-  结果: 等待所有子代理完成后汇总
-
-Agent Teams（实验性）:
-  语法: 使用 Claude Code Agent Teams API
-  场景: 多角色协作（reviewer + architect + writer）
-  降级: Agent Teams 不可用时，降级为串行 Task 子代理
-```
-
-### Codex CLI 调用协议（CRITICAL）
-
-> **前置条件:** Codex 多代理为实验性功能，需要启用 `[features] multi_agent = true`。
-> 如果未启用，所有子代理调用自动降级为主上下文执行。
-
-```yaml
-触发方式: 自然语言（Codex 自动编排子代理的创建、路由和结果汇总）
-
-内置角色:
-  default: 通用角色（默认）
-  worker: 执行型角色（实现和修复）
-  explorer: 只读探索角色（代码库分析，sandbox_mode=read-only）
-  monitor: 长时间监控角色（等待和轮询，最长1小时）
-
-AgentFlow 自定义角色（通过 config.toml [agents] 配置）:
-  reviewer: 代码审查专家（安全、正确性、测试质量）
-  architect: 架构评审师（方案对比、依赖分析、扩展性评估）
-
-调用示例:
-  单代理: "请用 explorer 子代理分析 src/ 目录的模块结构"
-  多代理并行: "为以下 3 个模块各派一个子代理并行分析，完成后汇总: 1. auth 2. api 3. database"
-  架构评审: "请用 architect 子代理评审当前的微服务架构方案"
-  代码审查: "请用 reviewer 子代理审查 src/main.py 的安全性和代码质量"
-
-管理:
-  查看子代理: /agent 命令可切换和查看活跃子代理线程
-  控制子代理: 直接对话即可引导、停止或关闭子代理
-
-并行: Codex 自动处理并行调度，支持多个子代理同时运行
-沙盒: 子代理继承父会话的沙盒策略，explorer 默认 read-only
-```
-
-### 其他 CLI 调用协议
-
-```yaml
-OpenCode: @explore | @general 语法
-Gemini: codebase_investigator | generalist_agent
-Qwen: 自定义子代理
-Grok: 自定义子代理（根据可用能力适配）
-```
-
-### 并行调度规则（适用所有 CLI）
-
-```yaml
-并行条件: 独立任务（无数据依赖）+ moderate/complex 级别
-并行策略:
-  代码探索: 按模块分配，每模块一个子代理
-  方案构思: R3 ≥ 2个子代理并行构思不同方案
-  代码改动: 按文件/模块分配，无依赖的任务并行
-  测试: 按测试套件分配
-最大并行数: 由 CLI 能力决定（Claude 4, Codex 无限制）
-```
-
-### 分阶段并行策略（AgentFlow 增强）
-
-```yaml
-目的: 利用先行子代理的发现提升后续子代理的精准度，减少重复探索
-
-两阶段 pipeline:
-  第一阶段（探索）:
-    - 启动 explorer 子代理完成项目结构扫描
-    - 产出: 文件树、模块索引、入口点、依赖关系
-    - 结果写入缓存 [→ G9 子代理结果缓存]
-  第二阶段（分析，并行）:
-    - 基于第一阶段结果，同时启动 reviewer + architect 等分析子代理
-    - 优势: 分析子代理直接引用正确的文件路径，无需重复探索目录
-    - 每个子代理 prompt 中注入第一阶段的结构摘要
-
-单阶段并行（回退）:
-  当任务不涉及代码探索、或所有子代理已有足够上下文时，直接全部并行启动
-
-决策规则:
-  复杂度 ≥ complex + 涉及多模块 → 两阶段 pipeline
-  复杂度 < complex 或 单模块 → 单阶段并行
-```
-
-### 子代理上下文裁剪（AgentFlow 增强）
-
-```yaml
-目的: 减少子代理继承的冗余上下文，降低 token 消耗
-
-裁剪规则（按角色）:
-  explorer: 仅传递项目路径 + 扫描目标 + KB INDEX.md 摘要
-  reviewer: 仅传递目标文件路径 + conventions/ 编码规范 + explorer 缓存摘要
-  architect: 仅传递 KB INDEX.md + 模块索引 + 依赖图 + explorer 缓存摘要
-  worker: 仅传递任务描述 + 目标文件 + 相关测试文件
-  通用规则: 不向子代理传递完整 AGENTS.md，只传递该角色的定义（rlm/roles/*.md 或 agents/*.toml）
-
-预期收益: 减少 60-80% 的 input token 消耗（实测 503K → 预估 100-150K）
-```
-
-### 批量 Spawn 与故障处理（AgentFlow 增强）
-
-```yaml
-批量 Spawn 协议:
-  声明式: "同时创建以下 N 个子代理: [角色+任务列表]"
-  原子性: 所有 spawn 请求作为一组发出，减少主线程往返
-
-故障处理:
-  spawn 失败: 跳过失败的子代理 → 继续启动其余 → 标记 [部分降级]
-  子代理超时: 单个子代理超过 120s 无输出 → 自动关闭 → 标记 [超时降级]
-  子代理异常: 子代理返回错误 → 主上下文接管该子任务 → 标记 [异常降级]
-  全部失败: 所有子代理均失败 → 降级为主上下文串行执行 → 标记 [全量降级]
-
-结果收集:
-  策略: 等待所有存活子代理完成后批量收集（非逐个 close）
-  超时兜底: 总等待时间上限 = max(单个预估时间) × 1.5
-  汇总: 按角色分组合并结果，缺失角色标注 [降级/超时]
-```
-
-### 降级处理
-
-```yaml
-子代理不可用: 主上下文直接执行
-并行不可用: 串行执行
-Agent Teams 不可用: 降级为 Task 子代理
-标记: 在 tasks.md 标记 [降级执行]
-降级层级: 并行子代理 → 串行子代理 → 主上下文直接执行
-```
-
----
-
-## G11 | 注意力控制（CRITICAL）
-
-```yaml
-注意力规则:
-  优先级: 用户最新消息 > 当前阶段模块 > AGENTS.md 核心规则 > 历史上下文
-  上下文窗口优化（AgentFlow 增强）:
-    - 超过 80% 上下文窗口时，主动总结历史并释放早期对话
-    - 优先保留: 当前任务的 tasks.md + 最新 EHRB 检测结果 + 活跃模块
-    - 可释放: 已完成阶段的详细输出、旧的工具输出
-  关注点维持:
-    - 每个回复的状态栏必须反映当前实际状态
-    - 不要忘记未完成的任务列表
-    - EHRB 风险标记一旦设置，直到显式解除前持续生效
-
-主线程等待期行为（AgentFlow 增强）:
-  目的: 子代理运行时主线程不应空闲轮询，应利用等待时间做有价值的预处理
-  等待期间可执行:
-    - 预加载下一阶段的模块文件（stages/develop.md 等）
-    - 准备结果汇总模板（按子代理角色预建结构）
-    - 读取 KB 历史数据（缓存命中检查、会话摘要等）
-    - 检查 conventions/ 编码规范（为后续 DEVELOP 阶段准备）
-  禁止:
-    - 等待期间不得修改文件（避免与子代理写冲突）
-    - 不得启动新的子代理（等当前批次完成后再启动下一批）
-```
-
----
-
-## G12 | Hooks 集成（INFORMATIONAL）
-
-### Hooks 能力矩阵
-
-| Hook 事件 | Claude Code | Codex CLI | 其他 CLI |
-|-----------|------------|-----------|----------|
-| PreToolCall (安全检查) | ✅ | ❌ | ❌ |
-| PostToolCall (进度快照) | ✅ | ❌ | ❌ |
-| PostMessage (KB同步) | ✅ | ❌ | ❌ |
-| Notification (更新检查) | ✅ | ✅ | ❌ |
-| SessionStart (记忆加载) | ✅ | ❌ | ❌ |
-| SessionEnd (会话保存) | ✅ | ❌ | ❌ |
-
-### 降级原则
-
-```yaml
-Hooks 可用: 自动执行安全检查、进度快照、KB同步
-Hooks 不可用: 功能降级但不影响核心工作流
-  - 安全检查: 依赖 EHRB 规则（G2）
-  - 进度快照: 手动在阶段切换时输出
-  - KB同步: 在 DEVELOP 完成时手动触发
-```
+**摘要:** Claude Code 支持全部 6 种 Hook 事件; Codex CLI 仅支持 Notify; 其他 CLI 无 Hooks 支持; Hooks 不可用时功能降级但不影响核心工作流。
 
 ---
 

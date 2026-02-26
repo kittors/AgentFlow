@@ -49,12 +49,12 @@ class TestInteractiveInstall:
         with (
             mock.patch("agentflow.interactive.detect_installed_clis", return_value=["codex", "claude"]),
             mock.patch("agentflow.interactive.detect_installed_targets", return_value=[]),
-            mock.patch("builtins.input", return_value="1"),
+            mock.patch("builtins.input", side_effect=["3", "1"]),
             mock.patch("agentflow.installer.install", return_value=True) as mock_install,
         ):
             result = interactive_install()
             assert result is True
-            mock_install.assert_called_once_with("codex")
+            mock_install.assert_called_once_with("codex", "full")
 
     def test_select_all(self):
         from agentflow.interactive import interactive_install
@@ -75,12 +75,12 @@ class TestInteractiveInstall:
         with (
             mock.patch("agentflow.interactive.detect_installed_clis", return_value=["codex", "claude"]),
             mock.patch("agentflow.interactive.detect_installed_targets", return_value=[]),
-            mock.patch("builtins.input", return_value="claude"),
+            mock.patch("builtins.input", side_effect=["3", "claude"]),
             mock.patch("agentflow.installer.install", return_value=True) as mock_install,
         ):
             result = interactive_install()
             assert result is True
-            mock_install.assert_called_once_with("claude")
+            mock_install.assert_called_once_with("claude", "full")
 
     def test_invalid_selection(self, capsys):
         from agentflow.interactive import interactive_install

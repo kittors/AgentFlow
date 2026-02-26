@@ -2,7 +2,46 @@
 
 from __future__ import annotations
 
-from ._constants import CLI_TARGETS, detect_installed_clis, detect_installed_targets, msg
+from ._constants import (
+    CLI_TARGETS,
+    DEFAULT_PROFILE,
+    detect_installed_clis,
+    detect_installed_targets,
+    msg,
+)
+
+
+def _select_profile() -> str:
+    """Prompt user to select a deployment profile."""
+    print()
+    print(msg("  选择部署 Profile:", "  Select deployment profile:"))
+    print()
+    print(
+        msg(
+            "  [1] lite     — 仅核心规则 (~310 行, 最小 token 消耗)",
+            "  [1] lite     — Core rules only (~310 lines, minimal tokens)",
+        )
+    )
+    print(
+        msg("  [2] standard — + 通用规则/验收/模块加载", "  [2] standard — + common rules, acceptance, module loading")
+    )
+    print(
+        msg(
+            "  [3] full     — 全部功能 (含子代理/注意力/Hooks)",
+            "  [3] full     — All features (sub-agents, attention, hooks)",
+        )
+    )
+    print()
+
+    profile_map = {"1": "lite", "2": "standard", "3": "full"}
+
+    try:
+        choice = input(msg("  请输入编号 (默认 3=full): ", "  Enter number (default 3=full): ")).strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return DEFAULT_PROFILE
+
+    return profile_map.get(choice) or DEFAULT_PROFILE
 
 
 def interactive_install() -> bool:
@@ -14,6 +53,10 @@ def interactive_install() -> bool:
 
     already = detect_installed_targets()
 
+    # Step 1: Select profile
+    profile = _select_profile()
+
+    # Step 2: Select targets
     print()
     print(msg("  检测到以下 CLI:", "  Detected CLIs:"))
     print()
@@ -28,8 +71,7 @@ def interactive_install() -> bool:
     print()
 
     try:
-        choice = input(msg("  请输入编号 (可多选, 用逗号分隔): ",
-                           "  Enter numbers (comma-separated): ")).strip()
+        choice = input(msg("  请输入编号 (可多选, 用逗号分隔): ", "  Enter numbers (comma-separated): ")).strip()
     except (EOFError, KeyboardInterrupt):
         print()
         return False
@@ -40,7 +82,7 @@ def interactive_install() -> bool:
     from .installer import install, install_all
 
     if choice.upper() == "A":
-        return install_all()
+        return install_all(profile)
 
     targets: list[str] = []
     for part in choice.split(","):
@@ -59,7 +101,7 @@ def interactive_install() -> bool:
 
     success = 0
     for t in targets:
-        if install(t):
+        if install(t, profile):
             success += 1
 
     return success > 0
@@ -85,8 +127,7 @@ def interactive_uninstall() -> bool:
     print()
 
     try:
-        choice = input(msg("  请输入编号 (可多选, 用逗号分隔): ",
-                           "  Enter numbers (comma-separated): ")).strip()
+        choice = input(msg("  请输入编号 (可多选, 用逗号分隔): ", "  Enter numbers (comma-separated): ")).strip()
     except (EOFError, KeyboardInterrupt):
         print()
         return False
