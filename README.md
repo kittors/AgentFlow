@@ -196,6 +196,7 @@ All commands run **inside AI chat**, not your system shell.
 | `~memory` | Manage memory layers (L0/L1/L2) |
 | `~rlm` | Sub-agent management and dispatch |
 | `~validatekb` | Validate knowledge base consistency |
+| `~help` | Show available commands and usage |
 
 ---
 
@@ -289,8 +290,9 @@ AgentFlow/
 │   ├── services/          ← Knowledge, Memory, Package, Attention, Support
 │   ├── rules/             ← State, Cache, Tools, Scaling
 │   ├── rlm/roles/         ← 6 specialized agent roles
-│   ├── functions/         ← 14 workflow commands (~init, ~graph, etc.)
-│   ├── templates/         ← KB/plan templates
+│   ├── functions/         ← 15 workflow commands (~init, ~graph, ~help, etc.)
+│   ├── templates/         ← 10 KB/plan templates
+│   ├── scripts/           ← 9 helper scripts
 │   └── hooks/             ← Claude Code (JSON) + Codex CLI (TOML)
 └── tests/                 ← pytest test suite
 ```
@@ -304,12 +306,13 @@ AgentFlow/
 | CLI targets | 6 |
 | Routing levels | 5 (R0–R4) |
 | RLM roles | 6 |
-| Workflow commands | 14 |
+| Workflow commands | 15 |
 | Stage modules | 2 |
 | Service modules | 5 |
 | Rule modules | 4 |
 | Hook configs | 2 |
-| KB/plan templates | 1 |
+| KB/plan templates | 10 |
+| Helper scripts | 9 |
 
 ---
 

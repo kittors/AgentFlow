@@ -184,6 +184,7 @@ agentflow clean               # 清理缓存
 | `~memory` | 管理记忆层 |
 | `~rlm` | 子代理管理 |
 | `~validatekb` | 验证知识库一致性 |
+| `~help` | 显示可用命令和用法 |
 
 ---
 

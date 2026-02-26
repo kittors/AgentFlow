@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2025-02-26
 
 ### ✨ Features
+
 - **5-Level Routing (R0–R4)**: Every input scored on 5 dimensions — R0 direct reply, R1 fast flow, R2 simplified, R3 standard, R4 architecture-level (unique)
 - **RLM Sub-Agent Orchestration**: 6 specialized roles (reviewer, synthesizer, kb_keeper, pkg_keeper, writer, architect) plus native CLI sub-agents
 - **EHRB Safety Detection**: Three-layer safety — keyword scan, semantic analysis, tool output inspection
@@ -17,9 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Architecture Scanning** (`~scan`): Proactive detection of large files, circular deps, missing tests
 - **Dashboard** (`~dashboard`): HTML project status dashboard generation
 - **Context Window Management**: Proactive summarization when context exceeds 80%
-- **14 Workflow Commands**: `~init`, `~auto`, `~plan`, `~exec`, `~status`, `~review`, `~scan`, `~conventions`, `~graph`, `~dashboard`, `~memory`, `~rlm`, `~validatekb`
+- **15 Workflow Commands**: `~init`, `~auto`, `~plan`, `~exec`, `~status`, `~review`, `~scan`, `~conventions`, `~graph`, `~dashboard`, `~memory`, `~rlm`, `~validatekb`, `~help`
+- **10 KB/Plan Templates**: Base, plan, changelog, frontend, backend, fullstack, Python, conventions, graph, session summary
+- **9 Helper Scripts**: KB sync, graph builder, convention scanner, architecture scanner, session manager, template initializer, cache manager, config helpers, dashboard generator
 
 ### 🛠️ Infrastructure
+
 - **6 CLI Targets**: Claude Code, Codex CLI, Gemini CLI, OpenCode, Qwen CLI, Grok CLI
 - **Multiple Install Methods**: pip, uv, npx, one-line scripts (install.sh / install.ps1)
 - **Interactive CLI**: Menu-driven installation with multi-target support

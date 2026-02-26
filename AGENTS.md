@@ -445,6 +445,8 @@ tasks.md checklist: [ ] 待执行 | [/] 执行中 | [x] 完成 | [!] 失败
 | ~plan 命令 | functions/plan.md |
 | ~plan list/show | functions/plan.md |
 | ~plan <需求> | functions/plan.md, stages/design.md |
+| ~help 命令 | functions/help.md |
+| ~help <命令名> | functions/help.md, functions/{命令名}.md |
 
 ### 按需读取规则
 
