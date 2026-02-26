@@ -26,6 +26,12 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/kittors/AgentFlow"
+Repository = "https://github.com/kittors/AgentFlow"
+Changelog = "https://github.com/kittors/AgentFlow/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/kittors/AgentFlow/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
@@ -50,3 +56,8 @@ python-version = "3.12"
 
 [tool.knot.src]
 root = "."
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.2",
+]

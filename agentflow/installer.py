@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import sys
 import shutil
+import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from ._constants import (
@@ -11,12 +15,77 @@ from ._constants import (
     PLUGIN_DIR_NAME,
     backup_user_file,
     detect_installed_clis,
-    get_agents_md_path,
     get_agentflow_module_path,
+    get_agents_md_path,
     get_skill_md_path,
     is_agentflow_file,
     msg,
 )
+
+# ── Windows file-locking safe operations ──────────────────────────────────────
+
+def _safe_remove(path: Path) -> bool:
+    """Remove a file or directory, handling Windows file-locking.
+
+    If a ``PermissionError`` is raised (common on Windows when a file is locked),
+    the path is renamed aside with a timestamp suffix instead of being deleted.
+    """
+    if not path.exists():
+        return True
+    try:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+        return True
+    except PermissionError:
+        # Rename-aside fallback for locked files (Windows)
+        ts = datetime.now().strftime("%Y%m%d%H%M%S")
+        aside = path.parent / f"{path.name}._agentflow_old_{ts}"
+        try:
+            path.rename(aside)
+            print(msg(f"  ⚠️ 文件被锁定，已重命名: {aside.name}",
+                      f"  ⚠️ File locked, renamed aside: {aside.name}"))
+            return True
+        except Exception:
+            print(msg(f"  ⚠️ 无法移除: {path}", f"  ⚠️ Cannot remove: {path}"))
+            return False
+
+
+def _safe_write(file_path: Path, content: str) -> bool:
+    """Write content to a file atomically via temp file + os.replace.
+
+    This prevents partial writes and handles Windows locking issues.
+    """
+    try:
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(file_path.parent),
+            suffix=".tmp",
+            prefix=".agentflow_",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp_path, str(file_path))
+            return True
+        except Exception:
+            # Clean up temp file on failure
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+    except PermissionError:
+        # Fallback: direct write if os.replace fails (Windows locking)
+        try:
+            file_path.write_text(content, encoding="utf-8")
+            return True
+        except Exception as e:
+            print(msg(f"  ⚠️ 写入失败: {e}", f"  ⚠️ Write failed: {e}"))
+            return False
+    except Exception as e:
+        print(msg(f"  ⚠️ 写入失败: {e}", f"  ⚠️ Write failed: {e}"))
+        return False
 
 
 def _get_source_files() -> dict[str, Path]:
@@ -24,7 +93,7 @@ def _get_source_files() -> dict[str, Path]:
     module_path = get_agentflow_module_path()
     sources: dict[str, Path] = {}
 
-    for subdir_name in ("stages", "services", "rules", "rlm", "functions", "templates", "hooks"):
+    for subdir_name in ("stages", "services", "rules", "rlm", "functions", "templates", "hooks", "agents"):
         subdir = module_path / subdir_name
         if subdir.exists():
             sources[subdir_name] = subdir
@@ -54,7 +123,7 @@ def _deploy_rules_file(target: str, cli_dir: Path) -> bool:
         print(msg(f"  📦 已备份原文件: {backup.name}",
                   f"  📦 Backed up existing file: {backup.name}"))
 
-    rules_file.write_text(content, encoding="utf-8")
+    _safe_write(rules_file, content)
     print(msg(f"  ✅ {config['rules_file']} 已部署",
               f"  ✅ {config['rules_file']} deployed"))
     return True
@@ -72,7 +141,7 @@ def _deploy_module_dir(target: str, cli_dir: Path) -> bool:
         dest = plugin_dir / name
         if source_path.is_dir():
             if dest.exists():
-                shutil.rmtree(dest)
+                _safe_remove(dest)
             shutil.copytree(source_path, dest)
             deployed += 1
         elif source_path.is_file():
@@ -145,6 +214,126 @@ def _deploy_hooks(target: str, cli_dir: Path) -> bool:
     return True
 
 
+def _deploy_codex_agents(cli_dir: Path) -> bool:
+    """Deploy AgentFlow agent roles to Codex CLI (multi-agent support).
+
+    Prompts the user whether to enable multi-agent, then:
+    1. Deploys reviewer.toml and architect.toml to ~/.codex/agents/
+    2. Merges [agents] role definitions into ~/.codex/config.toml
+    3. Enables [features] multi_agent = true
+    """
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    config_file = cli_dir / "config.toml"
+
+    # Check if multi-agent is already enabled
+    already_enabled = False
+    if config_file.exists():
+        try:
+            existing = tomllib.loads(config_file.read_text(encoding="utf-8"))
+            already_enabled = existing.get("features", {}).get("multi_agent", False)
+        except Exception:
+            pass
+
+    if already_enabled:
+        print(msg("  ℹ️  多代理已启用，更新角色配置...",
+                  "  ℹ️  Multi-agent already enabled, updating roles..."))
+    elif not sys.stdin.isatty():
+        # Non-interactive mode (e.g. tests, piped input): skip prompt
+        return True
+    else:
+        # Ask user with detailed explanation
+        print()
+        print(msg("  ┌─────────────────────────────────────────────────┐",
+                  "  ┌─────────────────────────────────────────────────┐"))
+        print(msg("  │  🤖 多代理协作 (Multi-Agent, 实验性)            │",
+                  "  │  🤖 Multi-Agent Collaboration (Experimental)    │"))
+        print(msg("  └─────────────────────────────────────────────────┘",
+                  "  └─────────────────────────────────────────────────┘"))
+        print(msg("  开启后的能力:",
+                  "  When enabled:"))
+        print(msg("    • reviewer 子代理 — 自动并行审查代码安全性和质量",
+                  "    • reviewer agent — parallel code security & quality review"))
+        print(msg("    • architect 子代理 — 评估架构方案，对比多种设计",
+                  "    • architect agent — evaluate architecture, compare designs"))
+        print(msg("    • 多个子代理可并行工作，大幅加速复杂任务",
+                  "    • Multiple agents work in parallel, speeding up complex tasks"))
+        print(msg("  适用场景: 大型重构、多模块开发、代码审查",
+                  "  Best for: large refactors, multi-module dev, code review"))
+        print(msg("  注意: 此功能为实验性，可随时通过 /experimental 关闭",
+                  "  Note: Experimental feature, can be disabled via /experimental"))
+        print()
+        answer = input(msg("  是否启用多代理？(y/N): ",
+                           "  Enable multi-agent? (y/N): ")).strip().lower()
+        if answer not in ("y", "yes", "是"):
+            print(msg("  ⏭️  跳过多代理配置（后续可通过 /experimental 手动开启）",
+                      "  ⏭️  Skipped (enable later via /experimental in Codex)"))
+            return True
+
+    # 1. Deploy agent role TOML files
+    agents_src = get_agentflow_module_path() / "agents"
+    agents_dest = cli_dir / "agents"
+    agents_dest.mkdir(parents=True, exist_ok=True)
+
+    for role_file in ("reviewer.toml", "architect.toml"):
+        src = agents_src / role_file
+        if src.exists():
+            shutil.copy2(src, agents_dest / role_file)
+
+    print(msg("  ✅ 子代理角色已部署 (reviewer, architect)",
+              "  ✅ Agent roles deployed (reviewer, architect)"))
+
+    # 2. Merge agent config into config.toml
+    config_text = ""
+    if config_file.exists():
+        config_text = config_file.read_text(encoding="utf-8")
+
+    # Parse existing config to check what's there
+    try:
+        existing = tomllib.loads(config_text)
+    except Exception:
+        existing = {}
+
+    # Build new sections to append (only if not already present)
+    additions: list[str] = []
+
+    # Enable multi_agent feature
+    features = existing.get("features", {})
+    if not features.get("multi_agent", False):
+        if "features" not in existing:
+            additions.append("\n[features]\nmulti_agent = true")
+        else:
+            # features section exists but multi_agent is not set
+            config_text = config_text.replace("[features]",
+                                              "[features]\nmulti_agent = true")
+
+    # Add agent role definitions
+    agents = existing.get("agents", {})
+    if "reviewer" not in agents:
+        additions.append(
+            '\n[agents.reviewer]\n'
+            'description = "AgentFlow code reviewer: security, correctness, test quality analysis."\n'
+            'config_file = "agents/reviewer.toml"'
+        )
+    if "architect" not in agents:
+        additions.append(
+            '\n[agents.architect]\n'
+            'description = "AgentFlow architect: architectural evaluation, dependency analysis."\n'
+            'config_file = "agents/architect.toml"'
+        )
+
+    if additions:
+        config_text += "\n" + "\n".join(additions) + "\n"
+        _safe_write(config_file, config_text)
+
+    print(msg("  ✅ 多代理配置已写入 config.toml",
+              "  ✅ Multi-agent config written to config.toml"))
+    return True
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def install(target: str) -> bool:
@@ -171,6 +360,10 @@ def install(target: str) -> bool:
     ok = ok and _deploy_module_dir(target, cli_dir)
     ok = ok and _deploy_skill_md(target, cli_dir)
     ok = ok and _deploy_hooks(target, cli_dir)
+
+    # Codex-specific: multi-agent setup
+    if target == "codex":
+        ok = ok and _deploy_codex_agents(cli_dir)
 
     if ok:
         print(msg(f"\n  ✅ {target} 安装完成!", f"\n  ✅ {target} installation complete!"))
@@ -212,19 +405,28 @@ def uninstall(target: str) -> bool:
 
     rules_file = cli_dir / config["rules_file"]
     if rules_file.exists() and is_agentflow_file(rules_file):
-        rules_file.unlink()
+        _safe_remove(rules_file)
         print(msg(f"  ✅ {config['rules_file']} 已移除",
                   f"  ✅ {config['rules_file']} removed"))
 
     plugin_dir = cli_dir / PLUGIN_DIR_NAME
     if plugin_dir.exists():
-        shutil.rmtree(plugin_dir)
+        _safe_remove(plugin_dir)
         print(msg("  ✅ 模块目录已移除", "  ✅ Module directory removed"))
 
     skill_dir = cli_dir / "skills" / "agentflow"
     if skill_dir.exists():
-        shutil.rmtree(skill_dir)
+        _safe_remove(skill_dir)
         print(msg("  ✅ SKILL.md 已移除", "  ✅ SKILL.md removed"))
+
+    # Codex-specific: clean up agent role files
+    if target == "codex":
+        agents_dir = cli_dir / "agents"
+        for role_file in ("reviewer.toml", "architect.toml"):
+            rf = agents_dir / role_file
+            if rf.exists():
+                _safe_remove(rf)
+        print(msg("  ✅ 子代理角色文件已移除", "  ✅ Agent role files removed"))
 
     if target == "claude":
         settings_file = cli_dir / "settings.json"

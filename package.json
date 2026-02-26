@@ -1,0 +1,35 @@
+{
+    "name": "agentflow",
+    "version": "1.0.0",
+    "description": "Multi-CLI Agent Workflow System — 5-level routing, EHRB safety, knowledge graph memory, sub-agent orchestration",
+    "keywords": [
+        "ai",
+        "agent",
+        "workflow",
+        "claude-code",
+        "codex",
+        "coding-assistant",
+        "prompt-engineering",
+        "sub-agent",
+        "knowledge-graph"
+    ],
+    "author": "AgentFlow Contributors",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/kittors/AgentFlow.git"
+    },
+    "homepage": "https://github.com/kittors/AgentFlow",
+    "bugs": {
+        "url": "https://github.com/kittors/AgentFlow/issues"
+    },
+    "bin": {
+        "agentflow": "bin/agentflow.js"
+    },
+    "files": [
+        "bin/"
+    ],
+    "engines": {
+        "node": ">=16"
+    }
+}

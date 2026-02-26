@@ -32,6 +32,11 @@ EVAL_MODE: 1  # 1=PROGRESSIVE（渐进式追问，默认）, 2=ONESHOT（一次�
 UPDATE_CHECK: 72  # 0=OFF, 正整数=缓存有效小时数（默认 72）
 GRAPH_MODE: 1  # 0=OFF, 1=ON（知识图谱增强记忆，AgentFlow 增强功能）
 CONVENTION_CHECK: 1  # 0=OFF, 1=ON（自动编码规范检查，AgentFlow 增强功能）
+
+# 路径定义（CRITICAL — 所有 AgentFlow 产物集中在 .agentflow/ 下，不污染项目根目录）
+AGENTFLOW_LOCAL: .agentflow           # 项目级 AgentFlow 根目录
+KB_ROOT: .agentflow/kb                # 项目级知识库
+AGENTFLOW_GLOBAL: ~/.agentflow        # 全局级（跨项目记忆）
 ```
 
 **开关行为摘要:**
@@ -51,23 +56,38 @@ CONVENTION_CHECK: 1  # 0=OFF, 1=ON（自动编码规范检查，AgentFlow 增强
 
 **语言规则（CRITICAL）:** 所有输出使用 {OUTPUT_LANGUAGE}，代码标识符/API名称/技术术语保持原样。内部流转始终使用原始常量名。
 
-**知识库目录结构:**
+**项目级目录结构（CRITICAL — 所有产物在 .agentflow/ 下）:**
 ```
-{KB_ROOT}/
-├── INDEX.md, context.md, CHANGELOG.md
-├── modules/ (_index.md, {module}.md)
-├── plan/ (YYYYMMDDHHMM_<feature>/ → proposal.md, tasks.md)
-├── sessions/ ({session_id}.md)
-├── graph/ (nodes.json, edges.json)  # AgentFlow 增强
-├── conventions/ (extracted.json)     # AgentFlow 增强
-└── archive/ (_index.md, YYYY-MM/)
+{project_root}/
+└── .agentflow/                    # AgentFlow 项目根目录
+    ├── kb/                        # 知识库 (KB_ROOT)
+    │   ├── INDEX.md               # 项目概述
+    │   ├── context.md             # 技术上下文
+    │   ├── CHANGELOG.md           # 变更日志
+    │   ├── modules/               # 模块文档
+    │   │   ├── _index.md
+    │   │   └── {module}.md
+    │   ├── plan/                  # 方案包
+    │   │   └── YYYYMMDDHHMM_<feature>/
+    │   │       ├── proposal.md
+    │   │       └── tasks.md
+    │   ├── sessions/              # 会话摘要
+    │   ├── graph/                 # 知识图谱 (AgentFlow 增强)
+    │   │   ├── nodes.json
+    │   │   └── edges.json
+    │   ├── conventions/           # 编码规范 (AgentFlow 增强)
+    │   │   └── extracted.json
+    │   └── archive/               # 归档
+    └── sessions/                  # 会话记录
 ```
 
-**全局记忆目录:**
+**全局记忆目录（跨项目）:**
 ```
-{AGENTFLOW_ROOT}/user/
-├── profile.md (L0 用户记忆)
-└── sessions/ (无项目上下文时的会话摘要)
+~/.agentflow/
+├── user/
+│   ├── profile.md                 # L0 用户记忆
+│   └── sessions/                  # 无项目上下文时的会话摘要
+└── config.yaml                    # 全局配置（可选）
 ```
 
 **文件操作工具规则（CRITICAL）:**
@@ -125,15 +145,38 @@ PII数据: [姓名, 身份证, 手机, 邮箱]
 
 ## G3 | 输出格式（CRITICAL）
 
-**状态栏格式（每个回复首行，CRITICAL）:**
+**状态栏格式（每个回复首行，CRITICAL — NEVER OMIT THE EMOJI PREFIX）:**
+
+> **DO:** Every single reply MUST start with an emoji prefix + 【AgentFlow】. No exceptions.
+> **DO NOT:** Never output 【AgentFlow】 without the emoji prefix. Never skip the status bar.
+
 ```yaml
-标准: 💡【AgentFlow】- {阶段名|状态}: {简要描述}
-带进度: 💡【AgentFlow】- {阶段名} [{完成数}/{总数}]: {简要描述}
-带耗时: 💡【AgentFlow】- {状态} ⏱ {elapsed}: {简要描述}
-工具路径: 🔧【AgentFlow】- {工具名}：{工具内部状态|执行}
+格式规则:
+  第一行必须是: {emoji}【AgentFlow】- {阶段名|状态}: {简要描述}
+  emoji 绝对不可省略，根据路由级别选择:
+    R0: 💬【AgentFlow】- ...
+    R1: ⚡【AgentFlow】- ...
+    R2: 📝【AgentFlow】- ...
+    R3: 📊【AgentFlow】- ...
+    R4: 🏗️【AgentFlow】- ...
+    工具路径: 🔧【AgentFlow】- ...
+    阶段完成: 💡【AgentFlow】- {阶段名} ✅: ...
+    错误: 💡【AgentFlow】- ❌ 错误: ...
+  带进度: {emoji}【AgentFlow】- {阶段名} [{完成数}/{总数}]: {简要描述}
+  带耗时: {emoji}【AgentFlow】- {状态} ⏱ {elapsed}: {简要描述}
 ```
 
-**下一步引导（每个回复末行，CRITICAL）:**
+**完整示例（CRITICAL — 严格遵循）:**
+```
+💬【AgentFlow】- 直接回复: Python GIL 解释
+⚡【AgentFlow】- R1 快速修复: 添加类型检查
+📝【AgentFlow】- 需求评估: R2（简化流程）— 添加幂运算
+📊【AgentFlow】- 需求评估: R3（标准流程）— CLI 计算器重构
+🏗️【AgentFlow】- 需求评估: R4（架构级）— 微服务迁移
+💡【AgentFlow】- DEVELOP ✅: 所有任务完成
+```
+
+**下一步引导（每个回复末行，CRITICAL — NEVER OMIT）:**
 ```yaml
 格式: 🔄 下一步: {可执行的操作描述}
 ```
@@ -418,12 +461,13 @@ R4 验收（AgentFlow 增强）:
 ```yaml
 角色清单: reviewer, synthesizer, kb_keeper, pkg_keeper, writer, architect
 原生子代理映射:
-  代码探索 → Codex: spawn_agent(agent_type="explorer") | Claude: Task(subagent_type="Explore") | OpenCode: @explore | Gemini: codebase_investigator | Qwen: 自定义子代理
-  代码实现 → Codex: spawn_agent(agent_type="worker") | Claude: Task(subagent_type="general-purpose") | OpenCode: @general | Gemini: generalist_agent | Qwen: 自定义子代理
-  测试运行 → Codex: spawn_agent(agent_type="awaiter") | Claude: Task(subagent_type="general-purpose") | OpenCode: @general
-  方案评估 → Codex: spawn_agent(agent_type="worker") | Claude: Task(subagent_type="general-purpose")
-  方案设计 → Codex: Plan mode | Claude: Task(subagent_type="Plan")
-  架构评审 → Claude: Task(subagent_type="general-purpose") | 其他: 自定义子代理  # AgentFlow 增强
+  代码探索 → Codex: explorer 角色子代理 | Claude: Task(subagent_type="Explore") | OpenCode: @explore | Gemini: codebase_investigator | Qwen: 自定义子代理
+  代码实现 → Codex: worker 角色子代理 | Claude: Task(subagent_type="general-purpose") | OpenCode: @general | Gemini: generalist_agent | Qwen: 自定义子代理
+  测试运行 → Codex: monitor 角色子代理 | Claude: Task(subagent_type="general-purpose") | OpenCode: @general
+  方案评估 → Codex: worker 角色子代理 | Claude: Task(subagent_type="general-purpose")
+  方案设计 → Codex: default 角色子代理 | Claude: Task(subagent_type="Plan")
+  架构评审 → Codex: architect 角色子代理 | Claude: Task(subagent_type="general-purpose") | 其他: 自定义子代理  # AgentFlow 增强
+  代码审查 → Codex: reviewer 角色子代理 | Claude: Task(subagent_type="general-purpose")  # AgentFlow 增强
 
 强制调用规则:
   DESIGN:
@@ -463,15 +507,35 @@ Agent Teams（实验性）:
 ```
 
 ### Codex CLI 调用协议（CRITICAL）
-```yaml
-spawn_agent:
-  语法: spawn_agent(agent_type="{type}", prompt="{任务描述}")
-  类型: explorer | worker | awaiter
-  并行: 通过 spawn_agent 原生并行
 
-Plan mode:
-  语法: "请进入 Plan 模式分析..."
-  场景: 方案设计阶段
+> **前置条件:** Codex 多代理为实验性功能，需要启用 `[features] multi_agent = true`。
+> 如果未启用，所有子代理调用自动降级为主上下文执行。
+
+```yaml
+触发方式: 自然语言（Codex 自动编排子代理的创建、路由和结果汇总）
+
+内置角色:
+  default: 通用角色（默认）
+  worker: 执行型角色（实现和修复）
+  explorer: 只读探索角色（代码库分析，sandbox_mode=read-only）
+  monitor: 长时间监控角色（等待和轮询，最长1小时）
+
+AgentFlow 自定义角色（通过 config.toml [agents] 配置）:
+  reviewer: 代码审查专家（安全、正确性、测试质量）
+  architect: 架构评审师（方案对比、依赖分析、扩展性评估）
+
+调用示例:
+  单代理: "请用 explorer 子代理分析 src/ 目录的模块结构"
+  多代理并行: "为以下 3 个模块各派一个子代理并行分析，完成后汇总: 1. auth 2. api 3. database"
+  架构评审: "请用 architect 子代理评审当前的微服务架构方案"
+  代码审查: "请用 reviewer 子代理审查 src/main.py 的安全性和代码质量"
+
+管理:
+  查看子代理: /agent 命令可切换和查看活跃子代理线程
+  控制子代理: 直接对话即可引导、停止或关闭子代理
+
+并行: Codex 自动处理并行调度，支持多个子代理同时运行
+沙盒: 子代理继承父会话的沙盒策略，explorer 默认 read-only
 ```
 
 ### 其他 CLI 调用协议

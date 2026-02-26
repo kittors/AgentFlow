@@ -1,0 +1,10 @@
+# AgentFlow agent roles for Codex CLI
+# This snippet is merged into ~/.codex/config.toml when multi-agent is enabled.
+
+[agents.reviewer]
+description = "AgentFlow code reviewer: security, correctness, test quality analysis."
+config_file = "agents/reviewer.toml"
+
+[agents.architect]
+description = "AgentFlow architect: architectural evaluation, dependency analysis, multi-approach comparison."
+config_file = "agents/architect.toml"

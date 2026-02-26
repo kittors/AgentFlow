@@ -11,7 +11,6 @@ from importlib.metadata import version as get_version
 
 from ._constants import CLI_TARGETS, msg
 
-
 # ── Interactive main menu ─────────────────────────────────────────────────────
 
 def _divider(width: int = 40) -> None:
@@ -20,8 +19,8 @@ def _divider(width: int = 40) -> None:
 
 def _interactive_main() -> None:
     """Show main interactive menu for all operations (loops until exit)."""
-    from .updater import update, status, clean
     from .interactive import interactive_install, interactive_uninstall
+    from .updater import clean, status, update
 
     _divider()
     try:
@@ -135,9 +134,9 @@ def print_usage() -> None:
 
 def main() -> None:
     """Main entry point."""
-    from .updater import update, status, clean
-    from .interactive import interactive_install, interactive_uninstall
     from .installer import install, install_all, uninstall, uninstall_all
+    from .interactive import interactive_install, interactive_uninstall
+    from .updater import clean, status, update
 
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
