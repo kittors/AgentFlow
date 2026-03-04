@@ -52,29 +52,8 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 ok "$(msg "找到 Git ($(git --version 2>&1))" "Found Git ($(git --version 2>&1))")"
 
-# ─── Step 2: Detect Python ───
-step "$(msg '步骤 2/5: 检测 Python' 'Step 2/5: Detecting Python')"
-
-PYTHON_CMD=""
-for cmd in python3 python; do
-    if command -v "$cmd" >/dev/null 2>&1; then
-        version=$("$cmd" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
-        major=$(echo "$version" | cut -d. -f1)
-        minor=$(echo "$version" | cut -d. -f2)
-        if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 10 ]; }; then
-            PYTHON_CMD="$cmd"
-            break
-        fi
-    fi
-done
-
-if [ -z "$PYTHON_CMD" ]; then
-    err "$(msg '需要 Python >= 3.10，但未找到。' 'Python >= 3.10 is required but not found.')"
-fi
-ok "$(msg "找到 $PYTHON_CMD ($($PYTHON_CMD --version 2>&1))" "Found $PYTHON_CMD ($($PYTHON_CMD --version 2>&1))")"
-
-# ─── Step 3: Detect package manager ───
-step "$(msg '步骤 3/5: 检测包管理器' 'Step 3/5: Detecting package manager')"
+# ─── Step 2: Detect package manager ───
+step "$(msg '步骤 2/5: 检测包管理器' 'Step 2/5: Detecting package manager')"
 
 HAS_UV=false
 if command -v uv >/dev/null 2>&1; then
@@ -84,18 +63,50 @@ else
     info "$(msg '未找到 uv，将使用 pip' 'uv not found, falling back to pip')"
 fi
 
-# ─── Step 3.5: Clean pip remnants ───
-while IFS= read -r sp_dir; do
-    [ -d "$sp_dir" ] || continue
-    for remnant in "$sp_dir"/~*; do
-        [ -e "$remnant" ] || continue
-        if rm -rf "$remnant" 2>/dev/null; then
-            info "$(msg "已清理 pip 残留: $(basename "$remnant")" "Cleaned pip remnant: $(basename "$remnant")")"
+# ─── Step 3: Detect Python ───
+step "$(msg '步骤 3/5: 检测 Python' 'Step 3/5: Detecting Python')"
+
+PYTHON_CMD=""
+# 检查带具体版本号的 python3 或者 python
+for cmd in python3.14 python3.13 python3.12 python3.11 python3.10 python3 python; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+        # 兼容例如 Python 3.10.x 等格式输出
+        version=$("$cmd" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+        if [ -n "$version" ]; then
+            major=$(echo "$version" | cut -d. -f1)
+            minor=$(echo "$version" | cut -d. -f2)
+            if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 10 ]; }; then
+                PYTHON_CMD="$cmd"
+                break
+            fi
         fi
-    done
-done < <("$PYTHON_CMD" -c "import site
+    fi
+done
+
+if [ -z "$PYTHON_CMD" ]; then
+    if [ "$HAS_UV" = true ]; then
+        warn "$(msg '未找到 Python >= 3.10，但已安装 uv。将使用 uv 继续安装。' 'Python >= 3.10 not found, but uv is installed. Proceeding with uv.')"
+    else
+        err "$(msg '需要 Python >= 3.10，但未找到。请安装后重试。' 'Python >= 3.10 is required but not found. Please install it and try again.')"
+    fi
+else
+    ok "$(msg "找到 $PYTHON_CMD ($($PYTHON_CMD --version 2>&1))" "Found $PYTHON_CMD ($($PYTHON_CMD --version 2>&1))")"
+fi
+
+# ─── Step 3.5: Clean pip remnants ───
+if [ -n "$PYTHON_CMD" ]; then
+    while IFS= read -r sp_dir; do
+        [ -d "$sp_dir" ] || continue
+        for remnant in "$sp_dir"/~*; do
+            [ -e "$remnant" ] || continue
+            if rm -rf "$remnant" 2>/dev/null; then
+                info "$(msg "已清理 pip 残留: $(basename "$remnant")" "Cleaned pip remnant: $(basename "$remnant")")"
+            fi
+        done
+    done < <("$PYTHON_CMD" -c "import site
 for p in site.getsitepackages():
     print(p)" 2>/dev/null || true)
+fi
 
 # ─── Step 4: Install ───
 step "$(msg "步骤 4/5: 安装 AgentFlow (分支: $BRANCH)" "Step 4/5: Installing AgentFlow (branch: $BRANCH)")"
