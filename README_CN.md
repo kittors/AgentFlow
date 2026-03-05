@@ -77,6 +77,24 @@ uv tool install --from git+https://github.com/kittors/AgentFlow agentflow && age
 pip install git+https://github.com/kittors/AgentFlow.git && agentflow
 ```
 
+### 使用镜像源（内网 / 国内加速网络）
+
+如果您在内网环境或访问 GitHub 较慢，可以通过设置 `AGENTFLOW_REPO` 环境变量来覆盖仓库地址。
+
+**macOS / Linux（例如：Gitee 镜像）：**
+
+```bash
+export AGENTFLOW_REPO="https://gitee.com/kittors/AgentFlow"
+curl -fsSL https://raw.githubusercontent.com/kittors/AgentFlow/main/install.sh | bash
+```
+
+**Windows PowerShell：**
+
+```powershell
+$env:AGENTFLOW_REPO="https://gitee.com/kittors/AgentFlow"
+irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
+```
+
 ### 安装到指定 CLI
 
 ```bash

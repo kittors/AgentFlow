@@ -78,6 +78,24 @@ uv tool install --from git+https://github.com/kittors/AgentFlow agentflow && age
 pip install git+https://github.com/kittors/AgentFlow.git && agentflow
 ```
 
+### Use a Mirror Repository (Internal Network / Fast Access)
+
+If you are using an internal network or have slow access to GitHub, you can override the repository URL by setting the `AGENTFLOW_REPO` environment variable.
+
+**macOS / Linux (e.g., Gitee mirror):**
+
+```bash
+export AGENTFLOW_REPO="https://gitee.com/kittors/AgentFlow"
+curl -fsSL https://raw.githubusercontent.com/kittors/AgentFlow/main/install.sh | bash
+```
+
+**Windows PowerShell:**
+
+```powershell
+$env:AGENTFLOW_REPO="https://gitee.com/kittors/AgentFlow"
+irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
+```
+
 ### Install to specific CLI targets
 
 ```bash

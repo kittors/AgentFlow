@@ -2,7 +2,7 @@
 set -eu
 
 # ─── Configuration ───
-REPO="https://github.com/kittors/AgentFlow"
+REPO="${AGENTFLOW_REPO:-https://github.com/kittors/AgentFlow}"
 BRANCH="${AGENTFLOW_BRANCH:-main}"
 
 # ─── Colors ───
