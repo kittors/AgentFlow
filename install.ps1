@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # ─── Configuration ───
-$REPO = "https://github.com/kittors/AgentFlow"
+$REPO = if ($env:AGENTFLOW_REPO) { $env:AGENTFLOW_REPO } else { "https://github.com/kittors/AgentFlow" }
 $BRANCH = if ($env:AGENTFLOW_BRANCH) { $env:AGENTFLOW_BRANCH } else { "main" }
 
 # ─── Locale detection ───
