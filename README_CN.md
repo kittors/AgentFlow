@@ -77,22 +77,18 @@ uv tool install --from git+https://github.com/kittors/AgentFlow agentflow && age
 pip install git+https://github.com/kittors/AgentFlow.git && agentflow
 ```
 
-### 使用镜像源（内网 / 国内加速网络）
+### 本地化安装（内网 / 离线环境）
 
-如果您在内网环境或访问 GitHub 较慢，可以通过设置 `AGENTFLOW_REPO` 环境变量来覆盖仓库地址。
+如果您在无内网环境或无法访问互联网，您可以使用离线安装包进行本地化安装：
 
-**macOS / Linux（例如：Gitee 镜像）：**
+1. 从 [Releases](https://github.com/kittors/AgentFlow/releases) 页面下载最新的 `agentflow-*.whl` 或 `agentflow-*.tar.gz` 包。
+2. 将安装包传输至您的内网或离线环境中。
+3. 使用 `uv`（推荐）或 `pip` 进行本地安装：
 
 ```bash
-export AGENTFLOW_REPO="https://gitee.com/kittors/AgentFlow"
-curl -fsSL https://raw.githubusercontent.com/kittors/AgentFlow/main/install.sh | bash
-```
-
-**Windows PowerShell：**
-
-```powershell
-$env:AGENTFLOW_REPO="https://gitee.com/kittors/AgentFlow"
-irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
+uv tool install /path/to/agentflow-*.whl
+# 或者使用 pip
+pip install /path/to/agentflow-*.whl
 ```
 
 ### 安装到指定 CLI
