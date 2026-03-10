@@ -295,7 +295,11 @@ def _deploy_hooks(target: str, cli_dir: Path) -> bool:
 
 
 def _deploy_agent_toml_files(cli_dir: Path) -> None:
-    """Deploy reviewer.toml and architect.toml to the Codex agents directory."""
+    """Deploy reviewer.toml and architect.toml to the Codex agents directory.
+
+    Each deployed file is stamped with the AgentFlow marker so that
+    ``is_agentflow_file()`` can identify them during uninstallation.
+    """
     agents_src = get_agentflow_module_path() / "agents"
     agents_dest = cli_dir / "agents"
     agents_dest.mkdir(parents=True, exist_ok=True)
@@ -303,7 +307,11 @@ def _deploy_agent_toml_files(cli_dir: Path) -> None:
     for role_file in ("reviewer.toml", "architect.toml"):
         src = agents_src / role_file
         if src.exists():
-            shutil.copy2(src, agents_dest / role_file)
+            content = src.read_text(encoding="utf-8")
+            # Stamp with marker so uninstall can verify ownership
+            if AGENTFLOW_MARKER not in content:
+                content += f"\n# {AGENTFLOW_MARKER} managed agent role\n"
+            _safe_write(agents_dest / role_file, content)
 
     print(msg("  ✅ 子代理角色已部署 (reviewer, architect)", "  ✅ Agent roles deployed (reviewer, architect)"))
 
@@ -532,6 +540,40 @@ def install_all(profile: str = DEFAULT_PROFILE) -> bool:
     return success > 0
 
 
+def _clean_codex_config(config_file: Path) -> None:
+    """Remove AgentFlow-injected sections from Codex config.toml.
+
+    Cleans up ``[agents.reviewer]``, ``[agents.architect]`` sections and
+    the ``multi_agent = true`` line under ``[features]``.
+    """
+    if not config_file.exists():
+        return
+
+    import re
+
+    text = config_file.read_text(encoding="utf-8")
+    original = text
+
+    # Remove [agents.reviewer] and [agents.architect] blocks
+    # Each block starts with the header and ends before the next [section] or EOF
+    for role in ("reviewer", "architect"):
+        pattern = rf"\n?\[agents\.{role}\]\n(?:[^\[]*?)(?=\n\[|\Z)"
+        text = re.sub(pattern, "", text)
+
+    # Remove multi_agent = true line (only if under [features])
+    text = re.sub(r"\nmulti_agent\s*=\s*true\s*", "\n", text)
+
+    # Remove empty [features] section left behind
+    text = re.sub(r"\n\[features\]\s*\n(?=\n|\[|\Z)", "\n", text)
+
+    # Clean up excessive blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text).strip() + "\n"
+
+    if text != original:
+        _safe_write(config_file, text)
+        print(msg("  ✅ config.toml 已清理", "  ✅ config.toml cleaned"))
+
+
 def uninstall(target: str) -> bool:
     """Uninstall AgentFlow from a single CLI target."""
     if target not in CLI_TARGETS:
@@ -558,14 +600,21 @@ def uninstall(target: str) -> bool:
         _safe_remove(skill_dir)
         print(msg("  ✅ SKILL.md 已移除", "  ✅ SKILL.md removed"))
 
-    # Codex-specific: clean up agent role files
+    # Codex-specific: clean up agent role files + config.toml
     if target == "codex":
         agents_dir = cli_dir / "agents"
+        removed_any = False
         for role_file in ("reviewer.toml", "architect.toml"):
             rf = agents_dir / role_file
-            if rf.exists():
+            if rf.exists() and is_agentflow_file(rf):
                 _safe_remove(rf)
-        print(msg("  ✅ 子代理角色文件已移除", "  ✅ Agent role files removed"))
+                removed_any = True
+            elif rf.exists():
+                print(msg(f"  ⏭️  跳过非 AgentFlow 文件: {role_file}", f"  ⏭️  Skipped non-AgentFlow file: {role_file}"))
+        if removed_any:
+            print(msg("  ✅ 子代理角色文件已移除", "  ✅ Agent role files removed"))
+        # Clean up config.toml entries injected by AgentFlow
+        _clean_codex_config(cli_dir / "config.toml")
 
     if target == "claude":
         settings_file = cli_dir / "settings.json"
