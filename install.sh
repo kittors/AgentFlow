@@ -223,5 +223,10 @@ printf "${DIM}  $(msg '请重启终端或执行 source ~/.zshrc 后即可使用 
 
 if command -v agentflow >/dev/null 2>&1; then
     printf "$(msg '  正在启动交互式菜单...' '  Launching interactive menu...')\n\n"
-    agentflow </dev/tty
+    # Pass language choice to the Python CLI
+    if [ "$USE_ZH" = true ]; then
+        AGENTFLOW_LANG=zh agentflow </dev/tty
+    else
+        AGENTFLOW_LANG=en agentflow </dev/tty
+    fi
 fi

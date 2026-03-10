@@ -142,7 +142,18 @@ VALID_PROFILES: tuple[str, ...] = tuple(PROFILES.keys())
 
 def detect_locale() -> str:
     """Detect system locale.  Returns ``'zh'`` for Chinese locales, ``'en'``
-    otherwise."""
+    otherwise.
+
+    The ``AGENTFLOW_LANG`` environment variable takes highest priority,
+    allowing the install script to propagate the user's language choice.
+    """
+    # Explicit override via AGENTFLOW_LANG (set by install.sh)
+    af_lang = os.environ.get("AGENTFLOW_LANG", "").lower()
+    if af_lang in ("zh", "cn", "chinese"):
+        return "zh"
+    if af_lang in ("en", "english"):
+        return "en"
+
     for var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
         val = os.environ.get(var, "")
         if val.lower().startswith("zh"):
