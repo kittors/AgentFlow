@@ -118,6 +118,10 @@ if [ "$HAS_UV" = true ]; then
     else
         uv tool install --force --from "git+${REPO}@${BRANCH}" agentflow
     fi
+    # Ensure ~/.local/bin is on PATH for the rest of this script
+    export PATH="$HOME/.local/bin:$PATH"
+    # Persist PATH into shell config (~/.zshrc, ~/.bashrc, etc.)
+    uv tool update-shell 2>/dev/null || true
 else
     info "$(msg '使用 pip 安装...' 'Installing with pip...')"
     if [ "$BRANCH" = "main" ]; then
@@ -141,12 +145,23 @@ for p in site.getsitepackages():
 # ─── Step 5: Verify ───
 step "$(msg '步骤 5/5: 验证安装' 'Step 5/5: Verifying installation')"
 
+# Also check common install locations as fallback
+if ! command -v agentflow >/dev/null 2>&1; then
+    for _bin_dir in "$HOME/.local/bin" "$HOME/.cargo/bin" "/usr/local/bin"; do
+        if [ -x "$_bin_dir/agentflow" ]; then
+            export PATH="$_bin_dir:$PATH"
+            break
+        fi
+    done
+fi
+
 if command -v agentflow >/dev/null 2>&1; then
     ok "$(msg 'agentflow 命令已就绪！' 'agentflow command is ready!')"
     agentflow version 2>/dev/null || true
 else
     warn "$(msg 'agentflow 未在 PATH 中找到。' 'agentflow not found in PATH.')"
-    warn "$(msg '可能需要重启终端或将安装路径加入 PATH。' 'You may need to restart your terminal or add the install location to PATH.')"
+    warn "$(msg '请重启终端，或手动执行:' 'Please restart your terminal, or run:')"
+    printf "\n${CYAN}    export PATH=\"\$HOME/.local/bin:\$PATH\"${RESET}\n\n"
 fi
 
 # ─── Launch interactive menu ───
