@@ -14,12 +14,33 @@ BOLD='\033[1m'
 DIM='\033[2m'
 RESET='\033[0m'
 
-# ─── Locale detection ───
+# ─── Language selection ───
+# Auto-detect first, then allow override via interactive prompt
 USE_ZH=false
 _locale="${LC_ALL:-${LC_MESSAGES:-${LANG:-${LANGUAGE:-}}}}"
 case "$_locale" in
     zh*|ZH*) USE_ZH=true ;;
 esac
+
+# Interactive language selection (only if stdin is a tty)
+if [ -t 0 ] 2>/dev/null || [ -e /dev/tty ]; then
+    printf "\n"
+    printf "  ${BOLD}Select language / 选择语言:${RESET}\n"
+    printf "  [1] 中文\n"
+    printf "  [2] English\n"
+    printf "\n"
+    _lang_choice=""
+    if [ -t 0 ]; then
+        printf "  (1/2): " && read -r _lang_choice
+    elif [ -e /dev/tty ]; then
+        printf "  (1/2): " && read -r _lang_choice </dev/tty
+    fi
+    case "$_lang_choice" in
+        1) USE_ZH=true ;;
+        2) USE_ZH=false ;;
+        # Empty or other: keep auto-detected value
+    esac
+fi
 
 msg() {
     if [ "$USE_ZH" = true ]; then echo "$1"; else echo "$2"; fi
@@ -31,6 +52,37 @@ warn()    { printf "${YELLOW}  [!]${RESET}  %s\n" "$*"; }
 err()     { printf "${RED}  [✗]${RESET}  %s\n" "$*"; exit 1; }
 step()    { printf "\n${BOLD}${CYAN}  ─── %s ───${RESET}\n\n" "$*"; }
 
+# ─── Ensure PATH in shell profile ───
+_ensure_path_in_profile() {
+    local bin_dir="$1"
+    local line="export PATH=\"${bin_dir}:\$PATH\""
+    local updated=false
+
+    # Determine which shell profile(s) to update
+    local profiles=""
+    local current_shell="${SHELL:-}"
+    case "$current_shell" in
+        */zsh)  profiles="$HOME/.zshrc" ;;
+        */bash) profiles="$HOME/.bashrc $HOME/.bash_profile" ;;
+        *)      profiles="$HOME/.profile" ;;
+    esac
+
+    for profile in $profiles; do
+        # Create profile if it doesn't exist
+        [ -f "$profile" ] || touch "$profile"
+        # Check if already present
+        if ! grep -qF "$bin_dir" "$profile" 2>/dev/null; then
+            printf "\n# Added by AgentFlow installer\n%s\n" "$line" >> "$profile"
+            updated=true
+            ok "$(msg "PATH 已写入 $(basename $profile)" "PATH added to $(basename $profile)")"
+        fi
+    done
+
+    if [ "$updated" = false ]; then
+        ok "$(msg "PATH 已存在于 shell 配置中" "PATH already configured in shell profile")"
+    fi
+}
+
 # ─── Banner ───
 printf "\n"
 printf "${BOLD}${CYAN}"
@@ -39,7 +91,7 @@ printf "    ██╔══██╗██╔════╝ ██╔═══�
 printf "    ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║   █████╗  ██║     ██║   ██║██║ █╗ ██║\n"
 printf "    ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   ██╔══╝  ██║     ██║   ██║██║███╗██║\n"
 printf "    ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   ██║     ███████╗╚██████╔╝╚███╔███╔╝\n"
-printf "    ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝ \n"
+printf "    ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝     ╚══════╝ ╚═════╝  ╚═╝╚═╝ \n"
 printf "${RESET}"
 printf "${DIM}    Multi-CLI Agent Workflow System${RESET}\n"
 printf "\n"
@@ -120,8 +172,9 @@ if [ "$HAS_UV" = true ]; then
     fi
     # Ensure ~/.local/bin is on PATH for the rest of this script
     export PATH="$HOME/.local/bin:$PATH"
-    # Persist PATH into shell config (~/.zshrc, ~/.bashrc, etc.)
-    uv tool update-shell 2>/dev/null || true
+    # Persist PATH into shell config (manual write, uv tool update-shell
+    # doesn't work reliably when run via curl | bash)
+    _ensure_path_in_profile "$HOME/.local/bin"
 else
     info "$(msg '使用 pip 安装...' 'Installing with pip...')"
     if [ "$BRANCH" = "main" ]; then
@@ -165,8 +218,10 @@ else
 fi
 
 # ─── Launch interactive menu ───
-printf "\n${BOLD}${GREEN}  ✅ $(msg '安装完成！正在启动交互式菜单...' 'Installation complete! Launching interactive menu...')${RESET}\n\n"
+printf "\n${BOLD}${GREEN}  ✅ $(msg '安装完成！' 'Installation complete!')${RESET}\n"
+printf "${DIM}  $(msg '请重启终端或执行 source ~/.zshrc 后即可使用 agentflow 命令' 'Restart your terminal or run: source ~/.zshrc')${RESET}\n\n"
 
 if command -v agentflow >/dev/null 2>&1; then
+    printf "$(msg '  正在启动交互式菜单...' '  Launching interactive menu...')\n\n"
     agentflow </dev/tty
 fi
