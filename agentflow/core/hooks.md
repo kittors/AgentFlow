@@ -1,18 +1,9 @@
 # G12 | Hooks 集成
 
-> 本文件从 AGENTS.md 拆分而来，包含 Hooks 能力矩阵和降级原则。
+> 本文件从 AGENTS.md 拆分而来，包含 Hooks 能力和降级原则。
 > 加载时机: 仅供参考，不影响核心工作流。
 
-## Hooks 能力矩阵
-
-| Hook 事件 | Claude Code | Codex CLI | 其他 CLI |
-|-----------|------------|-----------|----------|
-| PreToolCall (安全检查) | ✅ | ❌ | ❌ |
-| PostToolCall (进度快照) | ✅ | ❌ | ❌ |
-| PostMessage (KB同步) | ✅ | ❌ | ❌ |
-| Notification (更新检查) | ✅ | ✅ | ❌ |
-| SessionStart (记忆加载) | ✅ | ❌ | ❌ |
-| SessionEnd (会话保存) | ✅ | ❌ | ❌ |
+{HOOKS_MATRIX}
 
 ## 降级原则
 

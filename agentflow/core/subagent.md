@@ -27,14 +27,6 @@
 
 ```yaml
 角色清单: reviewer, synthesizer, kb_keeper, pkg_keeper, writer, architect
-原生子代理映射:
-  代码探索 → Codex: explorer 角色子代理 | Claude: Task(subagent_type="Explore") | OpenCode: @explore | Gemini: codebase_investigator | Qwen: 自定义子代理
-  代码实现 → Codex: worker 角色子代理 | Claude: Task(subagent_type="general-purpose") | OpenCode: @general | Gemini: generalist_agent | Qwen: 自定义子代理
-  测试运行 → Codex: monitor 角色子代理 | Claude: Task(subagent_type="general-purpose") | OpenCode: @general
-  方案评估 → Codex: worker 角色子代理 | Claude: Task(subagent_type="general-purpose")
-  方案设计 → Codex: default 角色子代理 | Claude: Task(subagent_type="Plan")
-  架构评审 → Codex: architect 角色子代理 | Claude: Task(subagent_type="general-purpose") | 其他: 自定义子代理
-  代码审查 → Codex: reviewer 角色子代理 | Claude: Task(subagent_type="general-purpose")
 
 强制调用规则:
   DESIGN:
@@ -48,6 +40,8 @@
 
 降级: 子代理调用失败 → 主上下文直接执行，标记 [降级执行]
 ```
+
+{CLI_SUBAGENT_PROTOCOL}
 
 ### 子代理结果缓存（AgentFlow 增强）
 
@@ -74,63 +68,7 @@
 通道选择: 优先 native，不支持时降级到主上下文模拟
 ```
 
-### Claude Code 调用协议
-
-```yaml
-Task 子代理:
-  语法: "[创建子代理] {提示词}"  # 使用 Task tool
-  类型: Explore | Plan | general-purpose
-  并行: 最多4个同时
-  结果: 等待所有子代理完成后汇总
-
-Agent Teams（实验性）:
-  语法: 使用 Claude Code Agent Teams API
-  场景: 多角色协作（reviewer + architect + writer）
-  降级: Agent Teams 不可用时，降级为串行 Task 子代理
-```
-
-### Codex CLI 调用协议
-
-> **前置条件:** Codex 多代理为实验性功能，需要启用 `[features] multi_agent = true`。
-> 如果未启用，所有子代理调用自动降级为主上下文执行。
-
-```yaml
-触发方式: 自然语言（Codex 自动编排子代理的创建、路由和结果汇总）
-
-内置角色:
-  default: 通用角色（默认）
-  worker: 执行型角色（实现和修复）
-  explorer: 只读探索角色（代码库分析，sandbox_mode=read-only）
-  monitor: 长时间监控角色（等待和轮询，最长1小时）
-
-AgentFlow 自定义角色（通过 config.toml [agents] 配置）:
-  reviewer: 代码审查专家（安全、正确性、测试质量）
-  architect: 架构评审师（方案对比、依赖分析、扩展性评估）
-
-调用示例:
-  单代理: "请用 explorer 子代理分析 src/ 目录的模块结构"
-  多代理并行: "为以下 3 个模块各派一个子代理并行分析，完成后汇总: 1. auth 2. api 3. database"
-  架构评审: "请用 architect 子代理评审当前的微服务架构方案"
-  代码审查: "请用 reviewer 子代理审查 src/main.py 的安全性和代码质量"
-
-管理:
-  查看子代理: /agent 命令可切换和查看活跃子代理线程
-  控制子代理: 直接对话即可引导、停止或关闭子代理
-
-并行: Codex 自动处理并行调度，支持多个子代理同时运行
-沙盒: 子代理继承父会话的沙盒策略，explorer 默认 read-only
-```
-
-### 其他 CLI 调用协议
-
-```yaml
-OpenCode: @explore | @general 语法
-Gemini: codebase_investigator | generalist_agent
-Qwen: 自定义子代理
-Grok: 自定义子代理（根据可用能力适配）
-```
-
-### 并行调度规则（适用所有 CLI）
+### 并行调度规则
 
 ```yaml
 并行条件: 独立任务（无数据依赖）+ moderate/complex 级别
@@ -139,7 +77,6 @@ Grok: 自定义子代理（根据可用能力适配）
   方案构思: R3 ≥ 2个子代理并行构思不同方案
   代码改动: 按文件/模块分配，无依赖的任务并行
   测试: 按测试套件分配
-最大并行数: 由 CLI 能力决定（Claude 4, Codex 无限制）
 ```
 
 ### 分阶段并行策略（AgentFlow 增强）
@@ -204,7 +141,6 @@ Grok: 自定义子代理（根据可用能力适配）
 ```yaml
 子代理不可用: 主上下文直接执行
 并行不可用: 串行执行
-Agent Teams 不可用: 降级为 Task 子代理
 标记: 在 tasks.md 标记 [降级执行]
 降级层级: 并行子代理 → 串行子代理 → 主上下文直接执行
 ```

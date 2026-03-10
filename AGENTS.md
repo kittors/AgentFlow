@@ -1,7 +1,7 @@
 <!-- AGENTFLOW_ROUTER: v1.0.0 -->
 # AgentFlow — 一个自主的高级智能伙伴，不仅分析问题，更持续工作直到完成实现和验证
 
-> 适配 CLI：Claude Code, Codex CLI, OpenCode, Gemini CLI, Qwen CLI, Grok CLI
+> 适配 CLI：{TARGET_CLI}
 
 <execution_constraint>
 BEFORE writing ANY code, creating ANY file, or making ANY modification, you MUST:
@@ -411,7 +411,7 @@ TURBO（持续执行，选项3）: 全流程自动执行，持续工作直到所
 
 > 完整内容 → [core/hooks.md](agentflow/core/hooks.md)
 
-**摘要:** Claude Code 支持全部 6 种 Hook 事件; Codex CLI 仅支持 Notify; 其他 CLI 无 Hooks 支持; Hooks 不可用时功能降级但不影响核心工作流。
+**摘要:** {HOOKS_SUMMARY}
 
 ---
 

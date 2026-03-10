@@ -11,8 +11,12 @@ from pathlib import Path
 
 from ._constants import (
     AGENTFLOW_MARKER,
+    CLI_DISPLAY_NAMES,
+    CLI_HOOKS_FILES,
+    CLI_SUBAGENT_FILES,
     CLI_TARGETS,
     DEFAULT_PROFILE,
+    HOOKS_SUMMARIES,
     PLUGIN_DIR_NAME,
     PROFILES,
     VALID_PROFILES,
@@ -104,11 +108,52 @@ def _get_source_files() -> dict[str, Path]:
     return sources
 
 
-def _build_agents_md_for_profile(profile: str) -> str:
+def _build_core_module_for_target(mod_file: str, target: str) -> str:
+    """Build a core module's content with CLI-specific sections for the target.
+
+    For ``subagent.md`` and ``hooks.md``, the generic template contains
+    placeholders that are replaced with CLI-specific content.
+    Other module files are returned as-is.
+    """
+    core_dir = get_agentflow_module_path() / "core"
+    mod_path = core_dir / mod_file
+    if not mod_path.exists():
+        return ""
+
+    content = mod_path.read_text(encoding="utf-8")
+
+    if mod_file == "subagent.md":
+        # Replace {CLI_SUBAGENT_PROTOCOL} with CLI-specific subagent protocol
+        cli_file = CLI_SUBAGENT_FILES.get(target, "subagent_other.md")
+        cli_path = core_dir / cli_file
+        if cli_path.exists():
+            cli_content = cli_path.read_text(encoding="utf-8")
+        else:
+            cli_content = ""
+        content = content.replace("{CLI_SUBAGENT_PROTOCOL}", cli_content)
+
+    elif mod_file == "hooks.md":
+        # Replace {HOOKS_MATRIX} with CLI-specific hooks matrix
+        cli_file = CLI_HOOKS_FILES.get(target, "hooks_other.md")
+        cli_path = core_dir / cli_file
+        if cli_path.exists():
+            cli_content = cli_path.read_text(encoding="utf-8")
+        else:
+            cli_content = ""
+        content = content.replace("{HOOKS_MATRIX}", cli_content)
+
+    return content
+
+
+def _build_agents_md_for_profile(profile: str, target: str = "codex") -> str:
     """Read the base AGENTS.md and append core extension modules per profile.
 
     The base AGENTS.md contains G1-G5 (core rules).  The profile determines
     which G6-G12 extension modules from ``agentflow/core/`` are appended.
+
+    Template placeholders are replaced with target-specific content:
+    - ``{TARGET_CLI}`` → CLI display name
+    - ``{HOOKS_SUMMARY}`` → CLI-specific hooks summary
     """
     source_agents_md = get_agents_md_path()
     content = source_agents_md.read_text(encoding="utf-8")
@@ -116,6 +161,12 @@ def _build_agents_md_for_profile(profile: str) -> str:
     marker_line = f"<!-- {AGENTFLOW_MARKER} v1.0.0 -->\n"
     if AGENTFLOW_MARKER not in content:
         content = marker_line + content
+
+    # Replace template placeholders with target-specific values
+    display_name = CLI_DISPLAY_NAMES.get(target, target)
+    content = content.replace("{TARGET_CLI}", display_name)
+    hooks_summary = HOOKS_SUMMARIES.get(target, "Hooks 不可用时功能降级但不影响核心工作流。")
+    content = content.replace("{HOOKS_SUMMARY}", hooks_summary)
 
     # Append core extension modules for this profile
     core_dir = get_agentflow_module_path() / "core"
@@ -125,9 +176,8 @@ def _build_agents_md_for_profile(profile: str) -> str:
         content += "\n\n---\n\n"
         content += f"<!-- PROFILE:{profile} — Extended modules appended below -->\n\n"
         for mod_file in modules:
-            mod_path = core_dir / mod_file
-            if mod_path.exists():
-                mod_content = mod_path.read_text(encoding="utf-8")
+            mod_content = _build_core_module_for_target(mod_file, target)
+            if mod_content:
                 content += mod_content + "\n\n"
 
     return content
@@ -148,7 +198,7 @@ def _deploy_rules_file(target: str, cli_dir: Path, profile: str = DEFAULT_PROFIL
         )
         return False
 
-    content = _build_agents_md_for_profile(profile)
+    content = _build_agents_md_for_profile(profile, target)
 
     if rules_file.exists() and not is_agentflow_file(rules_file):
         backup = backup_user_file(rules_file)

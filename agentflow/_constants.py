@@ -18,6 +18,10 @@ __all__ = [
     "REPO_URL",
     "REPO_API_LATEST",
     "CLI_TARGETS",
+    "CLI_DISPLAY_NAMES",
+    "CLI_SUBAGENT_FILES",
+    "CLI_HOOKS_FILES",
+    "HOOKS_SUMMARIES",
     "PLUGIN_DIR_NAME",
     "AGENTFLOW_MARKER",
     "HOOKS_FINGERPRINT",
@@ -53,6 +57,50 @@ CLI_TARGETS: dict[str, dict[str, str]] = {
     "qwen": {"dir": ".qwen", "rules_file": "QWEN.md"},
     "grok": {"dir": ".grok", "rules_file": "GROK.md"},
     "opencode": {"dir": ".config/opencode", "rules_file": "AGENTS.md"},
+}
+
+# Display names for each CLI target (used in prompt templates)
+CLI_DISPLAY_NAMES: dict[str, str] = {
+    "codex": "Codex CLI",
+    "claude": "Claude Code",
+    "gemini": "Gemini CLI",
+    "qwen": "Qwen CLI",
+    "grok": "Grok CLI",
+    "opencode": "OpenCode",
+}
+
+# CLI-specific subagent protocol files (in agentflow/core/)
+CLI_SUBAGENT_FILES: dict[str, str] = {
+    "codex": "subagent_codex.md",
+    "claude": "subagent_claude.md",
+    "gemini": "subagent_gemini.md",
+    "opencode": "subagent_opencode.md",
+    "qwen": "subagent_other.md",
+    "grok": "subagent_other.md",
+}
+
+# CLI-specific hooks capability files (in agentflow/core/)
+CLI_HOOKS_FILES: dict[str, str] = {
+    "claude": "hooks_claude.md",
+    "codex": "hooks_codex.md",
+    "gemini": "hooks_other.md",
+    "qwen": "hooks_other.md",
+    "grok": "hooks_other.md",
+    "opencode": "hooks_other.md",
+}
+
+# CLI-specific hooks summary text (for AGENTS.md G12 section)
+HOOKS_SUMMARIES: dict[str, str] = {
+    "claude": (
+        "支持全部 6 种 Hook 事件"
+        "（PreToolCall, PostToolCall, PostMessage, Notification, SessionStart, SessionEnd）;"
+        " Hooks 不可用时功能降级但不影响核心工作流。"
+    ),
+    "codex": "仅支持 Notification 事件; 其他 Hook 不可用时功能自动降级，不影响核心工作流。",
+    "gemini": "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
+    "qwen": "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
+    "grok": "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
+    "opencode": "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
 }
 
 PLUGIN_DIR_NAME: str = "agentflow"

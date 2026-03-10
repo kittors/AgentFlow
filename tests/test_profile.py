@@ -7,6 +7,9 @@ import pytest
 
 from agentflow._constants import (
     AGENTFLOW_MARKER,
+    CLI_DISPLAY_NAMES,
+    CLI_HOOKS_FILES,
+    CLI_SUBAGENT_FILES,
     CLI_TARGETS,
     DEFAULT_PROFILE,
     PROFILES,
@@ -78,6 +81,18 @@ class TestCoreDirectory:
         for filename in PROFILES["full"]:
             assert (core_dir / filename).exists(), f"core/{filename} listed in full profile but missing"
 
+    @pytest.mark.parametrize("target", list(CLI_SUBAGENT_FILES.keys()))
+    def test_subagent_cli_file_exists(self, target):
+        """Each CLI target's subagent file must exist."""
+        f = AGENTFLOW_DIR / "core" / CLI_SUBAGENT_FILES[target]
+        assert f.exists(), f"subagent file for {target} missing: {CLI_SUBAGENT_FILES[target]}"
+
+    @pytest.mark.parametrize("target", list(CLI_HOOKS_FILES.keys()))
+    def test_hooks_cli_file_exists(self, target):
+        """Each CLI target's hooks file must exist."""
+        f = AGENTFLOW_DIR / "core" / CLI_HOOKS_FILES[target]
+        assert f.exists(), f"hooks file for {target} missing: {CLI_HOOKS_FILES[target]}"
+
 
 # ── AGENTS.md validation ──────────────────────────────────────────────────────
 
@@ -134,15 +149,18 @@ class TestProfileAssembly:
     def test_build_lite_profile(self):
         from agentflow.installer import _build_agents_md_for_profile
 
-        content = _build_agents_md_for_profile("lite")
+        content = _build_agents_md_for_profile("lite", "codex")
         assert AGENTFLOW_MARKER in content
         # Lite should NOT contain appended module content
         assert "PROFILE:lite" not in content  # No modules to append
+        # Should contain target-specific CLI name
+        assert "Codex CLI" in content
+        assert "Claude Code" not in content
 
     def test_build_standard_profile(self):
         from agentflow.installer import _build_agents_md_for_profile
 
-        content = _build_agents_md_for_profile("standard")
+        content = _build_agents_md_for_profile("standard", "claude")
         assert AGENTFLOW_MARKER in content
         assert "PROFILE:standard" in content
         # Should contain the 3 standard module contents
@@ -151,11 +169,14 @@ class TestProfileAssembly:
         assert "G8 | 验收标准" in content
         # Should NOT contain full-only modules
         assert "G9+G10 | 子代理编排与调用通道" not in content
+        # Should contain target-specific CLI name
+        assert "Claude Code" in content
+        assert "Codex CLI" not in content
 
     def test_build_full_profile(self):
         from agentflow.installer import _build_agents_md_for_profile
 
-        content = _build_agents_md_for_profile("full")
+        content = _build_agents_md_for_profile("full", "codex")
         assert AGENTFLOW_MARKER in content
         assert "PROFILE:full" in content
         # Should contain all 6 module contents
@@ -165,19 +186,22 @@ class TestProfileAssembly:
         assert "G9+G10 | 子代理编排与调用通道" in content
         assert "G11 | 注意力控制" in content
         assert "G12 | Hooks 集成" in content
+        # Should contain Codex-specific content
+        assert "Codex CLI" in content
+        assert "Claude Code" not in content
 
     def test_full_profile_longer_than_lite(self):
         from agentflow.installer import _build_agents_md_for_profile
 
-        lite = _build_agents_md_for_profile("lite")
-        full = _build_agents_md_for_profile("full")
+        lite = _build_agents_md_for_profile("lite", "codex")
+        full = _build_agents_md_for_profile("full", "codex")
         assert len(full) > len(lite) * 1.5, "Full profile should be significantly longer than lite"
 
     def test_all_profiles_have_core_sections(self):
         from agentflow.installer import _build_agents_md_for_profile
 
         for profile in VALID_PROFILES:
-            content = _build_agents_md_for_profile(profile)
+            content = _build_agents_md_for_profile(profile, "codex")
             for section in ["G1 |", "G2 |", "G3 |", "G4 |", "G5 |"]:
                 assert section in content, f"Profile '{profile}' missing core section {section}"
 
@@ -231,3 +255,108 @@ class TestInstallWithProfile:
 
         result = install("claude", "nonexistent")
         assert not result
+
+
+# ── Cross-contamination verification ────────────────────────────────────────────────
+
+
+class TestNoCrossContamination:
+    """Verify that installing to a target doesn't include other CLI prompts."""
+
+    @pytest.fixture
+    def mock_home(self, tmp_path):
+        for name, config in CLI_TARGETS.items():
+            cli_dir = tmp_path / config["dir"]
+            cli_dir.mkdir(parents=True)
+        with mock.patch("pathlib.Path.home", return_value=tmp_path):
+            yield tmp_path
+
+    @pytest.fixture(autouse=True)
+    def _skip_if_no_agents(self):
+        if not (PROJECT_ROOT / "AGENTS.md").exists():
+            pytest.skip("AGENTS.md not found")
+
+    def _build_full(self, target: str) -> str:
+        from agentflow.installer import _build_agents_md_for_profile
+
+        return _build_agents_md_for_profile("full", target)
+
+    def test_codex_no_claude_content(self):
+        content = self._build_full("codex")
+        assert "Claude Code" not in content
+        assert "Task(subagent_type=" not in content
+        assert "Agent Teams" not in content
+
+    def test_codex_no_gemini_content(self):
+        content = self._build_full("codex")
+        assert "Gemini CLI" not in content
+        assert "codebase_investigator" not in content
+        assert "generalist_agent" not in content
+
+    def test_codex_no_opencode_content(self):
+        content = self._build_full("codex")
+        assert "OpenCode" not in content
+        assert "@explore" not in content
+
+    def test_codex_no_qwen_grok_content(self):
+        content = self._build_full("codex")
+        assert "Qwen CLI" not in content
+        assert "Grok CLI" not in content
+
+    def test_codex_has_own_content(self):
+        content = self._build_full("codex")
+        assert "Codex CLI" in content
+        assert "explorer 角色子代理" in content
+        assert "worker 角色子代理" in content
+
+    def test_claude_no_codex_content(self):
+        content = self._build_full("claude")
+        assert "Codex CLI" not in content
+        assert "config.toml" not in content
+
+    def test_claude_has_own_content(self):
+        content = self._build_full("claude")
+        assert "Claude Code" in content
+        assert "Task(subagent_type=" in content
+
+    def test_gemini_no_claude_codex_content(self):
+        content = self._build_full("gemini")
+        assert "Claude Code" not in content
+        assert "Codex CLI" not in content
+        assert "Gemini CLI" in content
+        assert "codebase_investigator" in content
+
+    @pytest.mark.parametrize("target", list(CLI_DISPLAY_NAMES.keys()))
+    def test_no_unreplaced_placeholders(self, target):
+        """No raw template placeholders should remain in the deployed content."""
+        content = self._build_full(target)
+        assert "{TARGET_CLI}" not in content
+        assert "{HOOKS_SUMMARY}" not in content
+        assert "{CLI_SUBAGENT_PROTOCOL}" not in content
+        assert "{HOOKS_MATRIX}" not in content
+
+    @pytest.mark.parametrize("target", list(CLI_DISPLAY_NAMES.keys()))
+    def test_target_has_own_display_name(self, target):
+        """Each target's deployed content should mention its own display name."""
+        content = self._build_full(target)
+        assert CLI_DISPLAY_NAMES[target] in content
+
+    def test_install_codex_produces_clean_rules(self, mock_home):
+        """Full install to codex should have no cross-contamination in deployed file."""
+        from agentflow.installer import install
+
+        install("codex")
+        rules = (mock_home / ".codex" / "AGENTS.md").read_text()
+        assert "Codex CLI" in rules
+        assert "Claude Code" not in rules
+        assert "Gemini CLI" not in rules
+
+    def test_install_claude_produces_clean_rules(self, mock_home):
+        """Full install to claude should have no cross-contamination in deployed file."""
+        from agentflow.installer import install
+
+        install("claude")
+        rules = (mock_home / ".claude" / "CLAUDE.md").read_text()
+        assert "Claude Code" in rules
+        assert "Codex CLI" not in rules
+        assert "Gemini CLI" not in rules
