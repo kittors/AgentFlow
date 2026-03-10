@@ -52,10 +52,12 @@ warn()    { printf "${YELLOW}  [!]${RESET}  %s\n" "$*"; }
 err()     { printf "${RED}  [✗]${RESET}  %s\n" "$*"; exit 1; }
 step()    { printf "\n${BOLD}${CYAN}  ─── %s ───${RESET}\n\n" "$*"; }
 
-# ─── Ensure PATH in shell profile ───
-_ensure_path_in_profile() {
-    local bin_dir="$1"
-    local line="export PATH=\"${bin_dir}:\$PATH\""
+# ─── Ensure env var in shell profile ───
+_ensure_env_in_profile() {
+    # Usage: _ensure_env_in_profile "SEARCH_KEY" "export LINE" "label"
+    local search_key="$1"
+    local export_line="$2"
+    local label="$3"
     local updated=false
 
     # Determine which shell profile(s) to update
@@ -68,19 +70,37 @@ _ensure_path_in_profile() {
     esac
 
     for profile in $profiles; do
-        # Create profile if it doesn't exist
         [ -f "$profile" ] || touch "$profile"
-        # Check if already present
-        if ! grep -qF "$bin_dir" "$profile" 2>/dev/null; then
-            printf "\n# Added by AgentFlow installer\n%s\n" "$line" >> "$profile"
+        if ! grep -qF "$search_key" "$profile" 2>/dev/null; then
+            printf "\n# Added by AgentFlow installer\n%s\n" "$export_line" >> "$profile"
             updated=true
-            ok "$(msg "PATH 已写入 $(basename $profile)" "PATH added to $(basename $profile)")"
+            ok "$(msg "$label 已写入 $(basename $profile)" "$label added to $(basename $profile)")"
+        else
+            # Update existing value if different
+            local old_line
+            old_line=$(grep -F "$search_key" "$profile" | tail -1)
+            if [ "$old_line" != "$export_line" ]; then
+                # Use sed to replace the old line
+                sed -i'' -e "s|.*${search_key}.*|${export_line}|" "$profile"
+                updated=true
+                ok "$(msg "$label 已更新于 $(basename $profile)" "$label updated in $(basename $profile)")"
+            fi
         fi
     done
 
     if [ "$updated" = false ]; then
-        ok "$(msg "PATH 已存在于 shell 配置中" "PATH already configured in shell profile")"
+        ok "$(msg "$label 已存在于 shell 配置中" "$label already configured in shell profile")"
     fi
+}
+
+_ensure_path_in_profile() {
+    _ensure_env_in_profile "$1" "export PATH=\"${1}:\$PATH\"" "PATH"
+}
+
+_persist_lang_choice() {
+    local lang="en"
+    [ "$USE_ZH" = true ] && lang="zh"
+    _ensure_env_in_profile "AGENTFLOW_LANG" "export AGENTFLOW_LANG=\"${lang}\"" "AGENTFLOW_LANG"
 }
 
 # ─── Banner ───
@@ -175,6 +195,7 @@ if [ "$HAS_UV" = true ]; then
     # Persist PATH into shell config (manual write, uv tool update-shell
     # doesn't work reliably when run via curl | bash)
     _ensure_path_in_profile "$HOME/.local/bin"
+    _persist_lang_choice
 else
     info "$(msg '使用 pip 安装...' 'Installing with pip...')"
     if [ "$BRANCH" = "main" ]; then
@@ -182,6 +203,7 @@ else
     else
         "$PYTHON_CMD" -m pip install --upgrade --no-cache-dir "git+${REPO}.git@${BRANCH}"
     fi
+    _persist_lang_choice
 fi
 
 # Post-install pip remnant cleanup
