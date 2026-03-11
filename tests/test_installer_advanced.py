@@ -155,6 +155,32 @@ class TestDeployHooks:
         if settings.exists():
             data = json.loads(settings.read_text())
             assert "hooks" in data
+            # New format: hooks is a dict keyed by event type
+            hooks = data["hooks"]
+            assert isinstance(hooks, dict), "hooks should be a record (dict), not an array"
+            # Should have event type keys
+            assert "PreToolUse" in hooks or "PostToolUse" in hooks or "Notification" in hooks
+            # Each event type should contain matcher groups
+            for event_type, groups in hooks.items():
+                assert isinstance(groups, list)
+                for group in groups:
+                    assert "matcher" in group
+                    assert "hooks" in group
+                    assert isinstance(group["hooks"], list)
+
+    def test_deploy_claude_hooks_migrates_old_format(self, mock_home):
+        """If settings.json has old array-format hooks, they should be discarded."""
+        from agentflow.installer import _deploy_hooks
+
+        cli_dir = mock_home / ".claude"
+        settings = cli_dir / "settings.json"
+        # Write old format
+        settings.write_text(
+            json.dumps({"hooks": [{"type": "PreToolUse", "description": "old", "command": "echo old"}]})
+        )
+        assert _deploy_hooks("claude", cli_dir)
+        data = json.loads(settings.read_text())
+        assert isinstance(data["hooks"], dict), "old array format should be migrated to dict"
 
     def test_deploy_codex_hooks(self, mock_home):
         from agentflow.installer import _deploy_hooks

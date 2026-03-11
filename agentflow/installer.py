@@ -250,8 +250,19 @@ def _deploy_skill_md(target: str, cli_dir: Path) -> bool:
     return True
 
 
+def _is_agentflow_hook(hook_handler: dict) -> bool:
+    """Check if a hook handler was deployed by AgentFlow."""
+    desc = hook_handler.get("description", "")
+    return desc.startswith(PLUGIN_DIR_NAME) or desc.startswith("agentflow")
+
+
 def _deploy_hooks(target: str, cli_dir: Path) -> bool:
-    """Deploy hooks configuration for supported CLIs."""
+    """Deploy hooks configuration for supported CLIs.
+
+    Claude Code uses the new record-based hooks format where hooks is an
+    object keyed by event type (e.g. PreToolUse, PostToolUse), each
+    containing an array of matcher groups with nested hooks arrays.
+    """
     hooks_dir = get_agentflow_module_path() / "hooks"
     if not hooks_dir.exists():
         return True
@@ -270,18 +281,36 @@ def _deploy_hooks(target: str, cli_dir: Path) -> bool:
                     pass
 
             hooks_config = json.loads(hooks_src.read_text(encoding="utf-8"))
+            new_hooks: dict = hooks_config.get("hooks", {})
 
-            existing_hooks: list = existing.get("hooks", [])
-            new_hooks: list = hooks_config.get("hooks", [])
-            existing_hooks = [h for h in existing_hooks if not h.get("description", "").startswith(PLUGIN_DIR_NAME)]
-            existing_hooks.extend(new_hooks)
+            # Migrate: if existing hooks is old array format, discard it
+            existing_hooks = existing.get("hooks", {})
+            if isinstance(existing_hooks, list):
+                existing_hooks = {}
+
+            # Merge per event type
+            deployed_count = 0
+            for event_type, new_groups in new_hooks.items():
+                existing_groups: list = existing_hooks.get(event_type, [])
+                # Remove old AgentFlow matcher groups
+                cleaned = []
+                for group in existing_groups:
+                    group_hooks = group.get("hooks", [])
+                    filtered = [h for h in group_hooks if not _is_agentflow_hook(h)]
+                    if filtered:
+                        group["hooks"] = filtered
+                        cleaned.append(group)
+                cleaned.extend(new_groups)
+                existing_hooks[event_type] = cleaned
+                deployed_count += len(new_groups)
+
             existing["hooks"] = existing_hooks
 
             settings_file.write_text(
                 json.dumps(existing, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
-            print(msg(f"  ✅ Hooks 已部署 ({len(new_hooks)} 个)", f"  ✅ Hooks deployed ({len(new_hooks)})"))
+            print(msg(f"  ✅ Hooks 已部署 ({deployed_count} 个)", f"  ✅ Hooks deployed ({deployed_count})"))
 
     elif target == "codex":
         hooks_src = hooks_dir / "codex_hooks.toml"
@@ -623,8 +652,24 @@ def uninstall(target: str) -> bool:
 
             try:
                 settings = json.loads(settings_file.read_text(encoding="utf-8"))
-                hooks = settings.get("hooks", [])
-                settings["hooks"] = [h for h in hooks if not h.get("description", "").startswith(PLUGIN_DIR_NAME)]
+                hooks = settings.get("hooks", {})
+                if isinstance(hooks, list):
+                    # Legacy array format — just remove entirely
+                    settings["hooks"] = {}
+                elif isinstance(hooks, dict):
+                    # New record format — filter AgentFlow entries per event type
+                    cleaned_hooks = {}
+                    for event_type, groups in hooks.items():
+                        cleaned_groups = []
+                        for group in groups:
+                            group_hooks = group.get("hooks", [])
+                            filtered = [h for h in group_hooks if not _is_agentflow_hook(h)]
+                            if filtered:
+                                group["hooks"] = filtered
+                                cleaned_groups.append(group)
+                        if cleaned_groups:
+                            cleaned_hooks[event_type] = cleaned_groups
+                    settings["hooks"] = cleaned_hooks
                 settings_file.write_text(
                     json.dumps(settings, indent=2, ensure_ascii=False),
                     encoding="utf-8",

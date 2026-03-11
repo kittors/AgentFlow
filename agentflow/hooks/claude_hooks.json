@@ -1,24 +1,40 @@
 {
-  "hooks": [
-    {
-      "type": "PreToolUse",
-      "description": "agentflow-safety-check",
-      "command": "echo 'AgentFlow EHRB check passed'"
-    },
-    {
-      "type": "PostToolUse",
-      "description": "agentflow-progress-snapshot",
-      "command": "echo 'AgentFlow progress recorded'"
-    },
-    {
-      "type": "PostMessage",
-      "description": "agentflow-kb-sync",
-      "command": "echo 'AgentFlow KB sync check'"
-    },
-    {
-      "type": "Notification",
-      "description": "agentflow-update-check",
-      "command": "agentflow --check-update --silent"
-    }
-  ]
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'AgentFlow EHRB check passed'",
+            "description": "agentflow-safety-check"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'AgentFlow progress recorded'",
+            "description": "agentflow-progress-snapshot"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "agentflow --check-update --silent",
+            "description": "agentflow-update-check"
+          }
+        ]
+      }
+    ]
+  }
 }
