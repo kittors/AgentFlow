@@ -4,6 +4,8 @@ set -eu
 # ─── Configuration ───
 REPO="${AGENTFLOW_REPO:-https://github.com/kittors/AgentFlow}"
 BRANCH="${AGENTFLOW_BRANCH:-main}"
+GITHUB_API="https://api.github.com/repos/kittors/AgentFlow/releases/latest"
+INSTALL_DIR="$HOME/.agentflow/bin"
 
 # ─── Colors ───
 RED='\033[0;31m'
@@ -138,6 +140,7 @@ fi
 # ─── Step 3: Detect Python ───
 step "$(msg '步骤 3/5: 检测 Python' 'Step 3/5: Detecting Python')"
 
+INSTALL_MODE="binary"   # default to binary, upgrade to pip if Python found
 PYTHON_CMD=""
 # 检查带具体版本号的 python3 或者 python
 for cmd in python3.14 python3.13 python3.12 python3.11 python3.10 python3 python; do
@@ -149,20 +152,25 @@ for cmd in python3.14 python3.13 python3.12 python3.11 python3.10 python3 python
             minor=$(echo "$version" | cut -d. -f2)
             if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 10 ]; }; then
                 PYTHON_CMD="$cmd"
+                INSTALL_MODE="pip"
                 break
             fi
         fi
     fi
 done
 
-if [ -z "$PYTHON_CMD" ]; then
-    if [ "$HAS_UV" = true ]; then
-        warn "$(msg '未找到 Python >= 3.10，但已安装 uv。将使用 uv 继续安装。' 'Python >= 3.10 not found, but uv is installed. Proceeding with uv.')"
-    else
-        err "$(msg '需要 Python >= 3.10，但未找到。请安装后重试。' 'Python >= 3.10 is required but not found. Please install it and try again.')"
-    fi
-else
+if [ "$INSTALL_MODE" = "pip" ]; then
     ok "$(msg "找到 $PYTHON_CMD ($($PYTHON_CMD --version 2>&1))" "Found $PYTHON_CMD ($($PYTHON_CMD --version 2>&1))")"
+    # uv 有自己的 Python 管理，也走 pip 模式
+    if [ -z "$PYTHON_CMD" ] && [ "$HAS_UV" = true ]; then
+        warn "$(msg '未找到 Python >= 3.10，但已安装 uv。将使用 uv 继续安装。' 'Python >= 3.10 not found, but uv is installed. Proceeding with uv.')"
+    fi
+elif [ "$HAS_UV" = true ]; then
+    # uv 可以自动管理 Python，走 pip 模式
+    INSTALL_MODE="pip"
+    warn "$(msg '未找到 Python >= 3.10，但已安装 uv。将使用 uv 继续安装。' 'Python >= 3.10 not found, but uv is installed. Proceeding with uv.')"
+else
+    warn "$(msg '未找到 Python >= 3.10，将下载预编译的独立版本。' 'Python >= 3.10 not found. Will download pre-built standalone binary.')"
 fi
 
 # ─── Step 3.5: Clean pip remnants ───
@@ -183,46 +191,107 @@ fi
 # ─── Step 4: Install ───
 step "$(msg "步骤 4/5: 安装 AgentFlow (分支: $BRANCH)" "Step 4/5: Installing AgentFlow (branch: $BRANCH)")"
 
-if [ "$HAS_UV" = true ]; then
-    info "$(msg '使用 uv 安装...' 'Installing with uv...')"
-    if [ "$BRANCH" = "main" ]; then
-        uv tool install --force --from "git+${REPO}" agentflow
+if [ "$INSTALL_MODE" = "pip" ]; then
+    # ── Pip/uv install path ──
+    if [ "$HAS_UV" = true ]; then
+        info "$(msg '使用 uv 安装...' 'Installing with uv...')"
+        if [ "$BRANCH" = "main" ]; then
+            uv tool install --force --from "git+${REPO}" agentflow
+        else
+            uv tool install --force --from "git+${REPO}@${BRANCH}" agentflow
+        fi
+        # Ensure ~/.local/bin is on PATH for the rest of this script
+        export PATH="$HOME/.local/bin:$PATH"
+        # Persist PATH into shell config (manual write, uv tool update-shell
+        # doesn't work reliably when run via curl | bash)
+        _ensure_path_in_profile "$HOME/.local/bin"
+        _persist_lang_choice
     else
-        uv tool install --force --from "git+${REPO}@${BRANCH}" agentflow
+        info "$(msg '使用 pip 安装...' 'Installing with pip...')"
+        if [ "$BRANCH" = "main" ]; then
+            "$PYTHON_CMD" -m pip install --upgrade --no-cache-dir "git+${REPO}.git"
+        else
+            "$PYTHON_CMD" -m pip install --upgrade --no-cache-dir "git+${REPO}.git@${BRANCH}"
+        fi
+        _persist_lang_choice
     fi
-    # Ensure ~/.local/bin is on PATH for the rest of this script
-    export PATH="$HOME/.local/bin:$PATH"
-    # Persist PATH into shell config (manual write, uv tool update-shell
-    # doesn't work reliably when run via curl | bash)
-    _ensure_path_in_profile "$HOME/.local/bin"
-    _persist_lang_choice
-else
-    info "$(msg '使用 pip 安装...' 'Installing with pip...')"
-    if [ "$BRANCH" = "main" ]; then
-        "$PYTHON_CMD" -m pip install --upgrade --no-cache-dir "git+${REPO}.git"
-    else
-        "$PYTHON_CMD" -m pip install --upgrade --no-cache-dir "git+${REPO}.git@${BRANCH}"
-    fi
-    _persist_lang_choice
-fi
 
-# Post-install pip remnant cleanup
-while IFS= read -r sp_dir; do
-    [ -d "$sp_dir" ] || continue
-    for remnant in "$sp_dir"/~*; do
-        [ -e "$remnant" ] || continue
-        rm -rf "$remnant" 2>/dev/null || true
-    done
-done < <("$PYTHON_CMD" -c "import site
+    # Post-install pip remnant cleanup
+    if [ -n "$PYTHON_CMD" ]; then
+        while IFS= read -r sp_dir; do
+            [ -d "$sp_dir" ] || continue
+            for remnant in "$sp_dir"/~*; do
+                [ -e "$remnant" ] || continue
+                rm -rf "$remnant" 2>/dev/null || true
+            done
+        done < <("$PYTHON_CMD" -c "import site
 for p in site.getsitepackages():
     print(p)" 2>/dev/null || true)
+    fi
+else
+    # ── Binary download fallback ──
+    info "$(msg '正在从 GitHub Releases 下载预编译版本...' 'Downloading pre-built binary from GitHub Releases...')"
+
+    # Detect OS and architecture
+    _os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    _arch="$(uname -m)"
+    case "$_os" in
+        linux*)  _platform="linux" ;;
+        darwin*) _platform="darwin" ;;
+        *)       err "$(msg "不支持的操作系统: $_os" "Unsupported OS: $_os")" ;;
+    esac
+    case "$_arch" in
+        x86_64|amd64) _arch_suffix="amd64" ;;
+        aarch64|arm64) _arch_suffix="arm64" ;;
+        *)            _arch_suffix="amd64" ;;
+    esac
+    _binary_name="agentflow-${_platform}-${_arch_suffix}"
+
+    # Get download URL from GitHub API
+    if command -v curl >/dev/null 2>&1; then
+        _release_json=$(curl -fsSL -H "User-Agent: AgentFlow-Installer" "$GITHUB_API" 2>/dev/null) || \
+            err "$(msg '无法获取 Release 信息。请检查网络并重试。' 'Failed to fetch release info. Check your network and try again.')"
+    elif command -v wget >/dev/null 2>&1; then
+        _release_json=$(wget -qO- --header="User-Agent: AgentFlow-Installer" "$GITHUB_API" 2>/dev/null) || \
+            err "$(msg '无法获取 Release 信息。请检查网络并重试。' 'Failed to fetch release info. Check your network and try again.')"
+    else
+        err "$(msg '需要 curl 或 wget 来下载文件。' 'curl or wget is required to download files.')"
+    fi
+
+    # Parse download URL (use grep/sed for portability, no jq dependency)
+    _download_url=$(echo "$_release_json" | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*'"$_binary_name"'[^"]*"' | head -1 | sed 's/.*"\(http[^"]*\)".*/\1/' | sed 's/"browser_download_url"[[:space:]]*:[[:space:]]*"//; s/"$//')
+
+    if [ -z "$_download_url" ]; then
+        err "$(msg "未在最新 Release 中找到 $_binary_name。请安装 Python >= 3.10 后重试。" "$_binary_name not found in latest release. Please install Python >= 3.10 and try again.")"
+    fi
+
+    info "$(msg "下载: $_binary_name ..." "Downloading: $_binary_name ...")"
+
+    # Create install directory and download
+    mkdir -p "$INSTALL_DIR"
+    _exe_path="$INSTALL_DIR/agentflow"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fSL -o "$_exe_path" "$_download_url" || err "$(msg '下载失败' 'Download failed')"
+    else
+        wget -qO "$_exe_path" "$_download_url" || err "$(msg '下载失败' 'Download failed')"
+    fi
+    chmod +x "$_exe_path"
+
+    ok "$(msg "已下载到 $_exe_path" "Downloaded to $_exe_path")"
+
+    # Add to PATH
+    export PATH="$INSTALL_DIR:$PATH"
+    _ensure_path_in_profile "$INSTALL_DIR"
+    _persist_lang_choice
+fi
 
 # ─── Step 5: Verify ───
 step "$(msg '步骤 5/5: 验证安装' 'Step 5/5: Verifying installation')"
 
 # Also check common install locations as fallback
 if ! command -v agentflow >/dev/null 2>&1; then
-    for _bin_dir in "$HOME/.local/bin" "$HOME/.cargo/bin" "/usr/local/bin"; do
+    for _bin_dir in "$INSTALL_DIR" "$HOME/.local/bin" "$HOME/.cargo/bin" "/usr/local/bin"; do
         if [ -x "$_bin_dir/agentflow" ]; then
             export PATH="$_bin_dir:$PATH"
             break

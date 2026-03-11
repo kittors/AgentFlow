@@ -9,7 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  # ── Job 1: Build Python sdist/wheel ──
+  build-python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,8 +24,89 @@ jobs:
       - name: Build package
         run: python -m build
 
+      - name: Upload Python dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+
+  # ── Job 2: Build standalone binaries with PyInstaller ──
+  build-binary:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            suffix: linux-amd64
+            exe_name: agentflow-linux-amd64
+          - os: macos-13
+            suffix: darwin-amd64
+            exe_name: agentflow-darwin-amd64
+          - os: macos-14
+            suffix: darwin-arm64
+            exe_name: agentflow-darwin-arm64
+          - os: windows-latest
+            suffix: windows-amd64
+            exe_name: agentflow-windows-amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller
+          pip install -e .
+
+      - name: Build binary
+        run: >
+          pyinstaller
+          --onefile
+          --collect-data agentflow
+          --name ${{ matrix.exe_name }}
+          --hidden-import agentflow.scripts.arch_scanner
+          --hidden-import agentflow.scripts.cache_manager
+          --hidden-import agentflow.scripts.config_helpers
+          --hidden-import agentflow.scripts.convention_scanner
+          --hidden-import agentflow.scripts.dashboard_generator
+          --hidden-import agentflow.scripts.graph_builder
+          --hidden-import agentflow.scripts.kb_sync
+          --hidden-import agentflow.scripts.session_manager
+          --hidden-import agentflow.scripts.template_init
+          pyinstaller_entry.py
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.suffix }}
+          path: dist/${{ matrix.exe_name }}${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+
+  # ── Job 3: Create GitHub Release with all artifacts ──
+  release:
+    needs: [build-python, build-binary]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Prepare release files
+        run: |
+          mkdir -p final-assets
+          # Python dist
+          cp release-assets/python-dist/* final-assets/ 2>/dev/null || true
+          # Binaries
+          for dir in release-assets/binary-*; do
+            cp "$dir"/* final-assets/ 2>/dev/null || true
+          done
+          ls -la final-assets/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: final-assets/*
           generate_release_notes: true
