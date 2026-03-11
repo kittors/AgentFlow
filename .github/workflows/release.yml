@@ -38,10 +38,7 @@ jobs:
           - os: ubuntu-latest
             suffix: linux-amd64
             exe_name: agentflow-linux-amd64
-          - os: macos-13
-            suffix: darwin-amd64
-            exe_name: agentflow-darwin-amd64
-          - os: macos-14
+          - os: macos-latest
             suffix: darwin-arm64
             exe_name: agentflow-darwin-arm64
           - os: windows-latest
