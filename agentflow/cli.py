@@ -349,7 +349,11 @@ def main() -> None:
 
     if not cmd:
         if _HAS_TUI and sys.stdin.isatty():
-            _interactive_main_tui()
+            try:
+                _interactive_main_tui()
+            except OSError:
+                # prompt_toolkit fails in piped envs (curl|bash)
+                _interactive_main_plain()
         else:
             _interactive_main_plain()
         sys.exit(0)
@@ -368,8 +372,14 @@ def main() -> None:
             if _HAS_TUI and sys.stdin.isatty():
                 from .interactive import interactive_install_tui
 
-                if not interactive_install_tui():
-                    sys.exit(1)
+                try:
+                    if not interactive_install_tui():
+                        sys.exit(1)
+                except OSError:
+                    from .interactive import interactive_install
+
+                    if not interactive_install():
+                        sys.exit(1)
             else:
                 from .interactive import interactive_install
 
@@ -388,8 +398,14 @@ def main() -> None:
             if _HAS_TUI and sys.stdin.isatty():
                 from .interactive import interactive_uninstall_tui
 
-                if not interactive_uninstall_tui():
-                    sys.exit(1)
+                try:
+                    if not interactive_uninstall_tui():
+                        sys.exit(1)
+                except OSError:
+                    from .interactive import interactive_uninstall
+
+                    if not interactive_uninstall():
+                        sys.exit(1)
             else:
                 from .interactive import interactive_uninstall
 
