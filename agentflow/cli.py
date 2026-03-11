@@ -11,42 +11,157 @@ from importlib.metadata import version as get_version
 
 from ._constants import CLI_TARGETS, DEFAULT_PROFILE, VALID_PROFILES, msg
 
-# ── Interactive main menu ─────────────────────────────────────────────────────
+# ── Rich + InquirerPy TUI helpers ─────────────────────────────────────────────
+
+_HAS_TUI = True
+try:
+    from InquirerPy import inquirer
+    from InquirerPy.base.control import Choice
+    from InquirerPy.separator import Separator
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+except ImportError:
+    _HAS_TUI = False
 
 
-def _divider(width: int = 40) -> None:
-    print("─" * width)
+def _get_console() -> Console:
+    """Return a Rich Console instance."""
+    return Console()
 
 
-def _interactive_main() -> None:
-    """Show main interactive menu for all operations (loops until exit)."""
+def _print_banner(console: Console) -> None:
+    """Print a beautiful styled banner using Rich."""
+    try:
+        ver = get_version("agentflow")
+    except Exception:
+        ver = "dev"
+
+    title = Text()
+    title.append("🚀 ", style="bold")
+    title.append("AgentFlow", style="bold cyan")
+    title.append(f" v{ver}", style="dim cyan")
+
+    subtitle = Text(msg("多 CLI 代理工作流系统", "Multi-CLI Agent Workflow System"), style="dim")
+
+    content = Text()
+    content.append_text(title)
+    content.append("\n")
+    content.append_text(subtitle)
+
+    panel = Panel(
+        content,
+        border_style="cyan",
+        padding=(1, 2),
+    )
+    console.print()
+    console.print(panel)
+    console.print()
+
+
+# ── Interactive main menu (TUI version) ──────────────────────────────────────
+
+
+def _interactive_main_tui() -> None:
+    """Show main interactive menu using Rich + InquirerPy."""
+    from .interactive import interactive_install_tui, interactive_uninstall_tui
+    from .updater import clean, status, update
+
+    console = _get_console()
+    _print_banner(console)
+
+    actions = {
+        "install": (msg("📦  安装到 CLI 工具", "📦  Install to CLI targets"), "install"),
+        "uninstall": (msg("🗑️   卸载已安装的 CLI 工具", "🗑️   Uninstall from CLI targets"), "uninstall"),
+        "update": (msg("🔄  更新 AgentFlow 包", "🔄  Update AgentFlow package"), "update"),
+        "status": (msg("📊  查看安装状态", "📊  Show installation status"), "status"),
+        "clean": (msg("🧹  清理缓存", "🧹  Clean caches"), "clean"),
+        "exit": (msg("🚪  退出", "🚪  Exit"), "exit"),
+    }
+
+    while True:
+        try:
+            choices = [
+                Choice("install", name=actions["install"][0]),
+                Choice("uninstall", name=actions["uninstall"][0]),
+                Choice("update", name=actions["update"][0]),
+                Separator(),
+                Choice("status", name=actions["status"][0]),
+                Choice("clean", name=actions["clean"][0]),
+                Separator(),
+                Choice("exit", name=actions["exit"][0]),
+            ]
+
+            action = inquirer.select(
+                message=msg("请选择操作", "Select an action"),
+                choices=choices,
+                default="install",
+                pointer="❯",
+                qmark="",
+                amark="✔",
+                instruction=msg("(↑↓ 选择, Enter 确认)", "(↑↓ to move, Enter to select)"),
+            ).execute()
+
+        except (EOFError, KeyboardInterrupt):
+            console.print()
+            return
+
+        if action == "exit":
+            return
+        elif action == "install":
+            interactive_install_tui()
+        elif action == "uninstall":
+            interactive_uninstall_tui()
+        elif action == "update":
+            update()
+            return
+        elif action == "status":
+            status()
+        elif action == "clean":
+            clean()
+
+        console.print()
+        try:
+            resp = input(msg("按 Enter 返回主菜单，输入 0 退出: ", "Press Enter to return, 0 to exit: ")).strip()
+            if resp == "0":
+                return
+        except (EOFError, KeyboardInterrupt):
+            console.print()
+            return
+
+
+# ── Interactive main menu (fallback plain version) ───────────────────────────
+
+
+def _interactive_main_plain() -> None:
+    """Show main interactive menu using plain text (fallback)."""
     from .interactive import interactive_install, interactive_uninstall
     from .updater import clean, status, update
 
-    _divider()
+    print("─" * 40)
     try:
         ver = get_version("agentflow")
         print(f"  AgentFlow v{ver}")
     except Exception:
         print("  AgentFlow")
-    _divider()
+    print("─" * 40)
 
-    actions = [
+    action_items = [
         (msg("安装到 CLI 工具", "Install to CLI targets"), "install"),
         (msg("卸载已安装的 CLI 工具", "Uninstall from CLI targets"), "uninstall"),
         (msg("更新 AgentFlow 包", "Update AgentFlow package"), "update"),
-        None,  # separator
+        None,
         (msg("查看安装状态", "Show installation status"), "status"),
         (msg("清理缓存", "Clean caches"), "clean"),
     ]
-    flat_actions: list[tuple[str, str]] = [a for a in actions if a is not None]
+    flat_actions: list[tuple[str, str]] = [a for a in action_items if a is not None]
 
     while True:
         print()
         print(msg("  请选择操作:", "  Select an action:"))
         print()
         num = 1
-        for item in actions:
+        for item in action_items:
             if item is None:
                 print("  " + "─" * 30)
                 continue
@@ -75,7 +190,7 @@ def _interactive_main() -> None:
             print(msg("  无效输入。", "  Invalid input."))
             continue
 
-        _, action = flat_actions[idx - 1]  # type: ignore[index]
+        _, action = flat_actions[idx - 1]
 
         if action == "install":
             interactive_install()
@@ -97,7 +212,7 @@ def _interactive_main() -> None:
         except (EOFError, KeyboardInterrupt):
             print()
             return
-        _divider()
+        print("─" * 40)
 
 
 # ── Usage ─────────────────────────────────────────────────────────────────────
@@ -105,6 +220,46 @@ def _interactive_main() -> None:
 
 def print_usage() -> None:
     """Print usage information."""
+    if _HAS_TUI:
+        console = _get_console()
+        from rich.table import Table
+
+        console.print(
+            f"\n[bold cyan]AgentFlow[/] — {msg('多 CLI 代理工作流系统', 'Multi-CLI Agent Workflow System')}\n"
+        )
+
+        table = Table(show_header=True, header_style="bold", border_style="dim")
+        table.add_column(msg("命令", "Command"), style="cyan", min_width=35)
+        table.add_column(msg("说明", "Description"))
+
+        table.add_row("agentflow install <target>", msg("安装到指定 CLI", "Install to a specific CLI"))
+        table.add_row("agentflow install --all", msg("安装到所有已检测的 CLI", "Install to all detected CLIs"))
+        table.add_row("agentflow uninstall <target>", msg("从指定 CLI 卸载", "Uninstall from a specific CLI"))
+        table.add_row("agentflow uninstall --all", msg("从所有已安装的 CLI 卸载", "Uninstall from all installed CLIs"))
+        table.add_row("agentflow update", msg("更新到最新版本", "Update to latest version"))
+        table.add_row("agentflow clean", msg("清理已安装目标的缓存", "Clean caches from installed targets"))
+        table.add_row("agentflow status", msg("查看安装状态", "Show installation status"))
+        table.add_row("agentflow version", msg("查看版本", "Show version"))
+
+        console.print(table)
+
+        profiles_str = ", ".join(VALID_PROFILES)
+        console.print(f"\n[bold]{msg('选项', 'Options')}:[/]")
+        profile_desc = msg(
+            f"选择部署 Profile (默认: {DEFAULT_PROFILE})",
+            f"Deployment profile (default: {DEFAULT_PROFILE})",
+        )
+        console.print(f"  --profile=<{profiles_str}>  {profile_desc}")
+        console.print(f"\n[bold]{msg('目标', 'Targets')}:[/]")
+        for name in CLI_TARGETS:
+            console.print(f"  [cyan]{name}[/]")
+        console.print()
+    else:
+        _print_usage_plain()
+
+
+def _print_usage_plain() -> None:
+    """Plain text usage (fallback)."""
     print("AgentFlow - Multi-CLI Agent Workflow System")
     print()
     print(msg("用法:", "Usage:"))
@@ -169,7 +324,6 @@ def print_usage() -> None:
 def main() -> None:
     """Main entry point."""
     from .installer import install, install_all, uninstall, uninstall_all
-    from .interactive import interactive_install, interactive_uninstall
     from .updater import clean, status, update
 
     for stream in (sys.stdout, sys.stderr):
@@ -194,11 +348,13 @@ def main() -> None:
         sys.exit(0)
 
     if not cmd:
-        _interactive_main()
+        if _HAS_TUI and sys.stdin.isatty():
+            _interactive_main_tui()
+        else:
+            _interactive_main_plain()
         sys.exit(0)
 
     if cmd == "install":
-        # Parse --profile from remaining args
         rest_args = sys.argv[2:]
         profile = DEFAULT_PROFILE
         non_profile_args: list[str] = []
@@ -209,8 +365,16 @@ def main() -> None:
                 non_profile_args.append(arg)
 
         if not non_profile_args:
-            if not interactive_install():
-                sys.exit(1)
+            if _HAS_TUI and sys.stdin.isatty():
+                from .interactive import interactive_install_tui
+
+                if not interactive_install_tui():
+                    sys.exit(1)
+            else:
+                from .interactive import interactive_install
+
+                if not interactive_install():
+                    sys.exit(1)
         else:
             target = non_profile_args[0]
             if target == "--all":
@@ -221,8 +385,16 @@ def main() -> None:
                     sys.exit(1)
     elif cmd == "uninstall":
         if len(sys.argv) < 3:
-            if not interactive_uninstall():
-                sys.exit(1)
+            if _HAS_TUI and sys.stdin.isatty():
+                from .interactive import interactive_uninstall_tui
+
+                if not interactive_uninstall_tui():
+                    sys.exit(1)
+            else:
+                from .interactive import interactive_uninstall
+
+                if not interactive_uninstall():
+                    sys.exit(1)
         else:
             target = sys.argv[2]
             if target == "--all":
@@ -234,7 +406,7 @@ def main() -> None:
         branch = sys.argv[2] if len(sys.argv) >= 3 else None
         update(branch)
     else:
-        # Dict dispatch for simple commands
+
         def _cmd_clean() -> None:
             clean()
 

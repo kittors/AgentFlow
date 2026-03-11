@@ -139,7 +139,7 @@ class TestMainUnknownCommand:
 class TestMainNoArgs:
     def test_no_args_calls_interactive(self):
         with mock.patch("sys.argv", ["agentflow"]):
-            with mock.patch("agentflow.cli._interactive_main") as m:
+            with mock.patch("agentflow.cli._interactive_main_plain") as m:
                 with pytest.raises(SystemExit) as exc_info:
                     main()
                 m.assert_called_once()
