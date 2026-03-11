@@ -217,17 +217,39 @@ def backup_user_file(file_path: str | Path) -> Path:
 
 
 def get_package_root() -> Path:
-    """Return the repository / package root directory."""
+    """Return the repository / package root directory.
+
+    When running from a local checkout this is the repo root.
+    When installed via pip/uv it points to site-packages (mostly unused).
+    """
     return Path(__file__).parent.parent
 
 
 def get_agents_md_path() -> Path:
-    """Return the path to the ``AGENTS.md`` source file."""
+    """Return the path to the ``AGENTS.md`` source file.
+
+    Looks for a bundled copy inside the package first (``_AGENTS.md``),
+    then falls back to the repo root (for local development).
+    """
+    # Bundled inside the package (works for pip/uv installs)
+    bundled = Path(__file__).parent / "_AGENTS.md"
+    if bundled.exists():
+        return bundled
+    # Fallback: repo root (local development)
     return get_package_root() / "AGENTS.md"
 
 
 def get_skill_md_path() -> Path:
-    """Return the path to the ``SKILL.md`` source file."""
+    """Return the path to the ``SKILL.md`` source file.
+
+    Looks for a bundled copy inside the package first (``_SKILL.md``),
+    then falls back to the repo root (for local development).
+    """
+    # Bundled inside the package (works for pip/uv installs)
+    bundled = Path(__file__).parent / "_SKILL.md"
+    if bundled.exists():
+        return bundled
+    # Fallback: repo root (local development)
     return get_package_root() / "SKILL.md"
 
 
