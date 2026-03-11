@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $REPO = if ($env:AGENTFLOW_REPO) { $env:AGENTFLOW_REPO } else { "https://github.com/kittors/AgentFlow" }
 $BRANCH = if ($env:AGENTFLOW_BRANCH) { $env:AGENTFLOW_BRANCH } else { "main" }
 $GITHUB_API = "https://api.github.com/repos/kittors/AgentFlow/releases/latest"
-$INSTALL_DIR = Join-Path $HOME ".agentflow" "bin"
+$INSTALL_DIR = Join-Path (Join-Path $HOME ".agentflow") "bin"
 
 # ─── Locale detection ───
 $USE_ZH = $false
