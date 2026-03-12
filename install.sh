@@ -21,7 +21,7 @@ case "${locale_value}" in
     zh*|ZH*) USE_ZH=true ;;
 esac
 
-if [ -t 0 ] 2>/dev/null || [ -e /dev/tty ]; then
+if [ -t 0 ] 2>/dev/null || (tty -s 2>/dev/null && [ -r /dev/tty ]); then
     printf "\n"
     printf "  ${BOLD}Select language / 选择语言:${RESET}\n"
     printf "  [1] 中文\n"
@@ -29,7 +29,7 @@ if [ -t 0 ] 2>/dev/null || [ -e /dev/tty ]; then
     lang_choice=""
     if [ -t 0 ]; then
         printf "  (1/2): " && read -r lang_choice
-    elif [ -e /dev/tty ]; then
+    elif tty -s 2>/dev/null && [ -r /dev/tty ]; then
         printf "  (1/2): " && read -r lang_choice </dev/tty
     fi
     case "${lang_choice}" in

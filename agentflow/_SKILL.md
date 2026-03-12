@@ -1,7 +1,7 @@
 ---
 name: agentflow
 description: "AgentFlow — Multi-CLI agent workflow system with routing, safety detection, sub-agent orchestration, and knowledge graph memory."
-version: "1.0.2"
+version: "1.0.3"
 tags:
   - workflow
   - routing

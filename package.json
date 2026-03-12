@@ -1,6 +1,6 @@
 {
     "name": "agentflow",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Multi-CLI Agent Workflow System — 5-level routing, EHRB safety, knowledge graph memory, sub-agent orchestration",
     "keywords": [
         "ai",
