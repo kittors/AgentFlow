@@ -166,7 +166,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete "${{ needs.metadata.outputs.release_tag }}" --cleanup-tag -y || true
+          gh release delete "${{ needs.metadata.outputs.release_tag }}" --cleanup-tag -y --repo "${{ github.repository }}" || true
 
       - name: Delete previous continuous tag ref
         shell: bash
@@ -181,6 +181,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ needs.metadata.outputs.release_tag }}" final-assets/* \
+            --repo "${{ github.repository }}" \
             --target "${GITHUB_SHA}" \
             --title "${{ needs.metadata.outputs.version }}" \
             --notes "Continuous release from main commit ${{ needs.metadata.outputs.commit }}" \
