@@ -54,6 +54,8 @@ Windows PowerShell：
 irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
+安装脚本下载的是最新已发布的 release 二进制。如果你本机还有旧的 `uv` / Python 版 `agentflow` 排在 `PATH` 前面，请重开终端，或者执行 `export PATH="$HOME/.agentflow/bin:$PATH" && hash -r`，然后用 `which agentflow` 确认当前命中的路径。
+
 ### `npx` 启动
 
 `npx agentflow` 会自动下载与当前平台匹配的 release 二进制并执行。
@@ -99,7 +101,7 @@ agentflow uninstall codex       # 从指定 CLI 卸载
 agentflow uninstall --all       # 从所有已安装目标卸载
 agentflow status                # 查看安装状态
 agentflow clean                 # 清理 AgentFlow 缓存
-agentflow update                # 检查 release 更新
+agentflow update                # 自更新到最新 release 二进制
 agentflow version               # 输出当前版本与更新提示
 ```
 

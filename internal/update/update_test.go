@@ -3,7 +3,9 @@ package update
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -41,5 +43,114 @@ func TestCheckUsesCacheAndTrimsVersionPrefix(t *testing.T) {
 	}
 	if cached.Latest != "1.2.3" {
 		t.Fatalf("expected cached latest version, got %#v", cached)
+	}
+}
+
+func TestCheckDoesNotOfferDowngrade(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"tag_name":"v1.0.1"}`))
+	}))
+	defer server.Close()
+
+	checker := NewChecker()
+	checker.Client = server.Client()
+	checker.CacheFile = filepath.Join(t.TempDir(), "version_cache.json")
+
+	originalAPI := releaseAPIOverride
+	releaseAPIOverride = server.URL
+	defer func() { releaseAPIOverride = originalAPI }()
+
+	result, err := checker.Check("1.0.2", Options{Force: true, CacheTTLHours: 72})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if result.UpdateAvailable {
+		t.Fatalf("expected no downgrade suggestion, got %#v", result)
+	}
+}
+
+func TestAssetNameForPlatform(t *testing.T) {
+	tests := []struct {
+		goos   string
+		goarch string
+		want   string
+	}{
+		{goos: "darwin", goarch: "arm64", want: "agentflow-darwin-arm64"},
+		{goos: "linux", goarch: "amd64", want: "agentflow-linux-amd64"},
+		{goos: "windows", goarch: "amd64", want: "agentflow-windows-amd64.exe"},
+	}
+
+	for _, test := range tests {
+		got, err := assetNameForPlatform(test.goos, test.goarch)
+		if err != nil {
+			t.Fatalf("assetNameForPlatform(%q, %q) returned error: %v", test.goos, test.goarch, err)
+		}
+		if got != test.want {
+			t.Fatalf("assetNameForPlatform(%q, %q) = %q, want %q", test.goos, test.goarch, got, test.want)
+		}
+	}
+}
+
+func TestSelfUpdateReplacesExecutableOnUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("self-update replacement test is Unix-only")
+	}
+
+	assetName, err := assetNameForPlatform(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatalf("assetNameForPlatform returned error: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/latest":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"tag_name":"v1.2.3","assets":[{"name":"` + assetName + `","browser_download_url":"http://` + request.Host + `/download"}]}`))
+		case "/download":
+			_, _ = writer.Write([]byte("new-binary"))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	originalAPI := releaseAPIOverride
+	originalExecutablePath := executablePath
+	originalEvalSymlinks := evalSymlinks
+	t.Cleanup(func() {
+		releaseAPIOverride = originalAPI
+		executablePath = originalExecutablePath
+		evalSymlinks = originalEvalSymlinks
+	})
+
+	executable := filepath.Join(t.TempDir(), "agentflow")
+	if err := os.WriteFile(executable, []byte("old-binary"), 0o755); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	releaseAPIOverride = server.URL + "/latest"
+	executablePath = func() (string, error) { return executable, nil }
+	evalSymlinks = func(path string) (string, error) { return path, nil }
+
+	checker := NewChecker()
+	checker.Client = server.Client()
+	checker.CacheFile = filepath.Join(t.TempDir(), "version_cache.json")
+	checker.Now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+
+	result, err := checker.SelfUpdate("1.0.0")
+	if err != nil {
+		t.Fatalf("SelfUpdate returned error: %v", err)
+	}
+	if !result.UpdateAvailable || result.Latest != "1.2.3" {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+
+	content, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	if string(content) != "new-binary" {
+		t.Fatalf("expected executable to be replaced, got %q", string(content))
 	}
 }

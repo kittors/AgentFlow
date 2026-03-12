@@ -72,13 +72,14 @@ function downloadFile(url, destination) {
 async function ensureBinary() {
     const home = os.homedir();
     const cacheDir = path.join(home, ".cache", "agentflow", "npx");
-    const binaryPath = path.join(cacheDir, assetName());
+    const releaseInfo = await requestJson(API_URL);
+    const versionDir = path.join(cacheDir, releaseInfo.tag_name || "latest");
+    const binaryPath = path.join(versionDir, assetName());
     if (fs.existsSync(binaryPath)) {
         return binaryPath;
     }
 
-    fs.mkdirSync(cacheDir, { recursive: true });
-    const releaseInfo = await requestJson(API_URL);
+    fs.mkdirSync(versionDir, { recursive: true });
     const desiredAsset = releaseInfo.assets.find((asset) => asset.name === assetName());
     if (!desiredAsset) {
         throw new Error(`Unable to find release asset ${assetName()}`);

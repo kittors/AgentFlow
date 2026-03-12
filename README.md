@@ -53,6 +53,8 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
+The installer downloads the latest published release binary. If you still have an older `uv`/Python install earlier on `PATH`, reopen the terminal or run `export PATH="$HOME/.agentflow/bin:$PATH" && hash -r`, then verify with `which agentflow`.
+
 ### `npx` bootstrap
 
 `npx agentflow` downloads the matching release binary into the local cache and runs it.
@@ -98,7 +100,7 @@ agentflow uninstall codex       # Uninstall from a specific CLI
 agentflow uninstall --all       # Uninstall from all installed targets
 agentflow status                # Show installation status
 agentflow clean                 # Remove AgentFlow caches
-agentflow update                # Check releases and reinstall prompt
+agentflow update                # Self-update to the latest release binary
 agentflow version               # Print current version + update hint
 ```
 

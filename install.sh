@@ -5,6 +5,7 @@ REPO="${AGENTFLOW_REPO:-https://github.com/kittors/AgentFlow}"
 GITHUB_API="https://api.github.com/repos/kittors/AgentFlow/releases/latest"
 INSTALL_DIR="${HOME}/.agentflow/bin"
 BRANCH="${AGENTFLOW_BRANCH:-main}"
+PREVIOUS_AGENTFLOW="$(command -v agentflow 2>/dev/null || true)"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -80,6 +81,14 @@ persist_lang_choice() {
 
 persist_path() {
     ensure_line_in_profile "${INSTALL_DIR}" "export PATH=\"${INSTALL_DIR}:\$PATH\"" "PATH"
+}
+
+print_shell_refresh_notice() {
+    if [ -n "${PREVIOUS_AGENTFLOW}" ] && [ "${PREVIOUS_AGENTFLOW}" != "${INSTALL_DIR}/agentflow" ]; then
+        warn "$(msg "检测到旧的 agentflow 仍可能在当前终端中抢先命中: ${PREVIOUS_AGENTFLOW}" "An older agentflow may still shadow the new binary in your current shell: ${PREVIOUS_AGENTFLOW}")"
+        printf "     %s\n" "$(msg "运行: export PATH=\"${INSTALL_DIR}:\$PATH\" && hash -r" "Run: export PATH=\"${INSTALL_DIR}:\$PATH\" && hash -r")"
+        printf "     %s\n" "$(msg "或重新打开终端 / source 对应 shell 配置文件" "Or reopen your terminal / source your shell profile")"
+    fi
 }
 
 resolve_platform() {
@@ -159,9 +168,10 @@ ok "$(msg "已安装到 ${INSTALL_DIR}/agentflow" "Installed to ${INSTALL_DIR}/a
 
 step "$(msg "步骤 3/3: 验证安装" "Step 3/3: Verify installation")"
 PATH="${INSTALL_DIR}:$PATH"
-if command -v agentflow >/dev/null 2>&1; then
+if [ -x "${INSTALL_DIR}/agentflow" ]; then
     ok "$(msg "agentflow 命令已就绪" "agentflow command is ready")"
-    agentflow version || true
+    "${INSTALL_DIR}/agentflow" version || true
+    print_shell_refresh_notice
 else
     warn "$(msg "agentflow 还未进入当前 PATH，请重开终端后再试。" "agentflow is not yet on your current PATH; reopen the terminal and try again.")"
 fi

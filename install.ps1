@@ -6,6 +6,11 @@ $ErrorActionPreference = 'Stop'
 
 $GITHUB_API = "https://api.github.com/repos/kittors/AgentFlow/releases/latest"
 $INSTALL_DIR = Join-Path (Join-Path $HOME ".agentflow") "bin"
+$PREVIOUS_AGENTFLOW = $null
+try {
+    $existing = Get-Command agentflow -ErrorAction SilentlyContinue
+    if ($existing) { $PREVIOUS_AGENTFLOW = $existing.Source }
+} catch {}
 
 $USE_ZH = $false
 try {
@@ -49,6 +54,13 @@ function Resolve-DownloadUrl {
     return $asset.browser_download_url
 }
 
+function Show-ShadowWarning {
+    if ($PREVIOUS_AGENTFLOW -and ($PREVIOUS_AGENTFLOW -ne (Join-Path $INSTALL_DIR "agentflow.exe"))) {
+        Write-Host ("  [!]  " + (msg "检测到旧的 agentflow 可能仍在当前终端中抢先命中: $PREVIOUS_AGENTFLOW" "An older agentflow may still shadow the new binary in your current shell: $PREVIOUS_AGENTFLOW")) -ForegroundColor Yellow
+        Write-Host ("       " + (msg "请重新打开终端，或运行: `$env:Path = `"$INSTALL_DIR;`$env:Path`"" "Reopen your terminal, or run: `$env:Path = `"$INSTALL_DIR;`$env:Path`"")) -ForegroundColor Yellow
+    }
+}
+
 Write-Host ""
 Write-Host "AgentFlow" -ForegroundColor Cyan
 Write-Host (msg "Go Binary Installer" "Go Binary Installer") -ForegroundColor DarkGray
@@ -80,5 +92,6 @@ if ($USE_ZH) {
 }
 
 & $exePath version
+Show-ShadowWarning
 Write-Host ""
 Write-Host (msg "  ✅ 安装完成" "  ✅ Installation complete") -ForegroundColor Green

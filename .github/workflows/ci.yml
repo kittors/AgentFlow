@@ -20,6 +20,7 @@ jobs:
           go-version: "1.26.0"
 
       - name: Verify formatting
+        if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
           test -z "$(gofmt -l .)"
@@ -32,4 +33,6 @@ jobs:
       - name: Build CLI
         shell: bash
         run: |
-          go build -o /tmp/agentflow ./cmd/agentflow
+          COMMIT="${GITHUB_SHA::7}"
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          go build -trimpath -ldflags "-X github.com/kittors/AgentFlow/internal/buildinfo.Version=dev -X github.com/kittors/AgentFlow/internal/buildinfo.Commit=${COMMIT} -X github.com/kittors/AgentFlow/internal/buildinfo.BuildDate=${BUILD_DATE}" -o /tmp/agentflow ./cmd/agentflow

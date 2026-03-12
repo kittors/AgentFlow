@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/kittors/AgentFlow/internal/buildinfo"
 	"github.com/kittors/AgentFlow/internal/i18n"
 	"github.com/kittors/AgentFlow/internal/install"
 	"github.com/kittors/AgentFlow/internal/targets"
@@ -30,7 +31,7 @@ func New(stdout, stderr io.Writer) *App {
 		Catalog:   catalog,
 		Installer: install.New(catalog, stdout),
 		Checker:   update.NewChecker(),
-		Version:   "dev",
+		Version:   buildinfo.CurrentVersion(),
 	}
 }
 
@@ -63,8 +64,7 @@ func (a *App) Run(args []string) int {
 	case "uninstall":
 		return a.runUninstall(args[1:])
 	case "update":
-		a.runUpdate(args[1:])
-		return 0
+		return a.runUpdate(args[1:])
 	case "init":
 		return a.runInit(args[1:])
 	case "kb":
@@ -107,7 +107,7 @@ func (a *App) runInteractiveMainMenu() int {
 		case ui.ActionUninstall:
 			_ = a.runUninstall(nil)
 		case ui.ActionUpdate:
-			a.runUpdate(nil)
+			_ = a.runUpdate(nil)
 		case ui.ActionStatus:
 			a.printStatus()
 		case ui.ActionClean:
@@ -305,24 +305,26 @@ func (a *App) runInteractiveUninstall() int {
 	return 0
 }
 
-func (a *App) runUpdate(args []string) {
+func (a *App) runUpdate(args []string) int {
 	branch := ""
 	if len(args) > 0 {
 		branch = args[0]
 	}
-	result, err := a.Checker.Check(a.Version, update.Options{Force: true, CacheTTLHours: 72})
-	if err != nil {
-		fmt.Fprintln(a.Stdout, a.Catalog.Msg("检查更新失败。", "Failed to check for updates."))
-		return
-	}
 	if branch != "" {
-		fmt.Fprintf(a.Stdout, a.Catalog.Msg("当前 Go update 预留分支参数: %s\n", "The Go update flow reserved branch argument: %s\n"), branch)
+		fmt.Fprintf(a.Stdout, a.Catalog.Msg("当前 Go update 不支持分支参数: %s\n", "The Go update command does not support branch arguments: %s\n"), branch)
+		return 1
 	}
-	if result.UpdateAvailable {
-		fmt.Fprintf(a.Stdout, a.Catalog.Msg("发现新版本 v%s，请通过 release 二进制重新安装。\n", "Found update v%s, reinstall via release binary.\n"), result.Latest)
-		return
+	result, err := a.Checker.SelfUpdate(a.Version)
+	if err != nil {
+		fmt.Fprintf(a.Stdout, a.Catalog.Msg("更新失败: %v\n", "Update failed: %v\n"), err)
+		return 1
 	}
-	fmt.Fprintln(a.Stdout, a.Catalog.Msg("当前已是最新版本。", "Already on the latest version."))
+	if !result.UpdateAvailable {
+		fmt.Fprintln(a.Stdout, a.Catalog.Msg("当前已是最新版本。", "Already on the latest version."))
+		return 0
+	}
+	fmt.Fprintf(a.Stdout, a.Catalog.Msg("已更新到 v%s，请重新运行 agentflow。\n", "Updated to v%s. Restart agentflow to use the new binary.\n"), result.Latest)
+	return 0
 }
 
 func (a *App) runClean() error {
@@ -336,6 +338,9 @@ func (a *App) runClean() error {
 
 func (a *App) printStatus() {
 	fmt.Fprintf(a.Stdout, "AgentFlow v%s\n", a.Version)
+	if executable, err := os.Executable(); err == nil {
+		fmt.Fprintf(a.Stdout, a.Catalog.Msg("可执行文件: %s\n", "Executable: %s\n"), executable)
+	}
 	for _, line := range a.Installer.StatusLines() {
 		fmt.Fprintln(a.Stdout, line)
 	}

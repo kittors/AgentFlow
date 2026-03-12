@@ -43,17 +43,45 @@ type selectionModel struct {
 }
 
 var (
-	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
-	cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Bold(true)
-	labelStyle  = lipgloss.NewStyle().Bold(true)
-	descStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	heroStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("45")).
+			Padding(1, 2)
+	titleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("230")).
+			Background(lipgloss.Color("31")).
+			Padding(0, 1)
+	subtitleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("109"))
+	cursorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("221")).
+			Bold(true)
+	selectedRowStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("24")).
+				Foreground(lipgloss.Color("230")).
+				Padding(0, 1)
+	labelStyle = lipgloss.NewStyle().
+			Bold(true)
+	selectedLabelStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("230"))
+	descStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("244"))
+	selectedDescStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("189"))
+	hintStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("245")).
+			BorderTop(true).
+			BorderForeground(lipgloss.Color("238")).
+			PaddingTop(1)
 )
 
 func RunMainMenu(catalog i18n.Catalog, version string, output io.Writer) (Action, bool, error) {
 	options := []Option{
 		{Value: string(ActionInstall), Label: catalog.Msg("安装到 CLI", "Install to CLI targets"), Description: "install"},
 		{Value: string(ActionUninstall), Label: catalog.Msg("卸载已安装目标", "Uninstall from installed targets"), Description: "uninstall"},
-		{Value: string(ActionUpdate), Label: catalog.Msg("检查更新", "Check for updates"), Description: "update"},
+		{Value: string(ActionUpdate), Label: catalog.Msg("更新 AgentFlow", "Update AgentFlow"), Description: "self-update"},
 		{Value: string(ActionStatus), Label: catalog.Msg("查看状态", "Show status"), Description: "status"},
 		{Value: string(ActionClean), Label: catalog.Msg("清理缓存", "Clean caches"), Description: "clean"},
 		{Value: string(ActionExit), Label: catalog.Msg("退出", "Exit"), Description: "exit"},
@@ -161,18 +189,17 @@ func (m selectionModel) View() string {
 	var builder strings.Builder
 
 	builder.WriteString("\n")
-	builder.WriteString(titleStyle.Render(m.title))
-	builder.WriteString("\n")
+	headerLines := []string{titleStyle.Render(m.title)}
 	if m.subtitle != "" {
-		builder.WriteString(descStyle.Render(m.subtitle))
-		builder.WriteString("\n")
+		headerLines = append(headerLines, subtitleStyle.Render(m.subtitle))
 	}
-	builder.WriteString("\n")
+	builder.WriteString(heroStyle.Render(strings.Join(headerLines, "\n")))
+	builder.WriteString("\n\n")
 
 	for index, option := range m.options {
 		cursor := "  "
 		if index == m.cursor {
-			cursor = cursorStyle.Render("› ")
+			cursor = cursorStyle.Render("→ ")
 		}
 
 		marker := "•"
@@ -183,22 +210,30 @@ func (m selectionModel) View() string {
 			}
 		}
 
-		builder.WriteString(cursor)
-		builder.WriteString(marker)
-		builder.WriteString(" ")
-		builder.WriteString(labelStyle.Render(option.Label))
+		rowLabel := labelStyle.Render(option.Label)
+		rowDesc := descStyle.Render(option.Description)
+		if index == m.cursor {
+			rowLabel = selectedLabelStyle.Render(option.Label)
+			rowDesc = selectedDescStyle.Render(option.Description)
+		}
+
+		row := cursor + marker + " " + rowLabel
 		if option.Description != "" {
-			builder.WriteString(" ")
-			builder.WriteString(descStyle.Render(option.Description))
+			row += "  " + rowDesc
+		}
+		if index == m.cursor {
+			builder.WriteString(selectedRowStyle.Render(row))
+		} else {
+			builder.WriteString(row)
 		}
 		builder.WriteString("\n")
 	}
 
 	builder.WriteString("\n")
 	if m.multi {
-		builder.WriteString(descStyle.Render(m.catalog.Msg("Space 切换，Enter 确认，Esc 取消。", "Space toggles, Enter confirms, Esc cancels.")))
+		builder.WriteString(hintStyle.Render(m.catalog.Msg("Space 切换选择，Enter 执行，Esc 取消。", "Space toggles selection, Enter runs, Esc cancels.")))
 	} else {
-		builder.WriteString(descStyle.Render(m.catalog.Msg("Enter 确认，Esc 取消。", "Enter confirms, Esc cancels.")))
+		builder.WriteString(hintStyle.Render(m.catalog.Msg("Enter 执行，Esc 返回。", "Enter runs, Esc goes back.")))
 	}
 	builder.WriteString("\n")
 
