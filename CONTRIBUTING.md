@@ -1,100 +1,102 @@
 # Contributing to AgentFlow
 
-Thank you for your interest in contributing! This guide will help you get started.
+AgentFlow now uses a **Go-first** development workflow. This guide covers the current toolchain, repository layout, and validation steps expected before opening a pull request.
 
-## Development Setup
+## Requirements
+
+- Go `1.26.0`
+- Git
+- Node.js `>=16` only if you touch `bin/agentflow.js`
+- PowerShell if you need to validate `install.ps1` locally on Windows
+
+## Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/kittors/AgentFlow.git
 cd AgentFlow
-
-# Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\Activate.ps1  # Windows
-
-# Install in editable mode with dev dependencies
-pip install -e ".[dev]"
+go test ./...
+go build -o ./bin/agentflow ./cmd/agentflow
 ```
 
-## Code Standards
+## Repository Structure
 
-- **Python 3.10+** — use type hints everywhere
-- **Linter**: [Ruff](https://github.com/astral-sh/ruff) (`ruff check agentflow/`)
-- **Line length**: 120 characters
-- **Encoding**: UTF-8 without BOM
-- **Locale**: All user-facing strings must use `msg(zh, en)` for bilingual output
-- **File operations**: Use `_safe_write()` / `_safe_remove()` helpers for Windows compatibility
+```text
+AgentFlow/
+├── cmd/agentflow/          # CLI entrypoint
+├── internal/app/           # Command dispatch and runtime flows
+├── internal/ui/            # Bubble Tea TUI
+├── internal/install/       # Install / uninstall / config merge logic
+├── internal/update/        # Release checks and cache
+├── internal/kb/            # KB, plan, session helpers
+├── internal/scan/          # Graph, convention, dashboard, arch scan
+├── internal/targets/       # Supported CLIs and deployment profiles
+├── agentflow/              # Embedded prompt assets, hooks, templates, roles
+├── install.sh              # POSIX installer
+├── install.ps1             # Windows installer
+└── bin/agentflow.js        # npx bridge
+```
 
-## Running Tests
+## Coding Standards
+
+- Use `gofmt` for all Go code.
+- Keep user-facing output bilingual where the code already uses `Catalog.Msg(zh, en)`.
+- Use `internal/config` helpers for safe writes, backups, and Windows-friendly cleanup.
+- Prefer adding or updating tests with each behavior change.
+- Keep embedded asset behavior aligned with the shipped files under `agentflow/`.
+
+## Validation
+
+Run the full local validation set before opening a PR:
 
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific test file
-pytest tests/test_installer.py -v
+gofmt -w .
+go test ./...
+go build -o /tmp/agentflow ./cmd/agentflow
+bash -n install.sh
+node --check bin/agentflow.js
 ```
 
-## Project Structure
+On Windows, also validate:
 
-```
-AgentFlow/
-├── AGENTS.md              ← Core prompt system (G1–G12)
-├── SKILL.md               ← Skill discovery metadata
-├── agentflow/
-│   ├── cli.py             ← CLI entry point
-│   ├── _constants.py      ← Shared constants and helpers
-│   ├── installer.py       ← Deploy to CLI targets
-│   ├── interactive.py     ← Interactive menus
-│   ├── updater.py         ← Update/status/clean
-│   ├── version_check.py   ← GitHub version check
-│   ├── stages/            ← DESIGN + DEVELOP workflows
-│   ├── services/          ← Knowledge, Memory, Package, Attention, Support
-│   ├── rules/             ← State, Cache, Tools, Scaling
-│   ├── rlm/roles/         ← 6 specialized agent roles
-│   ├── functions/         ← 14 workflow commands
-│   ├── templates/         ← KB/plan templates
-│   └── hooks/             ← Claude Code + Codex CLI hooks
-├── install.sh             ← One-line installer (macOS/Linux)
-├── install.ps1            ← One-line installer (Windows)
-├── bin/agentflow.js       ← npx bridge
-└── tests/
+```powershell
+$null = [System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw ./install.ps1), [ref]$null)
 ```
 
-## Making Changes
+## Pull Requests
 
-1. **Fork** the repository
-2. **Create a branch**: `git checkout -b feature/my-feature`
-3. **Make your changes** and add tests if applicable
-4. **Run lint**: `ruff check agentflow/`
-5. **Run tests**: `pytest tests/ -v`
-6. **Commit**: use clear, descriptive commit messages
-7. **Push** and open a **Pull Request**
+1. Create a branch from `main`.
+2. Keep changes scoped and explain user-visible behavior clearly.
+3. Include tests for install logic, target compatibility, parsing, or TUI behavior when applicable.
+4. Update `README.md`, `README_CN.md`, `CHANGELOG.md`, or embedded assets if the behavior changed.
+5. Summarize platform impact in the PR description if macOS, Linux, and Windows behavior differ.
 
-## Adding a New CLI Target
+## Release Notes
 
-1. Add the target config to `CLI_TARGETS` in `_constants.py`
-2. Add hook config in `hooks/` if applicable
-3. Add tests in `test_installer.py`
-4. Update `README.md` and `README_CN.md`
+GitHub Actions builds release binaries from `.github/workflows/release.yml` for:
 
-## Adding a New Workflow Command
+- Linux `amd64`
+- Linux `arm64`
+- macOS `amd64`
+- macOS `arm64`
+- Windows `amd64`
 
-1. Create `agentflow/functions/your_command.md`
-2. Add the command to the routing table in `AGENTS.md` (G7 section)
-3. Add to `SKILL.md` commands list
-4. Update `README.md` and `README_CN.md`
+If you change asset names, install scripts, or the `npx` bootstrap path, update:
+
+- `install.sh`
+- `install.ps1`
+- `bin/agentflow.js`
+- `.github/workflows/release.yml`
 
 ## Reporting Issues
 
 Please include:
-- OS and Python version
-- CLI target(s) in use
-- Steps to reproduce
-- Expected vs actual behavior
+
+- OS and architecture
+- CLI target in use (`codex`, `claude`, `gemini`, `qwen`, `grok`, `opencode`)
+- Exact command you ran
+- Expected behavior vs actual behavior
+- Relevant config snippets if install/uninstall integration is involved
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions are licensed under the MIT License.

@@ -1,34 +1,40 @@
 # Changelog
 
-All notable changes to AgentFlow will be documented in this file.
+All notable changes to AgentFlow are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Rewrote the runtime CLI from Python to Go and moved distribution to cross-platform release binaries.
+- Embedded `AGENTS.md`, `SKILL.md`, workflow modules, templates, hooks, and agent role files directly into the Go executable.
+- Replaced the placeholder terminal menu with a Bubble Tea based cross-platform TUI for main actions plus interactive install and uninstall selection.
+- Reworked installation flows so profile-aware rules generation, Claude hook merge/cleanup, and Codex multi-agent config injection are handled natively in Go.
+- Switched repository development, CI, and release documentation to Go build and Go test workflows.
+
+### Added
+
+- `cmd/agentflow` as the Go entrypoint.
+- `internal/ui` for the interactive TUI layer.
+- `internal/install`, `internal/update`, `internal/kb`, `internal/scan`, and related Go-native test suites.
+- GitHub Actions matrices that build and smoke-test Go release assets for Linux, macOS, and Windows.
+
+### Removed
+
+- Python-first install, test, and release flow from the primary documentation path.
+
 ## [1.0.0] - 2025-02-26
 
-### ✨ Features
+### Features
 
-- **5-Level Routing (R0–R4)**: Every input scored on 5 dimensions — R0 direct reply, R1 fast flow, R2 simplified, R3 standard, R4 architecture-level (unique)
-- **RLM Sub-Agent Orchestration**: 6 specialized roles (reviewer, synthesizer, kb_keeper, pkg_keeper, writer, architect) plus native CLI sub-agents
-- **EHRB Safety Detection**: Three-layer safety — keyword scan, semantic analysis, tool output inspection
-- **Three-Layer Memory**: L0 user preferences (global), L1 project knowledge base, L2 session summaries
-- **Knowledge Graph Memory** (`~graph`): Graph-based project memory with progressive disclosure queries
-- **Convention Extraction** (`~conventions`): Auto-discover coding patterns from your codebase
-- **Architecture Scanning** (`~scan`): Proactive detection of large files, circular deps, missing tests
-- **Dashboard** (`~dashboard`): HTML project status dashboard generation
-- **Context Window Management**: Proactive summarization when context exceeds 80%
-- **15 Workflow Commands**: `~init`, `~auto`, `~plan`, `~exec`, `~status`, `~review`, `~scan`, `~conventions`, `~graph`, `~dashboard`, `~memory`, `~rlm`, `~validatekb`, `~help`
-- **10 KB/Plan Templates**: Base, plan, changelog, frontend, backend, fullstack, Python, conventions, graph, session summary
-- **9 Helper Scripts**: KB sync, graph builder, convention scanner, architecture scanner, session manager, template initializer, cache manager, config helpers, dashboard generator
-
-### 🛠️ Infrastructure
-
-- **6 CLI Targets**: Claude Code, Codex CLI, Gemini CLI, OpenCode, Qwen CLI, Grok CLI
-- **Multiple Install Methods**: pip, uv, npx, one-line scripts (install.sh / install.ps1)
-- **Interactive CLI**: Menu-driven installation with multi-target support
-- **Auto Locale Detection**: CLI messages switch between zh-CN and en-US
-- **Hooks Integration**: Claude Code lifecycle hooks + Codex CLI notify hook
-- **SKILL.md**: Skill discovery metadata for all CLI targets
-- **Windows Support**: File-locking safe operations with rename-aside fallback
-- **CI/CD**: GitHub Actions for lint, test (Python 3.10–3.13, macOS/Linux/Windows), and auto-release
+- 5-Level Routing (`R0`–`R4`) with proportional workflow depth
+- EHRB three-layer safety detection
+- Three-layer memory model (`L0`, `L1`, `L2`)
+- Knowledge graph memory via `~graph`
+- Convention extraction via `~conventions`
+- Architecture scanning via `~scan`
+- Project dashboard generation via `~dashboard`
+- Multi-CLI deployment targets for Codex, Claude, Gemini, OpenCode, Qwen, and Grok

@@ -1,104 +1,107 @@
 #!/usr/bin/env node
 
-/**
- * AgentFlow npx bridge — installs the Python package and launches the interactive menu.
- * Usage: npx agentflow [install <target>]
- */
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const https = require("https");
+const { spawnSync } = require("child_process");
 
-const { execSync, spawnSync } = require("child_process");
+const API_URL = "https://api.github.com/repos/kittors/AgentFlow/releases/latest";
 
-const REPO = "https://github.com/kittors/AgentFlow";
+function assetName() {
+    const platform = process.platform === "win32" ? "windows" : process.platform;
+    const arch = process.arch === "x64" ? "amd64" : process.arch === "arm64" ? "arm64" : null;
+    if (!arch || !["linux", "darwin", "windows"].includes(platform)) {
+        throw new Error(`Unsupported platform: ${process.platform}/${process.arch}`);
+    }
+    return `agentflow-${platform}-${arch}${platform === "windows" ? ".exe" : ""}`;
+}
 
-function findPython() {
-    for (const cmd of ["python3", "python", "py"]) {
-        try {
-            const ver = execSync(`${cmd} --version 2>&1`, { encoding: "utf-8" }).trim();
-            const match = ver.match(/(\d+)\.(\d+)/);
-            if (match) {
-                const major = parseInt(match[1], 10);
-                const minor = parseInt(match[2], 10);
-                if (major > 3 || (major === 3 && minor >= 10)) {
-                    return { cmd, version: ver };
-                }
+function requestJson(url) {
+    return new Promise((resolve, reject) => {
+        const req = https.get(url, {
+            headers: { "User-Agent": "agentflow-npx" },
+        }, (res) => {
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                resolve(requestJson(res.headers.location));
+                return;
             }
-        } catch { }
-    }
-    return null;
-}
-
-function hasCommand(name) {
-    try {
-        execSync(`${process.platform === "win32" ? "where" : "which"} ${name}`, {
-            stdio: "ignore",
+            if (res.statusCode >= 400) {
+                reject(new Error(`Request failed with status ${res.statusCode}`));
+                return;
+            }
+            const chunks = [];
+            res.on("data", (chunk) => chunks.push(chunk));
+            res.on("end", () => {
+                try {
+                    resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+                } catch (error) {
+                    reject(error);
+                }
+            });
         });
-        return true;
-    } catch {
-        return false;
-    }
+        req.on("error", reject);
+    });
 }
 
-function main() {
-    console.log("");
-    console.log("  ╔═══════════════════════════════════════╗");
-    console.log("  ║        AgentFlow — npx installer      ║");
-    console.log("  ╚═══════════════════════════════════════╝");
-    console.log("");
+function downloadFile(url, destination) {
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(destination);
+        https.get(url, { headers: { "User-Agent": "agentflow-npx" } }, (res) => {
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                file.close();
+                fs.unlinkSync(destination);
+                resolve(downloadFile(res.headers.location, destination));
+                return;
+            }
+            if (res.statusCode >= 400) {
+                reject(new Error(`Download failed with status ${res.statusCode}`));
+                return;
+            }
+            res.pipe(file);
+            file.on("finish", () => {
+                file.close(() => resolve(destination));
+            });
+        }).on("error", (error) => {
+            try { fs.unlinkSync(destination); } catch {}
+            reject(error);
+        });
+    });
+}
 
-    // 1. Find Python
-    const python = findPython();
-    if (!python) {
-        console.error("  ✗ Python >= 3.10 is required but not found.");
-        console.error("    Please install Python 3.10+ first.");
-        process.exit(1);
+async function ensureBinary() {
+    const home = os.homedir();
+    const cacheDir = path.join(home, ".cache", "agentflow", "npx");
+    const binaryPath = path.join(cacheDir, assetName());
+    if (fs.existsSync(binaryPath)) {
+        return binaryPath;
     }
-    console.log(`  ✓ Found ${python.version}`);
 
-    // 2. Check if agentflow is already installed
-    if (hasCommand("agentflow")) {
-        console.log("  ✓ agentflow is already installed");
-        console.log("");
-        const args = process.argv.slice(2);
-        const result = spawnSync("agentflow", args.length ? args : [], {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const releaseInfo = await requestJson(API_URL);
+    const desiredAsset = releaseInfo.assets.find((asset) => asset.name === assetName());
+    if (!desiredAsset) {
+        throw new Error(`Unable to find release asset ${assetName()}`);
+    }
+    await downloadFile(desiredAsset.browser_download_url, binaryPath);
+    if (process.platform !== "win32") {
+        fs.chmodSync(binaryPath, 0o755);
+    }
+    return binaryPath;
+}
+
+async function main() {
+    try {
+        const binaryPath = await ensureBinary();
+        const result = spawnSync(binaryPath, process.argv.slice(2), {
             stdio: "inherit",
+            env: process.env,
         });
         process.exit(result.status || 0);
-    }
-
-    // 3. Install via uv or pip
-    const hasUv = hasCommand("uv");
-    console.log(`  · Installing via ${hasUv ? "uv" : "pip"}...`);
-    console.log("");
-
-    let installResult;
-    if (hasUv) {
-        installResult = spawnSync(
-            "uv",
-            ["tool", "install", "--from", `git+${REPO}`, "agentflow"],
-            { stdio: "inherit" }
-        );
-    } else {
-        installResult = spawnSync(
-            python.cmd,
-            ["-m", "pip", "install", "--upgrade", `git+${REPO}.git`],
-            { stdio: "inherit" }
-        );
-    }
-
-    if (installResult.status !== 0) {
-        console.error("  ✗ Installation failed.");
+    } catch (error) {
+        console.error(`AgentFlow npx bootstrap failed: ${error.message}`);
         process.exit(1);
     }
-
-    console.log("");
-    console.log("  ✓ AgentFlow installed successfully!");
-    console.log("");
-
-    // 4. Launch interactive menu or pass args
-    const args = process.argv.slice(2);
-    const result = spawnSync("agentflow", args.length ? args : [], {
-        stdio: "inherit",
-    });
-    process.exit(result.status || 0);
 }
 
 main();
