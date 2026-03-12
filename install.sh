@@ -111,6 +111,10 @@ sync_legacy_command_path() {
 
 print_shell_refresh_notice() {
     if [ -n "${PREVIOUS_AGENTFLOW}" ] && [ "${PREVIOUS_AGENTFLOW}" != "${INSTALL_DIR}/agentflow" ]; then
+        if [ -L "${PREVIOUS_AGENTFLOW}" ] && [ "$(readlink "${PREVIOUS_AGENTFLOW}" 2>/dev/null || true)" = "${INSTALL_DIR}/agentflow" ]; then
+            ok "$(msg "当前命令入口已切到新的 Go 二进制: ${PREVIOUS_AGENTFLOW}" "The current command entry now points to the new Go binary: ${PREVIOUS_AGENTFLOW}")"
+            return 0
+        fi
         warn "$(msg "检测到旧的 agentflow 仍可能在当前终端中抢先命中: ${PREVIOUS_AGENTFLOW}" "An older agentflow may still shadow the new binary in your current shell: ${PREVIOUS_AGENTFLOW}")"
         printf "     %s\n" "$(msg "运行: export PATH=\"${INSTALL_DIR}:\$PATH\" && hash -r" "Run: export PATH=\"${INSTALL_DIR}:\$PATH\" && hash -r")"
         printf "     %s\n" "$(msg "或重新打开终端 / source 对应 shell 配置文件" "Or reopen your terminal / source your shell profile")"

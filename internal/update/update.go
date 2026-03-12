@@ -86,9 +86,11 @@ func (c *Checker) Check(current string, options Options) (Result, error) {
 	if !options.Force {
 		if entry, err := c.readCache(); err == nil && entry != nil {
 			if c.Now().Unix()-entry.Timestamp < int64(ttl*3600) && isUsableCachedVersion(entry.Latest) {
-				result.Latest = entry.Latest
-				result.UpdateAvailable = shouldUpdate(current, entry.Latest)
-				return result, nil
+				if !shouldRefreshMainBuildCache(current, entry.Latest) {
+					result.Latest = entry.Latest
+					result.UpdateAvailable = shouldUpdate(current, entry.Latest)
+					return result, nil
+				}
 			}
 		}
 	}
@@ -375,6 +377,15 @@ func isUsableCachedVersion(version string) bool {
 	}
 	_, ok := parseReleaseVersion(version)
 	return ok
+}
+
+func shouldRefreshMainBuildCache(current, cached string) bool {
+	current = normalizeVersion(current)
+	cached = normalizeVersion(cached)
+	if current == "" || cached == "" || current == cached {
+		return false
+	}
+	return strings.Contains(current, "-main.") && strings.Contains(cached, "-main.")
 }
 
 func (c *Checker) readCache() (*cacheEntry, error) {

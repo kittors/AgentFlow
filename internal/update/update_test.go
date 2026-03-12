@@ -77,6 +77,40 @@ func TestCheckIgnoresMalformedCachedVersion(t *testing.T) {
 	}
 }
 
+func TestCheckRefreshesStaleCachedMainBuild(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"tag_name":"continuous","name":"1.0.3-main.d4c9af6"}`))
+	}))
+	defer server.Close()
+
+	checker := NewChecker()
+	checker.Client = server.Client()
+	checker.CacheFile = filepath.Join(t.TempDir(), "version_cache.json")
+	checker.Now = func() time.Time {
+		return time.Unix(1_700_000_000, 0)
+	}
+
+	if err := checker.writeCache(cacheEntry{Latest: "1.0.3-main.dfa4830", Timestamp: checker.Now().Unix()}); err != nil {
+		t.Fatalf("writeCache returned error: %v", err)
+	}
+
+	originalAPI := releaseAPIOverride
+	releaseAPIOverride = server.URL
+	defer func() { releaseAPIOverride = originalAPI }()
+
+	result, err := checker.Check("1.0.3-main.d4c9af6", Options{CacheTTLHours: 72})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if result.UpdateAvailable {
+		t.Fatalf("expected stale cached main build to be refreshed, got %#v", result)
+	}
+	if result.Latest != "1.0.3-main.d4c9af6" {
+		t.Fatalf("expected latest version to refresh from API, got %#v", result)
+	}
+}
+
 func TestCheckDoesNotOfferDowngrade(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")

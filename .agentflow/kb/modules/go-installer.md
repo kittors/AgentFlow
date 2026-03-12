@@ -18,6 +18,7 @@
 - 安装脚本解析下载地址时会优先读取 `releases/tags/continuous`，仅在该接口不可用时回退到 `releases/latest`
 - Go 自更新同样优先读取 `continuous` release，并在读取缓存时跳过 `continuous` 这类不可比较的畸形版本值
 - Go 自更新默认 HTTP 超时已提高到 2 分钟，并有慢下载测试覆盖，避免较慢网络下更新 9-13MB 二进制时被 5 秒超时过早中断
+- 当当前版本与缓存版本都是 `-main.` 构建但提交不同，版本检查会主动回源刷新，不再把旧缓存误报成“新版本可用”
 - 主菜单交互结果不再直接写到终端普通缓冲区，而是通过 TUI 内部状态/结果面板展示
 - `install.sh` 会自动备份并重定向用户目录中的旧 `agentflow` 命令入口，例如 `~/.local/bin/agentflow`，避免安装 Go 版后仍被历史 uv/Python 入口抢先命中
 
