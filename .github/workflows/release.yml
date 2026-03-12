@@ -199,3 +199,13 @@ jobs:
             --title "${{ needs.metadata.outputs.version }}" \
             --notes "Continuous release from main commit ${{ needs.metadata.outputs.commit }}" \
             --latest
+
+      - name: Publish continuous release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "${{ needs.metadata.outputs.release_tag }}" \
+            --repo "${{ github.repository }}" \
+            --draft=false \
+            --latest

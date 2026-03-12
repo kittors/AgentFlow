@@ -14,9 +14,9 @@ import (
 	"time"
 )
 
-const releaseAPI = "https://api.github.com/repos/kittors/AgentFlow/releases/latest"
-
 var (
+	releaseTagAPI      = "https://api.github.com/repos/kittors/AgentFlow/releases/tags/continuous"
+	releaseLatestAPI   = "https://api.github.com/repos/kittors/AgentFlow/releases/latest"
 	releaseAPIOverride = ""
 	executablePath     = os.Executable
 	evalSymlinks       = filepath.EvalSymlinks
@@ -83,7 +83,7 @@ func (c *Checker) Check(current string, options Options) (Result, error) {
 
 	if !options.Force {
 		if entry, err := c.readCache(); err == nil && entry != nil {
-			if c.Now().Unix()-entry.Timestamp < int64(ttl*3600) {
+			if c.Now().Unix()-entry.Timestamp < int64(ttl*3600) && isUsableCachedVersion(entry.Latest) {
 				result.Latest = entry.Latest
 				result.UpdateAvailable = shouldUpdate(current, entry.Latest)
 				return result, nil
@@ -152,11 +152,26 @@ func (c *Checker) SelfUpdate(current string) (Result, error) {
 }
 
 func (c *Checker) fetchLatestRelease() (releasePayload, error) {
-	endpoint := releaseAPI
+	endpoints := []string{releaseTagAPI, releaseLatestAPI}
 	if releaseAPIOverride != "" {
-		endpoint = releaseAPIOverride
+		endpoints = []string{releaseAPIOverride}
 	}
 
+	var lastErr error
+	for _, endpoint := range endpoints {
+		payload, err := c.fetchRelease(endpoint)
+		if err == nil {
+			return payload, nil
+		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		return releasePayload{}, lastErr
+	}
+	return releasePayload{}, errors.New("failed to resolve release metadata")
+}
+
+func (c *Checker) fetchRelease(endpoint string) (releasePayload, error) {
 	request, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return releasePayload{}, err
@@ -170,7 +185,7 @@ func (c *Checker) fetchLatestRelease() (releasePayload, error) {
 	}
 	defer response.Body.Close()
 	if response.StatusCode >= http.StatusBadRequest {
-		return releasePayload{}, errors.New(response.Status)
+		return releasePayload{}, fmt.Errorf("%s: %s", endpoint, response.Status)
 	}
 
 	var payload releasePayload
@@ -349,6 +364,15 @@ func parseReleaseVersion(version string) ([]int, bool) {
 		}
 	}
 	return values, true
+}
+
+func isUsableCachedVersion(version string) bool {
+	version = normalizeVersion(version)
+	if version == "" || version == "unknown" || version == "continuous" {
+		return false
+	}
+	_, ok := parseReleaseVersion(version)
+	return ok
 }
 
 func (c *Checker) readCache() (*cacheEntry, error) {

@@ -46,6 +46,37 @@ func TestCheckUsesCacheAndTrimsVersionPrefix(t *testing.T) {
 	}
 }
 
+func TestCheckIgnoresMalformedCachedVersion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"tag_name":"continuous","name":"1.0.3-main.abcdef1"}`))
+	}))
+	defer server.Close()
+
+	checker := NewChecker()
+	checker.Client = server.Client()
+	checker.CacheFile = filepath.Join(t.TempDir(), "version_cache.json")
+	checker.Now = func() time.Time {
+		return time.Unix(1_700_000_000, 0)
+	}
+
+	if err := checker.writeCache(cacheEntry{Latest: "continuous", Timestamp: checker.Now().Unix()}); err != nil {
+		t.Fatalf("writeCache returned error: %v", err)
+	}
+
+	originalAPI := releaseAPIOverride
+	releaseAPIOverride = server.URL
+	defer func() { releaseAPIOverride = originalAPI }()
+
+	result, err := checker.Check("1.0.3", Options{CacheTTLHours: 72})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if result.Latest != "1.0.3-main.abcdef1" {
+		t.Fatalf("expected malformed cache entry to be ignored, got %#v", result)
+	}
+}
+
 func TestCheckDoesNotOfferDowngrade(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -67,6 +98,84 @@ func TestCheckDoesNotOfferDowngrade(t *testing.T) {
 	}
 	if result.UpdateAvailable {
 		t.Fatalf("expected no downgrade suggestion, got %#v", result)
+	}
+}
+
+func TestCheckPrefersContinuousReleaseEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/tag":
+			_, _ = writer.Write([]byte(`{"tag_name":"continuous","name":"1.0.3-main.abcdef1"}`))
+		case "/latest":
+			_, _ = writer.Write([]byte(`{"tag_name":"v1.0.3","name":"v1.0.3"}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	checker := NewChecker()
+	checker.Client = server.Client()
+	checker.CacheFile = filepath.Join(t.TempDir(), "version_cache.json")
+
+	originalTagAPI := releaseTagAPI
+	originalLatestAPI := releaseLatestAPI
+	originalOverride := releaseAPIOverride
+	releaseTagAPI = server.URL + "/tag"
+	releaseLatestAPI = server.URL + "/latest"
+	releaseAPIOverride = ""
+	defer func() {
+		releaseTagAPI = originalTagAPI
+		releaseLatestAPI = originalLatestAPI
+		releaseAPIOverride = originalOverride
+	}()
+
+	result, err := checker.Check("1.0.3", Options{Force: true, CacheTTLHours: 72})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !result.UpdateAvailable || result.Latest != "1.0.3-main.abcdef1" {
+		t.Fatalf("expected continuous release metadata to win, got %#v", result)
+	}
+}
+
+func TestCheckFallsBackToLatestWhenContinuousEndpointUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch request.URL.Path {
+		case "/tag":
+			http.NotFound(writer, request)
+		case "/latest":
+			_, _ = writer.Write([]byte(`{"tag_name":"v1.2.3"}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	checker := NewChecker()
+	checker.Client = server.Client()
+	checker.CacheFile = filepath.Join(t.TempDir(), "version_cache.json")
+
+	originalTagAPI := releaseTagAPI
+	originalLatestAPI := releaseLatestAPI
+	originalOverride := releaseAPIOverride
+	releaseTagAPI = server.URL + "/tag"
+	releaseLatestAPI = server.URL + "/latest"
+	releaseAPIOverride = ""
+	defer func() {
+		releaseTagAPI = originalTagAPI
+		releaseLatestAPI = originalLatestAPI
+		releaseAPIOverride = originalOverride
+	}()
+
+	result, err := checker.Check("1.0.0", Options{Force: true, CacheTTLHours: 72})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !result.UpdateAvailable || result.Latest != "1.2.3" {
+		t.Fatalf("expected fallback to latest release metadata, got %#v", result)
 	}
 }
 

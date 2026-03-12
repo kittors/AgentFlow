@@ -2,7 +2,8 @@
 set -eu
 
 REPO="${AGENTFLOW_REPO:-https://github.com/kittors/AgentFlow}"
-GITHUB_API="https://api.github.com/repos/kittors/AgentFlow/releases/latest"
+GITHUB_TAG_API="https://api.github.com/repos/kittors/AgentFlow/releases/tags/continuous"
+GITHUB_LATEST_API="https://api.github.com/repos/kittors/AgentFlow/releases/latest"
 INSTALL_DIR="${HOME}/.agentflow/bin"
 BRANCH="${AGENTFLOW_BRANCH:-main}"
 PREVIOUS_AGENTFLOW="$(command -v agentflow 2>/dev/null || true)"
@@ -102,18 +103,40 @@ resolve_platform() {
     ASSET_NAME="agentflow-${platform}-${arch}"
 }
 
-download_url_from_latest() {
+release_json_from_api() {
+    endpoint="$1"
     if command -v curl >/dev/null 2>&1; then
-        release_json="$(curl -fsSL -H "User-Agent: AgentFlow-Installer" "${GITHUB_API}")" || return 1
+        curl -fsSL -H "User-Agent: AgentFlow-Installer" "${endpoint}"
     elif command -v wget >/dev/null 2>&1; then
-        release_json="$(wget -qO- --header="User-Agent: AgentFlow-Installer" "${GITHUB_API}")" || return 1
+        wget -qO- --header="User-Agent: AgentFlow-Installer" "${endpoint}"
     else
         err "$(msg "需要 curl 或 wget 来下载 AgentFlow" "curl or wget is required to download AgentFlow")"
     fi
+}
+
+download_url_from_release_api() {
+    endpoint="$1"
+    release_json="$(release_json_from_api "${endpoint}")" || return 1
 
     printf "%s" "${release_json}" | grep -o "\"browser_download_url\"[[:space:]]*:[[:space:]]*\"[^\"]*${ASSET_NAME}[^\"]*\"" \
         | head -1 \
         | sed 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
+}
+
+download_url_from_preferred_release() {
+    download_url="$(download_url_from_release_api "${GITHUB_TAG_API}" || true)"
+    if [ -n "${download_url}" ]; then
+        printf "%s" "${download_url}"
+        return 0
+    fi
+
+    download_url="$(download_url_from_release_api "${GITHUB_LATEST_API}" || true)"
+    if [ -n "${download_url}" ]; then
+        printf "%s" "${download_url}"
+        return 0
+    fi
+
+    return 1
 }
 
 download_binary() {
@@ -125,7 +148,7 @@ download_binary() {
         if [ "${BRANCH}" != "main" ]; then
             err "$(msg "二进制安装器当前仅支持发布版本；自定义分支请先用 Go 在本地构建。" "The binary installer currently supports released builds only; for a custom branch, build locally with Go first.")"
         fi
-        download_url="$(download_url_from_latest)" || err "$(msg "无法获取最新版本下载地址" "Failed to resolve latest release download URL")"
+        download_url="$(download_url_from_preferred_release)" || err "$(msg "无法获取最新版本下载地址" "Failed to resolve latest release download URL")"
     fi
 
     [ -n "${download_url}" ] || err "$(msg "未找到匹配当前平台的二进制文件" "No matching binary found for this platform")"

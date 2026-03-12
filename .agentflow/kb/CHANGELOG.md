@@ -1,5 +1,12 @@
 # Knowledge Changelog
 
+## 2026-03-13
+
+- 修复 continuous release 曾被错误保留为 draft 的发布链路，workflow 现在在创建 release 后显式执行 `gh release edit --draft=false --latest`
+- `install.sh` 与 `internal/update` 现在优先读取 `releases/tags/continuous`，失败后才回退 `releases/latest`，避免公开 latest API 暂时落到旧稳定版
+- 更新缓存现在会忽略畸形版本值 `continuous` / `unknown`，避免升级后仍误报“有新版本”
+- 排查确认用户终端可能仍先命中 `~/.local/bin/agentflow` 的旧 uv 版本；Go 二进制实际安装路径仍是 `~/.agentflow/bin/agentflow`
+
 ## 2026-03-12
 
 - 建立 Go 版资源内嵌入口 `embed.go`
