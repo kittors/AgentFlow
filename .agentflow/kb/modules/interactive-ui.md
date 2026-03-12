@@ -16,12 +16,13 @@
 - 启动 Bubble Tea 时启用 `WithMouseCellMotion()`，滚轮上/下被映射为菜单游标切换
 - `internal/app` 为交互式 `install` / `uninstall` / `update` / `clean` 提供 panel 化结果，避免信息泄漏到 TUI 外部终端缓冲区
 - 交互式动作执行时会在当前 TUI 内显示 busy panel，而不是退出后打印普通终端输出
+- 交互只响应标准导航键：`↑/↓`、`PgUp/PgDn`、`Home/End`、`Enter`、`Esc`、`Space`；普通字母键不再作为隐藏快捷键生效
 - `Esc` 回退规则固定为：
   - 主菜单 `Esc` 退出
   - `install targets` `Esc` 返回 `profile`
   - `profile` `Esc` 返回主菜单
   - `uninstall targets` `Esc` 返回主菜单
-- UI 测试覆盖滚轮切换、受限高度裁剪、面板内容内嵌渲染，以及 `update` / `clean` / `uninstall` 的原位执行与回退层级
+- UI 测试覆盖滚轮切换、受限高度裁剪、面板内容内嵌渲染、普通字母键无副作用，以及 `update` / `clean` / `uninstall` 的原位执行与回退层级
 
 ## 已知边界
 

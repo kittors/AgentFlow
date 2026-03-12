@@ -14,3 +14,4 @@
 - 交互主流程改为单一 Bubble Tea 状态机，`更新` / `状态` / `清理` / `卸载` 不再退出后重进 TUI
 - `install -> profile -> targets` 与 `uninstall -> targets` 的 `Esc` 回退层级被固定为单次返回一级
 - 为交互状态机补充 `update` / `clean` / `uninstall` / busy panel 行为测试，`go test ./...` 持续通过
+- 移除交互式菜单中未公开的 `j/k/g/G/q` 字母快捷键，普通字母输入不再意外触发导航或退出

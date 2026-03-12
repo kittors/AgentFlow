@@ -74,6 +74,32 @@ func TestEscapeCancelsSelection(t *testing.T) {
 	}
 }
 
+func TestPrintableKeysDoNotMoveOrCancelSelection(t *testing.T) {
+	model := selectionModel{
+		catalog: i18n.NewCatalog(),
+		options: []Option{
+			{Value: "install", Label: "install"},
+			{Value: "status", Label: "status"},
+		},
+		cursor: 1,
+	}
+
+	next, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model = next.(selectionModel)
+	if model.cursor != 1 {
+		t.Fatalf("expected printable key to leave cursor unchanged, got %d", model.cursor)
+	}
+	if model.canceled {
+		t.Fatal("expected printable key not to cancel selection")
+	}
+
+	next, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model = next.(selectionModel)
+	if model.canceled {
+		t.Fatal("expected q not to cancel selection")
+	}
+}
+
 func TestViewShowsCurrentSummaryAndBadges(t *testing.T) {
 	model := selectionModel{
 		catalog:  i18n.NewCatalog(),

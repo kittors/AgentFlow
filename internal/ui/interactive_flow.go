@@ -218,10 +218,10 @@ func (m interactiveFlowModel) View() string {
 
 func (m interactiveFlowModel) handleKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
-	case "up", "k":
+	case "up":
 		m.moveCursor(-1)
 		return m, nil
-	case "down", "j":
+	case "down":
 		m.moveCursor(1)
 		return m, nil
 	case "pgup":
@@ -230,10 +230,10 @@ func (m interactiveFlowModel) handleKey(key string) (tea.Model, tea.Cmd) {
 	case "pgdown":
 		m.moveCursor(5)
 		return m, nil
-	case "home", "g":
+	case "home":
 		m.setCursor(0)
 		return m, nil
-	case "end", "G":
+	case "end":
 		m.setCursor(m.currentOptionsLen() - 1)
 		return m, nil
 	case " ":
@@ -244,7 +244,7 @@ func (m interactiveFlowModel) handleKey(key string) (tea.Model, tea.Cmd) {
 			m.toggleSelected(&m.uninstallOptions, m.uninstallCursor)
 		}
 		return m, nil
-	case "esc", "q":
+	case "esc":
 		return m.handleBack()
 	case "enter":
 		return m.handleEnter()

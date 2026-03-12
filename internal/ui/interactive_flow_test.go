@@ -3,6 +3,8 @@ package ui
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/kittors/AgentFlow/internal/i18n"
 )
 
@@ -69,6 +71,28 @@ func TestFlowEscReturnsSingleLevelFromInstallTargets(t *testing.T) {
 	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenMain {
 		t.Fatalf("expected second Esc to return to main, got %v", model.screen)
+	}
+}
+
+func TestFlowPrintableKeysDoNotTriggerHiddenShortcuts(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+	})
+	model.mainCursor = 1
+
+	next, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model = next.(interactiveFlowModel)
+	if model.mainCursor != 1 {
+		t.Fatalf("expected j not to move cursor, got %d", model.mainCursor)
+	}
+
+	next, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model = next.(interactiveFlowModel)
+	if model.mainCursor != 1 {
+		t.Fatalf("expected q not to change cursor, got %d", model.mainCursor)
+	}
+	if model.screen != flowScreenMain {
+		t.Fatalf("expected to remain on main screen, got %v", model.screen)
 	}
 }
 

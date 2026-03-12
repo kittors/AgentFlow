@@ -268,14 +268,14 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.KeyMsg:
 		switch value.String() {
-		case "ctrl+c", "esc", "q":
+		case "ctrl+c", "esc":
 			m.canceled = true
 			return m, tea.Quit
-		case "up", "k":
+		case "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case "down", "j":
+		case "down":
 			if m.cursor < len(m.options)-1 {
 				m.cursor++
 			}
@@ -289,9 +289,9 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor > len(m.options)-1 {
 				m.cursor = len(m.options) - 1
 			}
-		case "home", "g":
+		case "home":
 			m.cursor = 0
-		case "end", "G":
+		case "end":
 			if len(m.options) > 0 {
 				m.cursor = len(m.options) - 1
 			}
