@@ -136,12 +136,7 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 		profileCursor: 2,
 	}
 
-	program := tea.NewProgram(
-		model,
-		tea.WithOutput(output),
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
+	program := newInteractiveProgram(model, output)
 	_, err := program.Run()
 	return err
 }

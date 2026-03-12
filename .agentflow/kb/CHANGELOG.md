@@ -6,6 +6,7 @@
 - `install.sh` 与 `internal/update` 现在优先读取 `releases/tags/continuous`，失败后才回退 `releases/latest`，避免公开 latest API 暂时落到旧稳定版
 - 更新缓存现在会忽略畸形版本值 `continuous` / `unknown`，避免升级后仍误报“有新版本”
 - 排查确认用户终端可能仍先命中 `~/.local/bin/agentflow` 的旧 uv 版本；Go 二进制实际安装路径仍是 `~/.agentflow/bin/agentflow`
+- Bubble Tea 交互入口现在显式启用 `WithInputTTY()`，把键盘和鼠标事件绑定到真实 TTY，修复部分 macOS/终端环境里菜单无法响应方向键、Enter 和滚轮的问题
 
 ## 2026-03-12
 

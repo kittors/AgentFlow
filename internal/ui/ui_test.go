@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -218,5 +220,28 @@ func TestViewRendersPanelsInsideDetailsPane(t *testing.T) {
 		if !strings.Contains(view, needle) {
 			t.Fatalf("expected %q in view, got %q", needle, view)
 		}
+	}
+}
+
+func TestNewInteractiveProgramUsesTTYInputAndMouseAltScreen(t *testing.T) {
+	program := newInteractiveProgram(selectionModel{}, io.Discard)
+	value := reflect.ValueOf(program).Elem()
+
+	inputType := value.FieldByName("inputType").Int()
+	startupOptions := value.FieldByName("startupOptions").Int()
+
+	expected := reflect.ValueOf(tea.NewProgram(
+		nil,
+		tea.WithOutput(io.Discard),
+		tea.WithInputTTY(),
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)).Elem()
+
+	if inputType != expected.FieldByName("inputType").Int() {
+		t.Fatalf("expected tty input mode, got inputType=%d", inputType)
+	}
+	if startupOptions != expected.FieldByName("startupOptions").Int() {
+		t.Fatalf("expected alt screen + mouse startup options, got %d", startupOptions)
 	}
 }

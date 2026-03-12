@@ -14,6 +14,7 @@
   - 环境状态（可执行文件路径、CLI 状态、更新提示）
   - 最近一次交互式动作结果
 - 启动 Bubble Tea 时启用 `WithMouseCellMotion()`，滚轮上/下被映射为菜单游标切换
+- 交互入口统一通过 `newInteractiveProgram(...)` 构建，并显式启用 `WithInputTTY()`，避免真实终端里输入事件没有从默认 stdin 正确送达 Bubble Tea
 - `internal/app` 为交互式 `install` / `uninstall` / `update` / `clean` 提供 panel 化结果，避免信息泄漏到 TUI 外部终端缓冲区
 - 交互式动作执行时会在当前 TUI 内显示 busy panel，而不是退出后打印普通终端输出
 - 交互只响应标准导航键：`↑/↓`、`PgUp/PgDn`、`Home/End`、`Enter`、`Esc`、`Space`；普通字母键不再作为隐藏快捷键生效
@@ -29,3 +30,4 @@
 - 极小终端下详情面板仍可能显示省略号，但不会再把内容顶出 TUI 外部
 - 交互式更新只反馈“已替换二进制并提示重启”，当前进程不会热切换版本
 - 首次语言选择仍是独立的 Bubble Tea 会话；进入主菜单后，其余动作已保持在单一会话内
+- 如果终端本身完全不提供 TTY 输入设备，交互模式仍会直接失败；这是 Bubble Tea 与底层终端环境的硬约束

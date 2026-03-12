@@ -228,12 +228,7 @@ func runSelection(output io.Writer, model selectionModel) (string, []string, boo
 		output = io.Discard
 	}
 
-	program := tea.NewProgram(
-		model,
-		tea.WithOutput(output),
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
+	program := newInteractiveProgram(model, output)
 	finalModel, err := program.Run()
 	if err != nil {
 		return "", nil, false, err
@@ -244,6 +239,16 @@ func runSelection(output io.Writer, model selectionModel) (string, []string, boo
 		return "", nil, false, fmt.Errorf("unexpected model type %T", finalModel)
 	}
 	return result.value, result.values, result.canceled, nil
+}
+
+func newInteractiveProgram(model tea.Model, output io.Writer) *tea.Program {
+	return tea.NewProgram(
+		model,
+		tea.WithOutput(output),
+		tea.WithInputTTY(),
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
 }
 
 func (m selectionModel) Init() tea.Cmd {
