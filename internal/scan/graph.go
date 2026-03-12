@@ -45,7 +45,7 @@ type GraphSummary struct {
 
 func BuildGraph(root string, sourceDirs []string) (GraphSummary, error) {
 	if len(sourceDirs) == 0 {
-		sourceDirs = []string{"src", "lib", "app"}
+		sourceDirs = projectroot.DefaultScanDirs(root)
 	}
 
 	fileNodes, err := buildFileNodes(root, sourceDirs)
@@ -140,6 +140,9 @@ func buildModuleNodes(root string, sourceDirs []string) ([]GraphNode, error) {
 	nodes := make([]GraphNode, 0)
 	seen := make(map[string]struct{})
 	for _, dir := range sourceDirs {
+		if filepath.Clean(dir) == "." {
+			continue
+		}
 		src := filepath.Join(root, dir)
 		if info, err := os.Stat(src); err != nil || !info.IsDir() {
 			continue
@@ -218,13 +221,22 @@ func buildImportEdges(root string, fileNodes []GraphNode, sourceDirs []string) (
 	for _, node := range fileNodes {
 		if strings.HasSuffix(node.Name, ".py") {
 			stemToID[strings.TrimSuffix(node.Name, ".py")] = node.ID
+			continue
+		}
+		if strings.HasSuffix(node.Name, ".go") {
+			stemToID[strings.TrimSuffix(node.Name, ".go")] = node.ID
 		}
 	}
 
-	importPattern := regexp.MustCompile(`^(?:from|import)\s+([\w.]+)`)
+	pythonImportPattern := regexp.MustCompile(`^(?:from|import)\s+([\w.]+)`)
+	goImportPattern := regexp.MustCompile(`"([^"]+)"`)
 	edges := make([]GraphEdge, 0)
 	files, err := collectFiles(root, sourceDirs, func(path string, entry os.DirEntry) bool {
-		return !entry.IsDir() && filepath.Ext(entry.Name()) == ".py"
+		if entry.IsDir() {
+			return false
+		}
+		ext := filepath.Ext(entry.Name())
+		return ext == ".py" || ext == ".go"
 	})
 	if err != nil {
 		return nil, err
@@ -236,22 +248,44 @@ func buildImportEdges(root string, fileNodes []GraphNode, sourceDirs []string) (
 		if err != nil {
 			return nil, err
 		}
-		for _, match := range importPattern.FindAllStringSubmatch(string(content), -1) {
-			moduleName := strings.Split(match[1], ".")[0]
-			targetID, ok := stemToID[moduleName]
-			if !ok || targetID == sourceID {
-				continue
+		text := string(content)
+		switch filepath.Ext(path) {
+		case ".py":
+			for _, match := range pythonImportPattern.FindAllStringSubmatch(text, -1) {
+				moduleName := strings.Split(match[1], ".")[0]
+				targetID, ok := stemToID[moduleName]
+				if !ok || targetID == sourceID {
+					continue
+				}
+				edges = append(edges, GraphEdge{
+					Source: sourceID,
+					Target: targetID,
+					Type:   "imports",
+					Weight: 0.8,
+					Metadata: map[string]interface{}{
+						"description": fmt.Sprintf("imports %s", moduleName),
+						"created_at":  now,
+					},
+				})
 			}
-			edges = append(edges, GraphEdge{
-				Source: sourceID,
-				Target: targetID,
-				Type:   "imports",
-				Weight: 0.8,
-				Metadata: map[string]interface{}{
-					"description": fmt.Sprintf("imports %s", moduleName),
-					"created_at":  now,
-				},
-			})
+		case ".go":
+			for _, match := range goImportPattern.FindAllStringSubmatch(text, -1) {
+				moduleName := pathBaseWithoutVersion(match[1])
+				targetID, ok := stemToID[moduleName]
+				if !ok || targetID == sourceID {
+					continue
+				}
+				edges = append(edges, GraphEdge{
+					Source: sourceID,
+					Target: targetID,
+					Type:   "imports",
+					Weight: 0.8,
+					Metadata: map[string]interface{}{
+						"description": fmt.Sprintf("imports %s", moduleName),
+						"created_at":  now,
+					},
+				})
+			}
 		}
 	}
 	return dedupeEdges(edges), nil
@@ -261,13 +295,18 @@ func buildCallEdges(root string, fileNodes []GraphNode, sourceDirs []string) ([]
 	now := time.Now().UTC().Format(time.RFC3339)
 	functionToFile := make(map[string]string)
 	files, err := collectFiles(root, sourceDirs, func(path string, entry os.DirEntry) bool {
-		return !entry.IsDir() && filepath.Ext(entry.Name()) == ".py"
+		if entry.IsDir() {
+			return false
+		}
+		ext := filepath.Ext(entry.Name())
+		return ext == ".py" || ext == ".go"
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	defPattern := regexp.MustCompile(`^def\s+(\w+)\s*\(`)
+	pythonDefPattern := regexp.MustCompile(`^def\s+(\w+)\s*\(`)
+	goDefPattern := regexp.MustCompile(`^func\s+(?:\([^)]+\)\s*)?([A-Za-z_]\w*)\s*\(`)
 	callPattern := regexp.MustCompile(`\b([A-Za-z_]\w*)\s*\(`)
 	fileContents := make(map[string]string, len(files))
 
@@ -281,8 +320,16 @@ func buildCallEdges(root string, fileNodes []GraphNode, sourceDirs []string) ([]
 		rel, _ := filepath.Rel(root, path)
 		fileID := nodeID(filepath.ToSlash(rel), "file")
 		for _, line := range strings.Split(text, "\n") {
-			if match := defPattern.FindStringSubmatch(line); len(match) > 1 && !strings.HasPrefix(match[1], "_") {
-				functionToFile[match[1]] = fileID
+			trimmed := strings.TrimSpace(line)
+			switch filepath.Ext(path) {
+			case ".py":
+				if match := pythonDefPattern.FindStringSubmatch(trimmed); len(match) > 1 && !strings.HasPrefix(match[1], "_") {
+					functionToFile[match[1]] = fileID
+				}
+			case ".go":
+				if match := goDefPattern.FindStringSubmatch(trimmed); len(match) > 1 {
+					functionToFile[match[1]] = fileID
+				}
 			}
 		}
 	}
@@ -350,4 +397,16 @@ func dedupeEdges(edges []GraphEdge) []GraphEdge {
 		out = append(out, edge)
 	}
 	return out
+}
+
+func pathBaseWithoutVersion(importPath string) string {
+	parts := strings.Split(strings.TrimSpace(importPath), "/")
+	for index := len(parts) - 1; index >= 0; index-- {
+		part := parts[index]
+		if part == "" || regexp.MustCompile(`^v\d+$`).MatchString(part) {
+			continue
+		}
+		return part
+	}
+	return ""
 }

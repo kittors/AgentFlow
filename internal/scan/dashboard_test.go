@@ -11,11 +11,7 @@ import (
 
 func TestGenerateDashboardContainsExpectedLabels(t *testing.T) {
 	root := t.TempDir()
-	moduleDir := filepath.Join(root, filepath.Base(root), "feature")
-	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
-		t.Fatalf("mkdir module dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(moduleDir, "main.py"), []byte("print('hello')\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644); err != nil {
 		t.Fatalf("write source file: %v", err)
 	}
 	if _, err := kb.CreateSession(root, kb.SessionInput{Tasks: []string{"demo"}}); err != nil {
@@ -32,7 +28,7 @@ func TestGenerateDashboardContainsExpectedLabels(t *testing.T) {
 		t.Fatalf("read dashboard: %v", err)
 	}
 	output := string(content)
-	for _, token := range []string{"<!DOCTYPE html>", "AgentFlow Dashboard", "Modules", "Source Files", "Sessions", "KB Status"} {
+	for _, token := range []string{"<!DOCTYPE html>", "AgentFlow Dashboard", "Modules", "Source Files", "Sessions", "KB Status", "project-root"} {
 		if !strings.Contains(output, token) {
 			t.Fatalf("expected token %q in dashboard", token)
 		}

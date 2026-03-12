@@ -32,8 +32,8 @@ L2 — 会话记录（会话级）:
 会话启动:
   1. 加载 L0 profile.md（如存在）
   2. 加载最近 1 个 L2 会话摘要（如存在且相关）
-     命令: python -m agentflow.scripts.session_manager
-     或手动读取 .agentflow/sessions/ 下最新的 .md 文件
+     命令: 直接读取 .agentflow/sessions/ 下最新的 .md 文件
+     或通过宿主 CLI 的文件读取工具加载最近会话摘要
   3. L1 按需通过 KnowledgeService 加载
 
 阶段切换时自动保存快照（MUST）:
@@ -43,7 +43,7 @@ L2 — 会话记录（会话级）:
     - 任务进度: {completed}/{total}
     - 关键上下文: 方案选择、EHRB 标记等
   保存位置: .agentflow/sessions/{YYYYMMDD_HHMMSS}_snap.md
-  命令: python -m agentflow.scripts.session_manager
+  命令: agentflow session save --quiet --stage={CURRENT_STAGE}
   失败降级: 手动创建快照文件
 
 会话结束（MUST — 不可跳过）:

@@ -46,29 +46,29 @@ mkdir -p .agentflow/kb/modules .agentflow/kb/plan \
          .agentflow/sessions
 ```
 
-### Phase 2: 辅助脚本调用（MUST — 这些脚本负责生成实际内容）
+### Phase 2: Go 命令调用（MUST — 这些命令负责生成实际内容）
 
-> 以下命令使用 AgentFlow 自带的 Python 脚本自动生成知识库内容。
-> 如果 `python -m agentflow.scripts.*` 不可用，则手动执行等效操作。
+> 以下命令使用 AgentFlow 自带的 Go CLI 生成知识库内容。
+> 如果 `agentflow ...` 不可用，则手动执行等效操作。
 
 ```yaml
 步骤 A: 模板初始化（创建基础知识库结构）
-  命令: python -m agentflow.scripts.template_init
+  命令: agentflow init --quiet
   产出: .agentflow/kb/ 下的模板参考文件、所有子目录
   失败降级: 手动创建 INDEX.md 和 context.md
 
 步骤 B: 模块扫描与 KB 同步（填充 modules/ 目录）
-  命令: python -m agentflow.scripts.kb_sync
+  命令: agentflow kb sync --quiet
   产出: .agentflow/kb/modules/_index.md + 各模块的 {module}.md
   失败降级: 手动扫描项目源码目录，生成模块清单
 
 步骤 C: 编码规范提取（CONVENTION_CHECK=1 时，填充 conventions/ 目录）
-  命令: python -m agentflow.scripts.convention_scanner
+  命令: agentflow conventions --quiet
   产出: .agentflow/kb/conventions/extracted.json
   失败降级: 手动分析代码风格，生成 JSON 格式的规范文档
 
 步骤 D: 知识图谱初始化（GRAPH_MODE=1 时，填充 graph/ 目录）
-  命令: python -m agentflow.scripts.graph_builder
+  命令: agentflow graph --quiet
   产出: .agentflow/kb/graph/nodes.json, edges.json
   失败降级: 手动创建初始节点和边数据
 ```
@@ -84,7 +84,7 @@ mkdir -p .agentflow/kb/modules .agentflow/kb/plan \
   - 内容: 依赖清单、构建工具、运行环境、配置文件
 
 步骤 G: 创建初始会话记录
-  命令: python -m agentflow.scripts.session_manager
+  命令: agentflow session save --quiet --stage=INIT
   失败降级: 手动创建 .agentflow/sessions/{timestamp}.md
 ```
 

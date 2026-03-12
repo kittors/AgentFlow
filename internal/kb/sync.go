@@ -29,6 +29,22 @@ func ScanModules(root string, sourceDirs []string) ([]Module, error) {
 
 	modules := make([]Module, 0)
 	for _, dir := range sourceDirs {
+		if filepath.Clean(dir) == "." {
+			files, err := scanRootModuleFiles(root)
+			if err != nil {
+				return nil, err
+			}
+			if len(files) > 0 {
+				modules = append(modules, Module{
+					Name:      "project-root",
+					Path:      ".",
+					FileCount: len(files),
+					Files:     files,
+				})
+			}
+			continue
+		}
+
 		src := filepath.Join(root, dir)
 		info, err := os.Stat(src)
 		if err != nil || !info.IsDir() {
@@ -52,8 +68,7 @@ func ScanModules(root string, sourceDirs []string) ([]Module, error) {
 				if entry.IsDir() {
 					return nil
 				}
-				ext := filepath.Ext(entry.Name())
-				if ext != ".py" && ext != ".ts" {
+				if !isSupportedSourceExt(filepath.Ext(entry.Name())) {
 					return nil
 				}
 				rel, err := filepath.Rel(root, path)
@@ -88,6 +103,23 @@ func ScanModules(root string, sourceDirs []string) ([]Module, error) {
 		return modules[i].Name < modules[j].Name
 	})
 	return modules, nil
+}
+
+func scanRootModuleFiles(root string) ([]string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+
+	files := make([]string, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || !isSupportedSourceExt(filepath.Ext(entry.Name())) {
+			continue
+		}
+		files = append(files, filepath.ToSlash(entry.Name()))
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 func GenerateModuleIndex(modules []Module) string {
@@ -144,4 +176,13 @@ func SyncModules(root string, sourceDirs []string) (SyncSummary, error) {
 		ModulesFound: len(modules),
 		FilesWritten: filesWritten,
 	}, nil
+}
+
+func isSupportedSourceExt(ext string) bool {
+	switch ext {
+	case ".go", ".py", ".ts", ".tsx", ".js", ".jsx", ".rs", ".java":
+		return true
+	default:
+		return false
+	}
 }

@@ -18,6 +18,29 @@ type ConventionReport struct {
 	Conventions map[string]interface{} `json:"conventions"`
 }
 
+func ScanConventions(root string, sourceDirs []string) (ConventionReport, error) {
+	language, err := detectConventionLanguage(root, sourceDirs)
+	if err != nil {
+		return ConventionReport{}, err
+	}
+
+	switch language {
+	case "go":
+		return ScanGoConventions(root, sourceDirs)
+	case "python":
+		return ScanPythonConventions(root, sourceDirs)
+	default:
+		return ConventionReport{
+			Project:     projectroot.ProjectName(root),
+			ExtractedAt: time.Now().UTC().Format(time.RFC3339),
+			Language:    "unknown",
+			Conventions: map[string]interface{}{
+				"stats": map[string]int{"files_found": 0},
+			},
+		}, nil
+	}
+}
+
 func ScanPythonConventions(root string, sourceDirs []string) (ConventionReport, error) {
 	if len(sourceDirs) == 0 {
 		sourceDirs = projectroot.DefaultScanDirs(root)
@@ -106,6 +129,75 @@ func ScanPythonConventions(root string, sourceDirs []string) (ConventionReport, 
 	return report, nil
 }
 
+func ScanGoConventions(root string, sourceDirs []string) (ConventionReport, error) {
+	if len(sourceDirs) == 0 {
+		sourceDirs = projectroot.DefaultScanDirs(root)
+	}
+
+	functions := make([]string, 0)
+	types := make([]string, 0)
+	importGroups := 0
+	docComments := 0
+
+	funcPattern := regexp.MustCompile(`^func\s+(?:\([^)]+\)\s*)?([A-Za-z_]\w*)\s*\(`)
+	typePattern := regexp.MustCompile(`^type\s+([A-Za-z_]\w*)\s+`)
+	docPattern := regexp.MustCompile(`^//\s+[A-Z]`)
+
+	files, err := collectFiles(root, sourceDirs, func(path string, entry os.DirEntry) bool {
+		return !entry.IsDir() && filepath.Ext(entry.Name()) == ".go"
+	})
+	if err != nil {
+		return ConventionReport{}, err
+	}
+
+	for _, path := range files {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return ConventionReport{}, err
+		}
+		text := string(content)
+		if strings.Contains(text, "import (\n") {
+			importGroups++
+		}
+		for _, line := range strings.Split(text, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if match := funcPattern.FindStringSubmatch(trimmed); len(match) > 1 {
+				functions = append(functions, match[1])
+			}
+			if match := typePattern.FindStringSubmatch(trimmed); len(match) > 1 {
+				types = append(types, match[1])
+			}
+			if docPattern.MatchString(trimmed) {
+				docComments++
+			}
+		}
+	}
+
+	return ConventionReport{
+		Project:     projectroot.ProjectName(root),
+		ExtractedAt: time.Now().UTC().Format(time.RFC3339),
+		Language:    "go",
+		Conventions: map[string]interface{}{
+			"naming": map[string]string{
+				"functions": detectNamingStyle(functions),
+				"types":     defaultStyle(detectNamingStyle(types), "PascalCase"),
+			},
+			"imports": map[string]interface{}{
+				"style":          "go_import_blocks",
+				"grouped_blocks": importGroups,
+			},
+			"documentation": map[string]interface{}{
+				"line_comments": docComments,
+			},
+			"stats": map[string]int{
+				"functions_found": len(functions),
+				"types_found":     len(types),
+				"files_found":     len(files),
+			},
+		},
+	}, nil
+}
+
 func SaveConventions(root string, report ConventionReport) (string, error) {
 	paths := projectroot.NewPaths(root)
 	if err := os.MkdirAll(paths.Conventions, 0o755); err != nil {
@@ -166,4 +258,41 @@ func defaultStyle(style, fallback string) string {
 		return fallback
 	}
 	return style
+}
+
+func detectConventionLanguage(root string, sourceDirs []string) (string, error) {
+	if len(sourceDirs) == 0 {
+		sourceDirs = projectroot.DefaultScanDirs(root)
+	}
+
+	files, err := collectFiles(root, sourceDirs, func(path string, entry os.DirEntry) bool {
+		if entry.IsDir() {
+			return false
+		}
+		ext := filepath.Ext(entry.Name())
+		return ext == ".go" || ext == ".py"
+	})
+	if err != nil {
+		return "", err
+	}
+
+	goCount := 0
+	pythonCount := 0
+	for _, path := range files {
+		switch filepath.Ext(path) {
+		case ".go":
+			goCount++
+		case ".py":
+			pythonCount++
+		}
+	}
+
+	switch {
+	case goCount > 0 && goCount >= pythonCount:
+		return "go", nil
+	case pythonCount > 0:
+		return "python", nil
+	default:
+		return "unknown", nil
+	}
 }

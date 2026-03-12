@@ -4,10 +4,10 @@
 # via the prompt rules in AGENTS.md, not via config.toml injection.
 #
 # KB sync (after file changes):
-#   python -m agentflow.scripts.kb_sync
+#   agentflow kb sync --quiet
 #
 # Session save (on session end):
-#   python -m agentflow.scripts.session_manager
+#   agentflow session save --quiet --stage=SESSION_END
 #
 # Update check:
 #   agentflow --check-update --silent

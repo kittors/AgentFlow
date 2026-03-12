@@ -1,34 +1,37 @@
 # AgentFlow Development Guide
 
 ## Project Overview
-AgentFlow is an AI-assisted development enhancement layer. It builds a knowledge graph of your project and progressively discloses relevant context to AI tools (Claude Code, Codex, Cursor).
+
+AgentFlow is now implemented as a Go CLI that ships embedded workflow assets for Codex, Claude, and other supported assistants.
 
 ## Architecture
-- `agentflow/core/` — Config, context assembler, iteration engine
-- `agentflow/memory/` — Knowledge graph, persistent store, project indexer, session updater
-- `agentflow/planner/` — Requirement analysis and task decomposition
-- `agentflow/conventions/` — Convention extraction and checking
-- `agentflow/scanner/` — Proactive issue detection
-- `agentflow/integrations/` — CLAUDE.md, AGENTS.md, .cursor/rules/ generators
-- `agentflow/llm/` — Unified LLM client (OpenAI + Anthropic)
-- `agentflow/cli.py` — Click-based CLI entry point
+
+- `cmd/agentflow/` - CLI entrypoint
+- `internal/app/` - command dispatch and automation commands
+- `internal/install/` - installer, hooks, target config merge
+- `internal/kb/` - knowledge-base bootstrap, sync, sessions
+- `internal/scan/` - graph, conventions, dashboard, architecture scan
+- `internal/ui/` - Bubble Tea based interactive UI
+- `agentflow/` - embedded prompt assets, hooks, templates, role definitions
 
 ## Conventions
-- Python 3.10+, type hints everywhere
-- Pydantic v2 for data validation (use `model_dump()` not `dict()`)
-- `logging` module for all output (no `print()`)
-- Atomic file writes via temp file + `os.replace()`
-- JSON for all persistent data
-- Tests in `tests/`, fixtures in `conftest.py`
+
+- Go `1.26.0`
+- Format with `gofmt`
+- Prefer safe file writes through `internal/config`
+- Keep CLI output bilingual where the existing code uses `Catalog.Msg(zh, en)`
+- Treat `agentflow/` as shipped product assets and keep docs aligned with the real CLI behavior
 
 ## Testing
-- Offline tests: `pytest tests/test_memory.py tests/test_engine.py tests/test_scanner.py`
-- Integration tests (need LLM_API_KEY): `pytest tests/test_planner.py tests/test_conventions.py`
-- Use `tmp_project` fixture for tests needing a project directory
-- Use `api_key` fixture for tests needing LLM access (auto-skips if not set)
+
+- Main test command: `go test ./...`
+- Fast targeted checks: `go test ./internal/app ./internal/install ./internal/kb`
+- Build smoke: `go build -o /tmp/agentflow ./cmd/agentflow`
+- Script checks: `bash -n install.sh` and `node --check bin/agentflow.js`
 
 ## Key Design Decisions
-- Knowledge graph uses networkx DiGraph with BFS traversal for progressive disclosure
-- Memory nodes have types: module, pattern, decision, convention, issue, task
-- Convention extraction samples max 5 files per language, max 3000 bytes each
-- All LLM responses expected as JSON; fallback parsing strips markdown code blocks
+
+- Static workflow assets are embedded into the Go binary via `embed`
+- Install flows write rules, hooks, and agent role files directly from embedded assets
+- Hooks and helper automation should call Go CLI commands, not runtime Python scripts
+- Cross-platform behavior is validated through Go tests and GitHub Actions release matrices

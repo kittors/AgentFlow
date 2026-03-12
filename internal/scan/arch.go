@@ -286,12 +286,18 @@ func collectFiles(root string, sourceDirs []string, include func(path string, en
 		if err != nil || !info.IsDir() {
 			continue
 		}
+		rootOnly := filepath.Clean(dir) == "."
 		err = filepath.WalkDir(src, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
-			if entry.IsDir() && projectroot.IsHiddenName(entry.Name()) {
-				return filepath.SkipDir
+			if entry.IsDir() {
+				if projectroot.IsHiddenName(entry.Name()) {
+					return filepath.SkipDir
+				}
+				if rootOnly && path != src {
+					return filepath.SkipDir
+				}
 			}
 			if include(path, entry) {
 				files = append(files, path)

@@ -68,7 +68,7 @@ DIRECT 入口（~exec 直接执行）:
     - GRAPH_MODE=1: 更新知识图谱节点和边
   - 更新 tasks.md 状态
   - 辅助脚本调用（推荐，自动完成模块扫描和同步）:
-    命令: python -m agentflow.scripts.kb_sync
+    命令: agentflow kb sync --quiet
     失败降级: 手动更新 modules/ 目录下的文档
 
 步骤12: 方案包归档
@@ -83,7 +83,7 @@ DIRECT 入口（~exec 直接执行）:
     - 知识库更新内容
   - CURRENT_STAGE = COMPLETE
   - 保存会话摘要（MUST）:
-    命令: python -m agentflow.scripts.session_manager
+    命令: agentflow session save --quiet --stage=COMPLETE
     失败降级: 手动创建 .agentflow/sessions/{YYYYMMDD_HHMMSS}.md，内容包含任务摘要、决策记录、修改文件清单
 ```
 

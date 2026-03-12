@@ -199,7 +199,7 @@ Release builds are produced by `.github/workflows/release.yml` for:
 
 <details>
 <summary><b>Is AgentFlow still Python-based?</b></summary>
-No. The runtime CLI is now a Go executable. Some historical Python source files remain in the repository as migration references, but installation, distribution, testing, and release flows now target the Go binary.
+No. AgentFlow is now implemented and distributed as a Go executable. Installation, hooks, testing, and release flows use the Go CLI rather than Python runtime scripts.
 </details>
 
 <details>

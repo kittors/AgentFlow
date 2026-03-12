@@ -45,7 +45,7 @@ func ProjectName(root string) string {
 }
 
 func DefaultScanDirs(root string) []string {
-	return []string{"src", "lib", "app", ProjectName(root)}
+	return []string{".", "internal", "cmd", "pkg", "src", "lib", "app", ProjectName(root)}
 }
 
 func IsHiddenName(name string) bool {

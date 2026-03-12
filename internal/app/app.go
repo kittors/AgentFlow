@@ -65,6 +65,19 @@ func (a *App) Run(args []string) int {
 	case "update":
 		a.runUpdate(args[1:])
 		return 0
+	case "init":
+		return a.runInit(args[1:])
+	case "kb":
+		return a.runKB(args[1:])
+	case "session":
+		return a.runSession(args[1:])
+	case "conventions":
+		return a.runConventions(args[1:])
+	case "graph":
+		return a.runGraph(args[1:])
+	case "dashboard":
+		return a.runDashboard(args[1:])
+		return 0
 	default:
 		fmt.Fprintln(a.Stderr, a.Catalog.Msg("未知命令。", "Unknown command."))
 		a.printUsage()
@@ -342,6 +355,12 @@ func (a *App) printUsage() {
 	fmt.Fprintln(a.Stdout, "  clean")
 	fmt.Fprintln(a.Stdout, "  version")
 	fmt.Fprintln(a.Stdout, "  help")
+	fmt.Fprintln(a.Stdout, "  init [--root=<path>] [--quiet]")
+	fmt.Fprintln(a.Stdout, "  kb sync [--root=<path>] [--quiet]")
+	fmt.Fprintln(a.Stdout, "  session save [--root=<path>] [--stage=<name>] [--quiet]")
+	fmt.Fprintln(a.Stdout, "  conventions [--root=<path>] [--quiet]")
+	fmt.Fprintln(a.Stdout, "  graph [--root=<path>] [--quiet]")
+	fmt.Fprintln(a.Stdout, "  dashboard [--root=<path>] [--quiet]")
 	fmt.Fprintln(a.Stdout, "  --check-update [--silent]")
 }
 

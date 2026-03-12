@@ -43,3 +43,48 @@ func TestScanPythonConventionsAndSave(t *testing.T) {
 		t.Fatalf("expected output file, got %v", err)
 	}
 }
+
+func TestScanConventionsPrefersGoWhenGoFilesPresent(t *testing.T) {
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "internal", "demo")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("mkdir source dir: %v", err)
+	}
+	content := "" +
+		"package demo\n\n" +
+		"import \"fmt\"\n\n" +
+		"// Run prints a message.\n" +
+		"func Run() {\n" +
+		"    fmt.Println(\"hi\")\n" +
+		"}\n"
+	if err := os.WriteFile(filepath.Join(sourceDir, "main.go"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write go source file: %v", err)
+	}
+
+	report, err := ScanConventions(root, nil)
+	if err != nil {
+		t.Fatalf("ScanConventions returned error: %v", err)
+	}
+	if report.Language != "go" {
+		t.Fatalf("expected go language, got %s", report.Language)
+	}
+}
+
+func TestScanConventionsDetectsRootLevelGoFiles(t *testing.T) {
+	root := t.TempDir()
+	content := "" +
+		"package main\n\n" +
+		"// Run prints a message.\n" +
+		"func Run() {}\n"
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write root go source file: %v", err)
+	}
+
+	report, err := ScanConventions(root, nil)
+	if err != nil {
+		t.Fatalf("ScanConventions returned error: %v", err)
+	}
+	if report.Language != "go" {
+		t.Fatalf("expected root-level Go file to be detected, got %s", report.Language)
+	}
+}

@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -m agentflow.scripts.kb_sync 2>/dev/null || true",
+            "command": "agentflow kb sync --quiet 2>/dev/null || true",
             "description": "agentflow-kb-sync",
             "timeout": 10000
           }
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python -m agentflow.scripts.session_manager 2>/dev/null || true",
+            "command": "agentflow session save --quiet --stage=SESSION_END 2>/dev/null || true",
             "description": "agentflow-session-save",
             "timeout": 10000
           }

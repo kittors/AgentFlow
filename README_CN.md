@@ -200,7 +200,7 @@ node --check bin/agentflow.js
 
 <details>
 <summary><b>AgentFlow 还是 Python 工具吗？</b></summary>
-不是。当前运行时 CLI 已经改为 Go 可执行文件。仓库里保留的部分 Python 文件只是迁移参考，不再是安装、分发、测试、发布主链路。
+不是。AgentFlow 现在已经改为 Go 可执行文件实现与分发，安装、hooks、测试和发布流程都走 Go CLI，不再依赖 Python 运行时脚本。
 </details>
 
 <details>
