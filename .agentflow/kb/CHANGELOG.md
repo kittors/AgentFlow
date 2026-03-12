@@ -3,9 +3,11 @@
 ## 2026-03-13
 
 - 修复 continuous release 曾被错误保留为 draft 的发布链路，workflow 现在在创建 release 后通过 GitHub REST API 显式 patch 为非 draft 并标记 latest
+- 上述 continuous release 发布步骤改为 `gh release edit --draft=false --latest` 并追加公开校验，避免 workflow 成功但 release 仍停留在 draft
 - `install.sh` 与 `internal/update` 现在优先读取 `releases/tags/continuous`，失败后才回退 `releases/latest`，避免公开 latest API 暂时落到旧稳定版
 - 更新缓存现在会忽略畸形版本值 `continuous` / `unknown`，避免升级后仍误报“有新版本”
 - 排查确认用户终端可能仍先命中 `~/.local/bin/agentflow` 的旧 uv 版本；Go 二进制实际安装路径仍是 `~/.agentflow/bin/agentflow`
+- `install.sh` 现在会在用户目录内自动备份并重定向旧的 `agentflow` 入口到 `~/.agentflow/bin/agentflow`，减少安装成功后仍命中旧版 CLI 的情况
 - Bubble Tea 交互入口现在显式启用 `WithInputTTY()`，把键盘和鼠标事件绑定到真实 TTY，修复部分 macOS/终端环境里菜单无法响应方向键、Enter 和滚轮的问题
 - 修复 `interactiveFlowModel.moveCursor` / `setCursor` 使用值接收者导致游标状态写回副本的问题；这正是主菜单方向键和滚轮在 macOS 上看似“完全失效”的直接根因
 

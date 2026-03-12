@@ -205,11 +205,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          release_id="$(gh api "repos/${{ github.repository }}/releases/tags/${{ needs.metadata.outputs.release_tag }}" --jq .id)"
-          gh api \
-            --method PATCH \
-            -H "Accept: application/vnd.github+json" \
-            "repos/${{ github.repository }}/releases/${release_id}" \
-            -f draft=false \
-            -f make_latest=true >/dev/null
-          gh api "repos/${{ github.repository }}/releases/${release_id}" --jq .html_url
+          gh release edit "${{ needs.metadata.outputs.release_tag }}" \
+            --repo "${{ github.repository }}" \
+            --draft=false \
+            --latest \
+            --title "${{ needs.metadata.outputs.version }}"
+
+      - name: Verify continuous release is public
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${{ needs.metadata.outputs.release_tag }}" \
+            --repo "${{ github.repository }}" \
+            --json isDraft,name,tagName,targetCommitish,url

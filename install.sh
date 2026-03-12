@@ -61,6 +61,54 @@ persist_path() {
     ensure_line_in_profile "${INSTALL_DIR}" "export PATH=\"${INSTALL_DIR}:\$PATH\"" "PATH"
 }
 
+sync_legacy_command_path() {
+    target_path="${INSTALL_DIR}/agentflow"
+    legacy_path="${PREVIOUS_AGENTFLOW}"
+
+    if [ -z "${legacy_path}" ] || [ "${legacy_path}" = "${target_path}" ]; then
+        return 0
+    fi
+
+    case "${legacy_path}" in
+        "${HOME}"/*) ;;
+        *)
+            warn "$(msg "检测到旧入口位于用户目录之外，未自动接管: ${legacy_path}" "Detected a legacy agentflow outside your home directory; left it untouched: ${legacy_path}")"
+            return 0
+            ;;
+    esac
+
+    legacy_dir="$(dirname "${legacy_path}")"
+    if [ ! -d "${legacy_dir}" ] && ! mkdir -p "${legacy_dir}" 2>/dev/null; then
+        warn "$(msg "无法创建旧入口目录，未自动接管: ${legacy_dir}" "Could not create the legacy command directory, leaving it untouched: ${legacy_dir}")"
+        return 0
+    fi
+
+    if [ -L "${legacy_path}" ]; then
+        current_target="$(readlink "${legacy_path}" 2>/dev/null || true)"
+        if [ "${current_target}" = "${target_path}" ]; then
+            ok "$(msg "兼容入口已指向新的 Go 二进制: ${legacy_path}" "Compatibility entry already points to the new Go binary: ${legacy_path}")"
+            return 0
+        fi
+    fi
+
+    if [ -e "${legacy_path}" ] || [ -L "${legacy_path}" ]; then
+        backup_path="${legacy_path}.agentflow-backup-$(date +%Y%m%d%H%M%S)"
+        if mv "${legacy_path}" "${backup_path}" 2>/dev/null; then
+            ok "$(msg "已备份旧入口到 ${backup_path}" "Backed up the legacy command entry to ${backup_path}")"
+        else
+            warn "$(msg "无法备份旧入口，未自动接管: ${legacy_path}" "Could not back up the legacy command entry, leaving it untouched: ${legacy_path}")"
+            return 0
+        fi
+    fi
+
+    if ln -s "${target_path}" "${legacy_path}" 2>/dev/null; then
+        ok "$(msg "已把旧入口接到新的 Go 二进制: ${legacy_path}" "Repointed the legacy command entry to the new Go binary: ${legacy_path}")"
+        return 0
+    fi
+
+    warn "$(msg "无法写入兼容入口，请手动执行 PATH 刷新命令" "Could not write the compatibility entry; refresh PATH manually instead")"
+}
+
 print_shell_refresh_notice() {
     if [ -n "${PREVIOUS_AGENTFLOW}" ] && [ "${PREVIOUS_AGENTFLOW}" != "${INSTALL_DIR}/agentflow" ]; then
         warn "$(msg "检测到旧的 agentflow 仍可能在当前终端中抢先命中: ${PREVIOUS_AGENTFLOW}" "An older agentflow may still shadow the new binary in your current shell: ${PREVIOUS_AGENTFLOW}")"
@@ -178,6 +226,7 @@ ok "$(msg "下载工具可用" "Download tool available")"
 step "$(msg "步骤 2/3: 下载 AgentFlow Go 二进制" "Step 2/3: Download AgentFlow Go binary")"
 download_binary
 persist_path
+sync_legacy_command_path
 ok "$(msg "已安装到 ${INSTALL_DIR}/agentflow" "Installed to ${INSTALL_DIR}/agentflow")"
 
 step "$(msg "步骤 3/3: 验证安装" "Step 3/3: Verify installation")"
