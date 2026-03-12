@@ -14,265 +14,219 @@
 [English](README.md) · [中文](README_CN.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org)
+[![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8.svg?logo=go&logoColor=white)](https://go.dev)
 [![CI](https://github.com/kittors/AgentFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/kittors/AgentFlow/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/kittors/AgentFlow?include_prereleases&label=Release)](https://github.com/kittors/AgentFlow/releases)
 
-**`五级路由`** · **`EHRB 安全检测`** · **`知识图谱记忆`** · **`子代理编排`** · **`编码规范提取`**
+**`五级路由`** · **`EHRB 安全检测`** · **`知识图谱记忆`** · **`子代理编排`** · **`跨平台二进制`**
 
 </div>
 
 ---
 
-## 为什么选择 AgentFlow？
+## 项目概览
 
-大多数 AI 助手可以分析任务，但在真正交付之前就停下了。AgentFlow 添加了**严格路由**、**分阶段执行**、**安全门控**和**验收检查** —— 确保每个任务都能高质量完成。
+AgentFlow 现在以 **Go CLI** 的形式发布，规则、模板、阶段模块、Hooks、角色配置等静态资源都通过 `embed` 打进单个可执行文件中。安装和运行路径不再依赖 Python、`uv`、`pip` 或 PyInstaller。
 
-<table>
-<tr><td>
+当前 Go 版本已经覆盖：
 
-**🎯 有何不同？**
+- macOS / Linux / Windows 跨平台二进制
+- `install` / `uninstall` / `update` / `status` / `clean` 的交互式 TUI
+- 面向 Codex、Claude、Gemini、Qwen、Grok、OpenCode 的嵌入式部署资源
+- `lite` / `standard` / `full` 三种 profile 规则组装
+- Claude hooks 合并与清理
+- Codex 多代理配置与角色文件注入
+- Go 原生测试、CI、release、KB/session/template、扫描能力
 
-- 📊 **五级路由** — 按比例投入精力，从快速修复到架构重设计
-- 🏗️ **R4 架构模式** — 专为系统级重构设计的工作流
-- 🧠 **知识图谱** — 基于图结构的项目记忆，跨会话持久化
-- 🔍 **编码规范提取** — 自动发现并强制执行编码模式
-- 📡 **架构扫描** — 主动检测代码异味和结构问题
-- 📈 **项目仪表盘** — HTML 状态可视化
+## 安装方式
 
-</td></tr>
-</table>
+### 一键安装脚本
 
-## 快速开始
-
-### 方式 A：一键安装脚本 _（推荐）_
-
-**macOS / Linux：**
+macOS / Linux：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kittors/AgentFlow/main/install.sh | bash
 ```
 
-**Windows PowerShell：**
+Windows PowerShell：
 
 ```powershell
 irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
-### 方式 B：npx (Node.js ≥ 16)
+### `npx` 启动
+
+`npx agentflow` 会自动下载与当前平台匹配的 release 二进制并执行。
 
 ```bash
 npx agentflow
 ```
 
-### 方式 C：UV（隔离环境）
+### 手动下载二进制
+
+从 [Releases](https://github.com/kittors/AgentFlow/releases) 下载对应平台文件：
+
+- `agentflow-linux-amd64`
+- `agentflow-linux-arm64`
+- `agentflow-darwin-amd64`
+- `agentflow-darwin-arm64`
+- `agentflow-windows-amd64.exe`
+
+然后放到 `PATH` 中，例如：
 
 ```bash
-uv tool install --from git+https://github.com/kittors/AgentFlow agentflow && agentflow
+chmod +x agentflow-darwin-arm64
+mv agentflow-darwin-arm64 ~/.local/bin/agentflow
+agentflow version
 ```
 
-### 方式 D：pip (Python ≥ 3.10)
+### 本地构建
 
 ```bash
-pip install git+https://github.com/kittors/AgentFlow.git && agentflow
+git clone https://github.com/kittors/AgentFlow.git
+cd AgentFlow
+go build -o ./bin/agentflow ./cmd/agentflow
+./bin/agentflow version
 ```
 
-### 本地化安装（内网 / 离线环境）
-
-如果您在无内网环境或无法访问互联网，您可以使用离线安装包进行本地化安装：
-
-1. 从 [Releases](https://github.com/kittors/AgentFlow/releases) 页面下载最新的 `agentflow-*.whl` 或 `agentflow-*.tar.gz` 包。
-2. 将安装包传输至您的内网或离线环境中。
-3. 使用 `uv`（推荐）或 `pip` 进行本地安装：
+## 快速开始
 
 ```bash
-uv tool install /path/to/agentflow-*.whl
-# 或者使用 pip
-pip install /path/to/agentflow-*.whl
+agentflow                       # 交互式 TUI
+agentflow install codex         # 安装到指定 CLI
+agentflow install --all         # 安装到所有检测到的目标
+agentflow uninstall codex       # 从指定 CLI 卸载
+agentflow uninstall --all       # 从所有已安装目标卸载
+agentflow status                # 查看安装状态
+agentflow clean                 # 清理 AgentFlow 缓存
+agentflow update                # 检查 release 更新
+agentflow version               # 输出当前版本与更新提示
 ```
 
-### 安装到指定 CLI
+当未传子命令且 stdin 是 TTY 时，AgentFlow 会进入 Bubble Tea TUI。方向键、`Enter`、`Space`、`Esc` 在 macOS 和 Windows 终端里保持一致。
+
+## 支持的目标 CLI
+
+| 目标 | 配置目录 | 规则文件 | 额外集成 |
+|------|----------|----------|----------|
+| Codex CLI | `~/.codex/` | `AGENTS.md` | 注入 `agents/reviewer.toml`、`agents/architect.toml`，并 merge `config.toml` 多代理配置 |
+| Claude Code | `~/.claude/` | `CLAUDE.md` | merge / 清理 `settings.json` hooks |
+| Gemini CLI | `~/.gemini/` | `GEMINI.md` | 部署规则与嵌入模块 |
+| Qwen CLI | `~/.qwen/` | `QWEN.md` | 部署规则与嵌入模块 |
+| Grok CLI | `~/.grok/` | `GROK.md` | 部署规则与嵌入模块 |
+| OpenCode | `~/.config/opencode/` | `AGENTS.md` | 部署规则与嵌入模块 |
+
+## 核心能力
+
+### 五级路由
+
+每次输入都会按行动需求、目标明确度、决策范围、影响范围、EHRB 风险五个维度打分，路由到 `R0` 到 `R4`。
+
+### EHRB 安全检测
+
+在真正执行之前，拦截破坏性命令、敏感信息、权限越界、生产环境风险以及异常工具输出。
+
+### 知识库与会话摘要
+
+项目状态集中保存在 `.agentflow/`：
+
+- `.agentflow/kb/`
+- `.agentflow/kb/plan/`
+- `.agentflow/kb/graph/`
+- `.agentflow/kb/conventions/`
+- `.agentflow/sessions/`
+
+### 嵌入式部署资产
+
+Go 二进制内置：
+
+- `AGENTS.md`
+- `SKILL.md`
+- `agentflow/stages/`
+- `agentflow/functions/`
+- `agentflow/services/`
+- `agentflow/templates/`
+- `agentflow/hooks/`
+- `agentflow/agents/`
+- `agentflow/core/`
+
+## 仓库结构
+
+```text
+AgentFlow/
+├── cmd/agentflow/          # CLI 入口
+├── internal/app/           # 命令分发与主流程
+├── internal/ui/            # Bubble Tea TUI
+├── internal/install/       # 部署 / 卸载逻辑
+├── internal/update/        # GitHub release 检查与缓存
+├── internal/kb/            # KB、session、template
+├── internal/scan/          # graph、convention、dashboard、arch scan
+├── internal/targets/       # CLI target 与 profile
+├── agentflow/              # 随二进制分发的提示词资产
+├── embed.go                # 静态资源嵌入
+├── install.sh              # POSIX 二进制安装脚本
+├── install.ps1             # Windows 二进制安装脚本
+└── bin/agentflow.js        # npx 启动桥接
+```
+
+## 开发说明
+
+### 环境要求
+
+- Go `1.26.0`
+- 如需校验 `npx` 桥接，再准备 Node.js `>=16`
+
+### 常用命令
 
 ```bash
-agentflow                     # 交互式菜单
-agentflow install codex       # 直接指定目标
-agentflow install --all       # 安装到所有检测到的 CLI
+gofmt -w .
+go test ./...
+go build -o /tmp/agentflow ./cmd/agentflow
+bash -n install.sh
+node --check bin/agentflow.js
 ```
 
-### 更新
+### Release 产物
 
-```bash
-agentflow update
-```
+`.github/workflows/release.yml` 会为以下平台构建二进制：
 
-### 验证与卸载
-
-```bash
-agentflow status              # 查看安装状态
-agentflow version             # 查看版本
-agentflow uninstall codex     # 从指定目标卸载
-agentflow uninstall --all     # 从所有目标卸载
-agentflow clean               # 清理缓存
-```
-
----
-
-## 功能特性
-
-### 🎯 五级路由（R0–R4）
-
-对每个输入进行 **5 个维度** 评分，路由到合适的处理流程：
-
-| 级别 | 分数 | 场景 | 流程 |
-|:----:|:----:|------|------|
-| R0 💬 | ≤ 3 | 闲聊、问答 | 直接回复 |
-| R1 ⚡ | 4-6 | 快速修复 | 定位 → 修改 → 验收 |
-| R2 📝 | 7-9 | 多文件变更 | 确认 → 设计 → 开发 |
-| R3 📊 | 10-12 | 复杂功能 | 确认 → 多方案设计 → 开发 |
-| R4 🏗️ | ≥ 13 | 架构重构 | 评估 → 设计+评审 → 分阶段开发 |
-
-**5 评分维度：** 行动需求(0-3) · 目标明确度(0-3) · 决策范围(0-3) · 影响范围(0-3) · EHRB 风险(0-3)
-
-### 🛡️ EHRB 三层安全检测
-
-在执行**之前**拦截破坏性操作：
-
-| 层级 | 功能 |
-|------|------|
-| **关键词扫描** | 检测 `rm -rf`、`DROP TABLE`、`git push -f`、密钥、个人信息、支付操作 |
-| **语义分析** | 识别权限绕过、环境误指、逻辑漏洞 |
-| **工具输出检查** | 拦截指令注入、格式劫持、敏感信息泄露 |
-
-### 🤖 RLM 子代理编排
-
-**6 个专业角色** + 原生 CLI 子代理，根据任务复杂度自动调度：
-
-| 角色 | 职责 | 触发条件 |
-|------|------|----------|
-| `reviewer` | 代码质量 + 安全审查 | 涉及核心模块的复杂任务 |
-| `synthesizer` | 多方案综合分析 | 复杂 + 多评估维度 |
-| `kb_keeper` | 知识库同步 | KB 开启时 |
-| `pkg_keeper` | 方案包管理 | 设计/开发阶段 |
-| `writer` | 文档生成 | 手动 `~rlm spawn writer` |
-| `architect` | 系统级架构评审 | R4 / 架构级复杂度 |
-
-### 🧠 三层记忆
-
-| 层级 | 范围 | 内容 |
-|:----:|------|------|
-| **L0** | 全局（跨项目） | 用户偏好、技术栈、沟通风格 |
-| **L1** | 项目级 | 知识库、模块文档、架构决策 |
-| **L2** | 会话级 | 任务进度、决策记录、上下文 |
-
-### ⚡ 独有功能
-
-| 功能 | 命令 | 描述 |
-|------|:----:|------|
-| **知识图谱** | `~graph` | 基于图结构的项目记忆，支持渐进式查询 |
-| **编码规范提取** | `~conventions` | 自动发现编码模式，开发阶段强制检查 |
-| **架构扫描** | `~scan` | 检测大文件、循环依赖、缺失测试 |
-| **仪表盘** | `~dashboard` | 生成 HTML 项目状态仪表盘 |
-| **R4 架构路由** | _(自动)_ | 系统级变更的专属五阶段工作流 |
-| **Architect 角色** | _(自动)_ | 架构评审专属子代理 |
-| **上下文窗口管理** | _(自动)_ | 超过 80% 时主动总结释放 |
-| **规范检查门控** | _(自动)_ | 开发阶段自动代码合规验证 |
-
----
-
-## 工作流命令
-
-所有命令在 **AI 聊天中** 使用，不是系统终端命令。
-
-| 命令 | 描述 |
-|:----:|------|
-| `~init` | 初始化项目知识库 |
-| `~auto` | 自动执行完整工作流 |
-| `~plan` | 仅规划，开发前停止 |
-| `~exec` | 执行已有方案 |
-| `~status` | 显示工作流状态 |
-| `~review` | 触发代码审查 |
-| `~scan` | 架构扫描 |
-| `~conventions` | 提取/检查编码规范 |
-| `~graph` | 知识图谱操作 |
-| `~dashboard` | 生成项目仪表盘 |
-| `~memory` | 管理记忆层 |
-| `~rlm` | 子代理管理 |
-| `~validatekb` | 验证知识库一致性 |
-| `~help` | 显示可用命令和用法 |
-
----
-
-## 支持的 CLI 目标
-
-| 目标 | 配置目录 | Hooks |
-|------|:--------:|:-----:|
-| **Claude Code** | `~/.claude/` | ✅ 完整 (9 事件) |
-| **Codex CLI** | `~/.codex/` | ✅ 通知 |
-| **Gemini CLI** | `~/.gemini/` | — |
-| **OpenCode** | `~/.config/opencode/` | — |
-| **Qwen CLI** | `~/.qwen/` | — |
-| **Grok CLI** | `~/.grok/` | — |
-
-### Codex CLI 兼容性说明
-
-> 以下 `config.toml` 设置可能影响 AgentFlow：
-
-| 设置 | 影响 | 建议 |
-|------|------|------|
-| `steer = true` | 可能干扰工作流交互 | 出现问题时禁用 |
-| `child_agents_md = true` | 可能与 AgentFlow 指令冲突 | 禁用 |
-| `project_doc_max_bytes` | 值过低会截断 AGENTS.md | 安装时自动设为 98304 |
-| `agent_max_depth = 1` | 限制子代理嵌套深度 | 保持 ≥ 2 |
-| `agent_max_threads` | 限制并行子代理数 | 保持默认 (6) 或更高 |
-
----
+- Linux `amd64`
+- Linux `arm64`
+- macOS `amd64`
+- macOS `arm64`
+- Windows `amd64`
 
 ## FAQ
 
 <details>
-<summary><b>这是 Python CLI 工具还是提示词包？</b></summary>
-两者兼有。CLI 管理安装和更新；工作流行为来自部署到 AI 编码助手配置目录的 <code>AGENTS.md</code> 和模块文件。
+<summary><b>AgentFlow 还是 Python 工具吗？</b></summary>
+不是。当前运行时 CLI 已经改为 Go 可执行文件。仓库里保留的部分 Python 文件只是迁移参考，不再是安装、分发、测试、发布主链路。
 </details>
 
 <details>
-<summary><b>应该安装到哪个目标？</b></summary>
-安装到你使用的 CLI：<code>codex</code>、<code>claude</code>、<code>gemini</code>、<code>qwen</code>、<code>grok</code> 或 <code>opencode</code>。使用 <code>--all</code> 安装到所有检测到的 CLI。
+<summary><b>已有自定义规则文件会怎样？</b></summary>
+安装前会自动备份成带时间戳的 `*_bak` 文件，然后再写入 AgentFlow 的规则文件。
 </details>
 
 <details>
-<summary><b>如果规则文件已存在怎么办？</b></summary>
-非 AgentFlow 文件会自动带时间戳备份。备份文件名会在控制台输出中显示。
+<summary><b>profile 有什么区别？</b></summary>
+`lite` 最小化，`standard` 加入共享运行模块，`full` 再追加子代理、注意力和 Hooks 相关说明。
 </details>
 
 <details>
-<summary><b>什么是 RLM？</b></summary>
-角色语言模型（Role Language Model）——一个子代理编排系统，包含 6 个专业角色和原生 CLI 子代理，根据任务复杂度自动调度。
+<summary><b>Codex 安装时会改什么？</b></summary>
+会把 `reviewer.toml` 和 `architect.toml` 部署到 `~/.codex/agents/`，并把 `[features] multi_agent = true` 以及 `[agents.*]` 段 merge 到 `~/.codex/config.toml`。
 </details>
 
 <details>
-<summary><b>记忆是否跨会话持久化？</b></summary>
-是的。L0 用户记忆是全局的，L1 项目知识库是项目级的，L2 会话摘要在阶段转换时自动保存。
+<summary><b>Claude 安装时会改什么？</b></summary>
+会把 AgentFlow 的 hooks merge 进 `~/.claude/settings.json`，同时保留非 AgentFlow 的现有 hooks。
 </details>
 
-<details>
-<summary><b>什么是 R4 架构模式？</b></summary>
-专为系统级重构、技术栈迁移和全新架构设计的路由级别。包含额外的 EVALUATE 阶段、多方案设计配合架构评审、分阶段开发。这是同类工具中没有的功能。
-</details>
+## 参与贡献
 
----
-
-## 贡献
-
-请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解开发环境配置、代码规范和 PR 流程。
+开发、测试和发布流程请看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可证
 
-[MIT](LICENSE) — 自由使用。
-
----
-
-<div align="center">
-
-**AgentFlow** — 比分析更进一步，持续工作直到实现和验证完成。
-
-</div>
+[MIT](LICENSE)

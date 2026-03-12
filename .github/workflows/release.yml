@@ -9,164 +9,121 @@ permissions:
   contents: write
 
 jobs:
-  # ── Job 1: Build Python sdist/wheel ──
-  build-python:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install build tools
-        run: pip install build
-
-      - name: Build package
-        run: python -m build
-
-      - name: Upload Python dist
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-dist
-          path: dist/*
-
-  # ── Job 2: Build standalone binaries with PyInstaller ──
-  build-binary:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            suffix: linux-amd64
-            exe_name: agentflow-linux-amd64
-          - os: macos-latest
-            suffix: darwin-arm64
-            exe_name: agentflow-darwin-arm64
-          - os: windows-latest
-            suffix: windows-amd64
-            exe_name: agentflow-windows-amd64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          pip install pyinstaller
-          pip install -e .
-
-      - name: Build binary
-        run: >
-          pyinstaller
-          --onefile
-          --collect-data agentflow
-          --name ${{ matrix.exe_name }}
-          --hidden-import agentflow.scripts.arch_scanner
-          --hidden-import agentflow.scripts.cache_manager
-          --hidden-import agentflow.scripts.config_helpers
-          --hidden-import agentflow.scripts.convention_scanner
-          --hidden-import agentflow.scripts.dashboard_generator
-          --hidden-import agentflow.scripts.graph_builder
-          --hidden-import agentflow.scripts.kb_sync
-          --hidden-import agentflow.scripts.session_manager
-          --hidden-import agentflow.scripts.template_init
-          pyinstaller_entry.py
-
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-${{ matrix.suffix }}
-          path: dist/${{ matrix.exe_name }}${{ matrix.os == 'windows-latest' && '.exe' || '' }}
-
-  # ── Job 3: Test install scripts with freshly built binaries ──
-  test-install:
-    needs: [build-binary]
+  build:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            shell: pwsh
-            artifact: binary-windows-amd64
-            binary_name: agentflow-windows-amd64.exe
-            install_script: install.ps1
           - os: ubuntu-latest
-            shell: bash
-            artifact: binary-linux-amd64
-            binary_name: agentflow-linux-amd64
-            install_script: install.sh
+            goos: linux
+            goarch: amd64
+            asset_name: agentflow-linux-amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            asset_name: agentflow-linux-arm64
           - os: macos-latest
-            shell: bash
-            artifact: binary-darwin-arm64
-            binary_name: agentflow-darwin-arm64
-            install_script: install.sh
+            goos: darwin
+            goarch: amd64
+            asset_name: agentflow-darwin-amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            asset_name: agentflow-darwin-arm64
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            asset_name: agentflow-windows-amd64.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download built binary
-        uses: actions/download-artifact@v4
+      - uses: actions/setup-go@v5
         with:
-          name: ${{ matrix.artifact }}
-          path: test-binary
+          go-version: "1.26.0"
 
-      - name: Test binary runs (non-Windows)
-        if: runner.os != 'Windows'
+      - name: Run tests
+        shell: bash
+        run: go test ./...
+
+      - name: Build binary
         shell: bash
         run: |
-          chmod +x test-binary/${{ matrix.binary_name }}
-          test-binary/${{ matrix.binary_name }} version
-          test-binary/${{ matrix.binary_name }} --help
+          mkdir -p dist
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o dist/${{ matrix.asset_name }} ./cmd/agentflow
 
-      - name: Test binary runs (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          .\test-binary\${{ matrix.binary_name }} version
-          .\test-binary\${{ matrix.binary_name }} --help
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.asset_name }}
 
-      - name: Test install script with pip (non-Windows)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          # The CI runner has Python, so this tests the pip installation path
-          chmod +x ./${{ matrix.install_script }}
-          # Run in non-interactive mode by piping 2 (English) to stdin
-          echo "2" | bash ./${{ matrix.install_script }} || true
-
-      - name: Test install script syntax (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Parse the script to check for syntax errors without executing
-          $null = [System.Management.Automation.PSParser]::Tokenize(
-            (Get-Content -Raw ./install.ps1), [ref]$null
-          )
-          Write-Host "install.ps1 syntax check passed"
-
-  # ── Job 4: Create GitHub Release (only after all tests pass) ──
-  release:
-    needs: [build-python, build-binary, test-install]
-    runs-on: ubuntu-latest
+  test-install:
+    needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: agentflow-linux-amd64
+            binary_name: agentflow-linux-amd64
+            shell: bash
+          - os: macos-latest
+            artifact: agentflow-darwin-arm64
+            binary_name: agentflow-darwin-arm64
+            shell: bash
+          - os: windows-latest
+            artifact: agentflow-windows-amd64.exe
+            binary_name: agentflow-windows-amd64.exe
+            shell: pwsh
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: release-test
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - name: Smoke test binary (non-Windows)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x release-test/${{ matrix.binary_name }}
+          release-test/${{ matrix.binary_name }} help
+          release-test/${{ matrix.binary_name }} version
+
+      - name: Smoke test binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\release-test\${{ matrix.binary_name }} help
+          .\release-test\${{ matrix.binary_name }} version
+
+      - name: Validate install.sh
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash -n ./install.sh
+
+      - name: Validate install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw ./install.ps1), [ref]$null)
+          Write-Host "install.ps1 syntax check passed"
+
+  release:
+    needs: [build, test-install]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
         with:
           path: release-assets
 
-      - name: Prepare release files
+      - name: Collect assets
+        shell: bash
         run: |
           mkdir -p final-assets
-          # Python dist
-          cp release-assets/python-dist/* final-assets/ 2>/dev/null || true
-          # Binaries
-          for dir in release-assets/binary-*; do
-            cp "$dir"/* final-assets/ 2>/dev/null || true
-          done
-          ls -la final-assets/
+          find release-assets -type f -maxdepth 2 -exec cp {} final-assets/ \;
+          ls -la final-assets
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
