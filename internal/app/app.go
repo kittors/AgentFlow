@@ -93,39 +93,19 @@ func (a *App) runInteractiveMainMenu() int {
 		return code
 	}
 
-	var notice *ui.Panel
-	for {
-		action, canceled, err := ui.RunMainMenu(a.Catalog, a.Version, a.mainMenuPanels(notice), a.Stdout)
-		if err != nil {
-			fmt.Fprintln(a.Stderr, err.Error())
-			return 1
-		}
-		if canceled || action == ui.ActionExit {
-			return 0
-		}
-
-		notice = nil
-		switch action {
-		case ui.ActionInstall:
-			panel, _ := a.runInteractiveInstallPanel()
-			notice = nonEmptyPanel(panel)
-		case ui.ActionUninstall:
-			panel, _ := a.runInteractiveUninstallPanel()
-			notice = nonEmptyPanel(panel)
-		case ui.ActionUpdate:
-			panel := a.updatePanel(nil)
-			notice = nonEmptyPanel(panel)
-		case ui.ActionStatus:
-			panel := a.statusPanel()
-			panel.Title = a.Catalog.Msg("当前状态", "Current status")
-			notice = nonEmptyPanel(panel)
-		case ui.ActionClean:
-			panel := a.cleanPanel()
-			notice = nonEmptyPanel(panel)
-		default:
-			return 0
-		}
+	if err := ui.RunInteractiveFlow(a.Catalog, a.Version, ui.InteractiveCallbacks{
+		Status:           a.statusPanel,
+		InstallOptions:   a.installTargetOptions,
+		UninstallOptions: a.uninstallTargetOptions,
+		Install:          a.installTargetsPanel,
+		Uninstall:        a.uninstallTargetsPanel,
+		Update:           a.updatePanel,
+		Clean:            a.cleanPanel,
+	}, a.Stdout); err != nil {
+		fmt.Fprintln(a.Stderr, err.Error())
+		return 1
 	}
+	return 0
 }
 
 func (a *App) ensureInteractiveLanguage() (int, bool) {
@@ -248,8 +228,8 @@ func (a *App) runInteractiveInstall() int {
 }
 
 func (a *App) runInteractiveInstallPanel() (ui.Panel, int) {
-	detected := a.Installer.DetectInstalledCLIs()
-	if len(detected) == 0 {
+	options := a.installTargetOptions()
+	if len(options) == 0 {
 		return ui.Panel{
 			Title: a.Catalog.Msg("安装结果", "Install result"),
 			Lines: []string{a.Catalog.Msg("未检测到任何已安装的 CLI。", "No installed CLIs detected.")},
@@ -262,21 +242,6 @@ func (a *App) runInteractiveInstallPanel() (ui.Panel, int) {
 	}
 	if canceled {
 		return ui.Panel{}, 0
-	}
-
-	installed := sliceToSet(a.Installer.DetectInstalledTargets())
-	options := make([]ui.Option, 0, len(detected))
-	for _, name := range detected {
-		description := a.Catalog.Msg("已检测到该 CLI，可直接部署 AgentFlow。", "Detected on this machine and ready for AgentFlow deployment.")
-		if _, ok := installed[name]; ok {
-			description = a.Catalog.Msg("该 CLI 已接入 AgentFlow，再次执行会覆盖为当前版本。", "AgentFlow is already installed for this CLI; rerunning refreshes it to the current version.")
-		}
-		options = append(options, ui.Option{
-			Value:       name,
-			Label:       name,
-			Badge:       strings.ToUpper(name),
-			Description: description,
-		})
 	}
 
 	selected, canceled, err := ui.SelectTargets(
@@ -293,32 +258,11 @@ func (a *App) runInteractiveInstallPanel() (ui.Panel, int) {
 		return ui.Panel{}, 0
 	}
 
-	success := 0
-	lines := []string{
-		fmt.Sprintf(a.Catalog.Msg("Profile: %s", "Profile: %s"), profile),
+	panel := a.installTargetsPanel(profile, selected)
+	if strings.Contains(panel.Title, a.Catalog.Msg("失败", "failed")) || strings.Contains(strings.ToLower(panel.Title), "failed") {
+		return panel, 1
 	}
-	for _, name := range selected {
-		if err := a.Installer.Install(name, profile); err != nil {
-			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
-			continue
-		}
-		success++
-		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), name))
-	}
-
-	lines = append([]string{
-		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个目标安装。", "Completed installation for %d/%d targets."), success, len(selected)),
-	}, lines...)
-	if success == 0 {
-		return ui.Panel{
-			Title: a.Catalog.Msg("安装失败", "Install failed"),
-			Lines: lines,
-		}, 1
-	}
-	return ui.Panel{
-		Title: a.Catalog.Msg("安装结果", "Install result"),
-		Lines: lines,
-	}, 0
+	return panel, 0
 }
 
 func (a *App) runInteractiveUninstall() int {
@@ -328,22 +272,12 @@ func (a *App) runInteractiveUninstall() int {
 }
 
 func (a *App) runInteractiveUninstallPanel() (ui.Panel, int) {
-	installed := a.Installer.DetectInstalledTargets()
-	if len(installed) == 0 {
+	options := a.uninstallTargetOptions()
+	if len(options) == 0 {
 		return ui.Panel{
 			Title: a.Catalog.Msg("卸载结果", "Uninstall result"),
 			Lines: []string{a.Catalog.Msg("未检测到已安装的 AgentFlow。", "No AgentFlow installations found.")},
 		}, 0
-	}
-
-	options := make([]ui.Option, 0, len(installed))
-	for _, name := range installed {
-		options = append(options, ui.Option{
-			Value:       name,
-			Label:       name,
-			Badge:       strings.ToUpper(name),
-			Description: a.Catalog.Msg("移除该 CLI 中由 AgentFlow 写入的规则、技能和 hooks。", "Remove the AgentFlow rules, skills, and hooks written into this CLI."),
-		})
 	}
 
 	selected, canceled, err := ui.SelectTargets(
@@ -360,34 +294,25 @@ func (a *App) runInteractiveUninstallPanel() (ui.Panel, int) {
 		return ui.Panel{}, 0
 	}
 
-	success := 0
-	lines := make([]string, 0, len(selected)+1)
-	for _, name := range selected {
-		if err := a.Installer.Uninstall(name); err != nil {
-			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
-			continue
-		}
-		success++
-		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), name))
+	panel := a.uninstallTargetsPanel(selected)
+	if strings.Contains(panel.Title, a.Catalog.Msg("失败", "failed")) || strings.Contains(strings.ToLower(panel.Title), "failed") {
+		return panel, 1
 	}
-
-	lines = append([]string{
-		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个目标卸载。", "Completed uninstall for %d/%d targets."), success, len(selected)),
-	}, lines...)
-	if success == 0 {
-		return ui.Panel{
-			Title: a.Catalog.Msg("卸载失败", "Uninstall failed"),
-			Lines: lines,
-		}, 1
-	}
-	return ui.Panel{
-		Title: a.Catalog.Msg("卸载结果", "Uninstall result"),
-		Lines: lines,
-	}, 0
+	return panel, 0
 }
 
 func (a *App) runUpdate(args []string) int {
-	panel := a.updatePanel(args)
+	if len(args) > 0 && strings.TrimSpace(args[0]) != "" {
+		panel := ui.Panel{
+			Title: a.Catalog.Msg("更新失败", "Update failed"),
+			Lines: []string{
+				fmt.Sprintf(a.Catalog.Msg("当前 Go update 不支持分支参数: %s", "The Go update command does not support branch arguments: %s"), args[0]),
+			},
+		}
+		a.printPanel(panel)
+		return 1
+	}
+	panel, _ := a.updatePanel()
 	a.printPanel(panel)
 	if strings.Contains(strings.ToLower(panel.Title), "失败") || strings.Contains(strings.ToLower(panel.Title), "failed") {
 		return 1
@@ -395,34 +320,25 @@ func (a *App) runUpdate(args []string) int {
 	return 0
 }
 
-func (a *App) updatePanel(args []string) ui.Panel {
-	branch := ""
-	if len(args) > 0 {
-		branch = args[0]
-	}
-	if branch != "" {
-		return ui.Panel{
-			Title: a.Catalog.Msg("更新失败", "Update failed"),
-			Lines: []string{fmt.Sprintf(a.Catalog.Msg("当前 Go update 不支持分支参数: %s", "The Go update command does not support branch arguments: %s"), branch)},
-		}
-	}
+func (a *App) updatePanel() (ui.Panel, string) {
 	result, err := a.Checker.SelfUpdate(a.Version)
 	if err != nil {
-		return errorPanel(a.Catalog.Msg("更新失败", "Update failed"), err)
+		return errorPanel(a.Catalog.Msg("更新失败", "Update failed"), err), ""
 	}
 	if !result.UpdateAvailable {
 		return ui.Panel{
 			Title: a.Catalog.Msg("更新结果", "Update result"),
 			Lines: []string{a.Catalog.Msg("当前已是最新版本。", "Already on the latest version.")},
-		}
+		}, ""
 	}
+	a.Version = result.Latest
 	return ui.Panel{
 		Title: a.Catalog.Msg("更新结果", "Update result"),
 		Lines: []string{
 			fmt.Sprintf(a.Catalog.Msg("已更新到 v%s。", "Updated to v%s."), result.Latest),
 			a.Catalog.Msg("请重新运行 agentflow，进入新版本。", "Restart agentflow to enter the new version."),
 		},
-	}
+	}, result.Latest
 }
 
 func (a *App) runClean() error {
@@ -528,6 +444,93 @@ func (a *App) mainMenuPanels(notice *ui.Panel) []ui.Panel {
 	}
 	panels = append(panels, a.statusPanel())
 	return panels
+}
+
+func (a *App) installTargetOptions() []ui.Option {
+	detected := a.Installer.DetectInstalledCLIs()
+	installed := sliceToSet(a.Installer.DetectInstalledTargets())
+	options := make([]ui.Option, 0, len(detected))
+	for _, name := range detected {
+		description := a.Catalog.Msg("已检测到该 CLI，可直接部署 AgentFlow。", "Detected on this machine and ready for AgentFlow deployment.")
+		if _, ok := installed[name]; ok {
+			description = a.Catalog.Msg("该 CLI 已接入 AgentFlow，再次执行会覆盖为当前版本。", "AgentFlow is already installed for this CLI; rerunning refreshes it to the current version.")
+		}
+		options = append(options, ui.Option{
+			Value:       name,
+			Label:       name,
+			Badge:       strings.ToUpper(name),
+			Description: description,
+		})
+	}
+	return options
+}
+
+func (a *App) uninstallTargetOptions() []ui.Option {
+	installed := a.Installer.DetectInstalledTargets()
+	options := make([]ui.Option, 0, len(installed))
+	for _, name := range installed {
+		options = append(options, ui.Option{
+			Value:       name,
+			Label:       name,
+			Badge:       strings.ToUpper(name),
+			Description: a.Catalog.Msg("移除该 CLI 中由 AgentFlow 写入的规则、技能和 hooks。", "Remove the AgentFlow rules, skills, and hooks written into this CLI."),
+		})
+	}
+	return options
+}
+
+func (a *App) installTargetsPanel(profile string, targets []string) ui.Panel {
+	success := 0
+	lines := []string{
+		fmt.Sprintf(a.Catalog.Msg("Profile: %s", "Profile: %s"), profile),
+	}
+	for _, name := range targets {
+		if err := a.Installer.Install(name, profile); err != nil {
+			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
+			continue
+		}
+		success++
+		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), name))
+	}
+	lines = append([]string{
+		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个目标安装。", "Completed installation for %d/%d targets."), success, len(targets)),
+	}, lines...)
+	if success == 0 {
+		return ui.Panel{
+			Title: a.Catalog.Msg("安装失败", "Install failed"),
+			Lines: lines,
+		}
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("安装结果", "Install result"),
+		Lines: lines,
+	}
+}
+
+func (a *App) uninstallTargetsPanel(targets []string) ui.Panel {
+	success := 0
+	lines := make([]string, 0, len(targets)+1)
+	for _, name := range targets {
+		if err := a.Installer.Uninstall(name); err != nil {
+			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
+			continue
+		}
+		success++
+		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), name))
+	}
+	lines = append([]string{
+		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个目标卸载。", "Completed uninstall for %d/%d targets."), success, len(targets)),
+	}, lines...)
+	if success == 0 {
+		return ui.Panel{
+			Title: a.Catalog.Msg("卸载失败", "Uninstall failed"),
+			Lines: lines,
+		}
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("卸载结果", "Uninstall result"),
+		Lines: lines,
+	}
 }
 
 func (a *App) printPanel(panel ui.Panel) {
