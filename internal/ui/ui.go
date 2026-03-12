@@ -40,25 +40,40 @@ type selectionModel struct {
 	canceled bool
 	value    string
 	values   []string
+	width    int
+	height   int
 }
 
 var (
 	heroStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("45")).
+			BorderForeground(lipgloss.Color("81")).
 			Padding(1, 2)
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("230")).
-			Background(lipgloss.Color("31")).
-			Padding(0, 1)
+			Foreground(lipgloss.Color("230"))
 	subtitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("109"))
+			Foreground(lipgloss.Color("151"))
+	badgeStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("230")).
+			Background(lipgloss.Color("24")).
+			Padding(0, 1)
+	highlightBadgeStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("232")).
+				Background(lipgloss.Color("149")).
+				Bold(true).
+				Padding(0, 1)
 	cursorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("221")).
 			Bold(true)
+	rowStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), false, false, false, true).
+			BorderForeground(lipgloss.Color("238")).
+			Padding(0, 1)
 	selectedRowStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("24")).
+				Border(lipgloss.ThickBorder(), false, false, false, true).
+				BorderForeground(lipgloss.Color("81")).
+				Background(lipgloss.Color("236")).
 				Foreground(lipgloss.Color("230")).
 				Padding(0, 1)
 	labelStyle = lipgloss.NewStyle().
@@ -66,31 +81,38 @@ var (
 	selectedLabelStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("230"))
+	metaStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("109"))
+	selectedMetaStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("153")).
+				Bold(true)
 	descStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("244"))
 	selectedDescStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("189"))
-	hintStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245")).
+	footerStyle = lipgloss.NewStyle().
 			BorderTop(true).
 			BorderForeground(lipgloss.Color("238")).
+			PaddingTop(1)
+	hintStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("245")).
 			PaddingTop(1)
 )
 
 func RunMainMenu(catalog i18n.Catalog, version string, output io.Writer) (Action, bool, error) {
 	options := []Option{
-		{Value: string(ActionInstall), Label: catalog.Msg("安装到 CLI", "Install to CLI targets"), Description: "install"},
-		{Value: string(ActionUninstall), Label: catalog.Msg("卸载已安装目标", "Uninstall from installed targets"), Description: "uninstall"},
-		{Value: string(ActionUpdate), Label: catalog.Msg("更新 AgentFlow", "Update AgentFlow"), Description: "self-update"},
-		{Value: string(ActionStatus), Label: catalog.Msg("查看状态", "Show status"), Description: "status"},
-		{Value: string(ActionClean), Label: catalog.Msg("清理缓存", "Clean caches"), Description: "clean"},
-		{Value: string(ActionExit), Label: catalog.Msg("退出", "Exit"), Description: "exit"},
+		{Value: string(ActionInstall), Label: catalog.Msg("安装到 CLI", "Install to CLI targets"), Description: catalog.Msg("将 AgentFlow 写入 Codex、Claude、Gemini 等 CLI 配置。", "Write AgentFlow into Codex, Claude, Gemini, and other CLI configs.")},
+		{Value: string(ActionUninstall), Label: catalog.Msg("卸载已安装目标", "Uninstall from installed targets"), Description: catalog.Msg("从已接入的 CLI 中移除 AgentFlow 规则与资源。", "Remove AgentFlow rules and assets from integrated CLI targets.")},
+		{Value: string(ActionUpdate), Label: catalog.Msg("更新 AgentFlow", "Update AgentFlow"), Description: catalog.Msg("下载并替换当前 Go 二进制。", "Download and replace the current Go binary.")},
+		{Value: string(ActionStatus), Label: catalog.Msg("查看状态", "Show status"), Description: catalog.Msg("查看已检测目标、版本和运行环境。", "Inspect detected targets, version, and runtime environment.")},
+		{Value: string(ActionClean), Label: catalog.Msg("清理缓存", "Clean caches"), Description: catalog.Msg("清理缓存、临时下载和派生产物。", "Clean caches, temporary downloads, and derived artifacts.")},
+		{Value: string(ActionExit), Label: catalog.Msg("退出", "Exit"), Description: catalog.Msg("关闭菜单并返回终端。", "Close the menu and return to the terminal.")},
 	}
 
 	value, _, canceled, err := runSelection(output, selectionModel{
 		catalog:  catalog,
 		title:    fmt.Sprintf("AgentFlow v%s", version),
-		subtitle: catalog.Msg("使用 ↑/↓ 选择，Enter 确认，Esc 退出。", "Use ↑/↓ to move, Enter to confirm, Esc to exit."),
+		subtitle: catalog.Msg("跨平台 Go 可执行文件。使用 ↑/↓ 选择，Enter 执行，Esc 退出。", "Cross-platform Go executable. Use ↑/↓ to move, Enter to run, Esc to exit."),
 		options:  options,
 	})
 	return Action(value), canceled, err
@@ -146,6 +168,9 @@ func (m selectionModel) Init() tea.Cmd {
 
 func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch value := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = value.Width
+		m.height = value.Height
 	case tea.KeyMsg:
 		switch value.String() {
 		case "ctrl+c", "esc", "q":
@@ -186,14 +211,27 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m selectionModel) View() string {
+	contentWidth := m.contentWidth()
 	var builder strings.Builder
 
 	builder.WriteString("\n")
-	headerLines := []string{titleStyle.Render(m.title)}
-	if m.subtitle != "" {
-		headerLines = append(headerLines, subtitleStyle.Render(m.subtitle))
+	headerBadges := []string{
+		badgeStyle.Render(m.catalog.Msg("Go Binary", "Go Binary")),
+		badgeStyle.Render(m.catalog.Msg("Cross-platform", "Cross-platform")),
+		highlightBadgeStyle.Render(fmt.Sprintf("%d/%d", m.cursor+1, max(1, len(m.options)))),
 	}
-	builder.WriteString(heroStyle.Render(strings.Join(headerLines, "\n")))
+	if m.multi {
+		headerBadges = append(headerBadges, badgeStyle.Render(fmt.Sprintf(m.catalog.Msg("已选 %d", "%d selected"), selectedCount(m.options))))
+	}
+
+	headerLines := []string{
+		titleStyle.Render(m.title),
+		lipgloss.JoinHorizontal(lipgloss.Left, headerBadges...),
+	}
+	if m.subtitle != "" {
+		headerLines = append(headerLines, subtitleStyle.Width(contentWidth-4).Render(m.subtitle))
+	}
+	builder.WriteString(heroStyle.Width(contentWidth).Render(strings.Join(headerLines, "\n")))
 	builder.WriteString("\n\n")
 
 	for index, option := range m.options {
@@ -211,24 +249,31 @@ func (m selectionModel) View() string {
 		}
 
 		rowLabel := labelStyle.Render(option.Label)
-		rowDesc := descStyle.Render(option.Description)
+		rowDesc := descStyle.Width(max(12, contentWidth-10)).Render(option.Description)
+		rowMeta := metaStyle.Render(option.Value)
 		if index == m.cursor {
 			rowLabel = selectedLabelStyle.Render(option.Label)
-			rowDesc = selectedDescStyle.Render(option.Description)
+			rowDesc = selectedDescStyle.Width(max(12, contentWidth-10)).Render(option.Description)
+			rowMeta = selectedMetaStyle.Render(option.Value)
 		}
 
 		row := cursor + marker + " " + rowLabel
+		if option.Value != "" {
+			row += "  " + rowMeta
+		}
 		if option.Description != "" {
-			row += "  " + rowDesc
+			row += "\n    " + rowDesc
 		}
 		if index == m.cursor {
-			builder.WriteString(selectedRowStyle.Render(row))
+			builder.WriteString(selectedRowStyle.Width(contentWidth).Render(row))
 		} else {
-			builder.WriteString(row)
+			builder.WriteString(rowStyle.Width(contentWidth).Render(row))
 		}
 		builder.WriteString("\n")
 	}
 
+	builder.WriteString("\n")
+	builder.WriteString(footerStyle.Width(contentWidth).Render(m.currentSummary()))
 	builder.WriteString("\n")
 	if m.multi {
 		builder.WriteString(hintStyle.Render(m.catalog.Msg("Space 切换选择，Enter 执行，Esc 取消。", "Space toggles selection, Enter runs, Esc cancels.")))
@@ -237,7 +282,11 @@ func (m selectionModel) View() string {
 	}
 	builder.WriteString("\n")
 
-	return builder.String()
+	view := builder.String()
+	if m.width > 0 && m.height > 0 {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, view)
+	}
+	return view
 }
 
 func selectedValues(options []Option) []string {
@@ -248,4 +297,58 @@ func selectedValues(options []Option) []string {
 		}
 	}
 	return values
+}
+
+func selectedCount(options []Option) int {
+	count := 0
+	for _, option := range options {
+		if option.Selected {
+			count++
+		}
+	}
+	return count
+}
+
+func (m selectionModel) currentSummary() string {
+	if len(m.options) == 0 {
+		return m.catalog.Msg("当前没有可显示的选项。", "There are no options to display.")
+	}
+
+	current := m.options[m.cursor]
+	if m.multi {
+		return fmt.Sprintf(
+			m.catalog.Msg("当前目标: %s | 已选择 %d 项。", "Current target: %s | %d selected."),
+			current.Label,
+			selectedCount(m.options),
+		)
+	}
+
+	return fmt.Sprintf(
+		m.catalog.Msg("当前动作: %s | %s", "Current action: %s | %s"),
+		current.Label,
+		current.Description,
+	)
+}
+
+func (m selectionModel) contentWidth() int {
+	if m.width <= 0 {
+		return 72
+	}
+
+	width := m.width - 8
+	switch {
+	case width < 48:
+		return 48
+	case width > 88:
+		return 88
+	default:
+		return width
+	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

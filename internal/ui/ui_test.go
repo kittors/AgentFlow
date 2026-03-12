@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -70,5 +71,35 @@ func TestEscapeCancelsSelection(t *testing.T) {
 
 	if !result.canceled {
 		t.Fatal("expected selection to be canceled")
+	}
+}
+
+func TestViewShowsCurrentSummaryAndBadges(t *testing.T) {
+	model := selectionModel{
+		catalog:  i18n.NewCatalog(),
+		title:    "AgentFlow v1.0.3",
+		subtitle: "Cross-platform Go executable.",
+		options: []Option{
+			{Value: "install", Label: "Install", Description: "Write AgentFlow into CLI configs."},
+			{Value: "update", Label: "Update AgentFlow", Description: "Download and replace the current Go binary."},
+		},
+		cursor: 1,
+		width:  100,
+		height: 30,
+	}
+
+	view := model.View()
+
+	if !strings.Contains(view, "AgentFlow v1.0.3") {
+		t.Fatalf("expected title in view, got %q", view)
+	}
+	if !strings.Contains(view, "Go Binary") {
+		t.Fatalf("expected Go Binary badge in view, got %q", view)
+	}
+	if !strings.Contains(view, "2/2") {
+		t.Fatalf("expected cursor badge in view, got %q", view)
+	}
+	if !strings.Contains(view, "当前动作: Update AgentFlow") {
+		t.Fatalf("expected current summary in view, got %q", view)
 	}
 }

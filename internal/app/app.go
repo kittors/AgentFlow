@@ -77,7 +77,6 @@ func (a *App) Run(args []string) int {
 		return a.runGraph(args[1:])
 	case "dashboard":
 		return a.runDashboard(args[1:])
-		return 0
 	default:
 		fmt.Fprintln(a.Stderr, a.Catalog.Msg("未知命令。", "Unknown command."))
 		a.printUsage()
