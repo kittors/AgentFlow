@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/kittors/AgentFlow/internal/i18n"
 )
@@ -30,12 +31,19 @@ type Option struct {
 	Selected    bool
 }
 
+type Panel struct {
+	Title string
+	Lines []string
+}
+
 type selectionModel struct {
 	catalog  i18n.Catalog
 	title    string
 	subtitle string
 	hint     string
 	options  []Option
+	panels   []Panel
+
 	cursor   int
 	multi    bool
 	done     bool
@@ -47,74 +55,65 @@ type selectionModel struct {
 }
 
 var (
-	heroStyle = lipgloss.NewStyle().
-			Border(lipgloss.DoubleBorder()).
-			BorderForeground(lipgloss.Color("81")).
-			Background(lipgloss.Color("235")).
-			Padding(1, 2)
+	headerStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), false, false, true, false).
+			BorderForeground(lipgloss.Color("39")).
+			Padding(0, 0, 1, 0)
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("230"))
 	subtitleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("151"))
-	headerBadgeStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("230")).
-				Background(lipgloss.Color("24")).
-				Padding(0, 1)
-	headerFocusBadgeStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("232")).
-				Background(lipgloss.Color("149")).
-				Bold(true).
-				Padding(0, 1)
-	cardStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("239")).
+			Foreground(lipgloss.Color("109"))
+	pillStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("230")).
+			Background(lipgloss.Color("24")).
 			Padding(0, 1)
-	selectedCardStyle = lipgloss.NewStyle().
-				Border(lipgloss.DoubleBorder()).
-				BorderForeground(lipgloss.Color("81")).
-				Background(lipgloss.Color("236")).
-				Padding(0, 1)
-	badgeStyle = lipgloss.NewStyle().
+	focusPillStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("232")).
+			Background(lipgloss.Color("81")).
 			Bold(true).
+			Padding(0, 1)
+	listPanelStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("238")).
+			Padding(0, 1)
+	detailPanelStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("63")).
+				Padding(0, 1)
+	rowStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("252"))
+	selectedRowStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("230")).
+				Background(lipgloss.Color("237")).
+				Bold(true)
+	badgeStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("230")).
 			Background(lipgloss.Color("60")).
 			Padding(0, 1)
 	selectedBadgeStyle = lipgloss.NewStyle().
-				Bold(true).
 				Foreground(lipgloss.Color("232")).
 				Background(lipgloss.Color("149")).
-				Padding(0, 1)
-	cursorStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("221"))
-	mutedCursorStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("242"))
-	labelStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("230"))
-	selectedLabelStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("230"))
-	descStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246"))
-	selectedDescStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("189"))
-	footerStyle = lipgloss.NewStyle().
-			BorderTop(true).
-			BorderForeground(lipgloss.Color("238")).
-			PaddingTop(1)
-	footerSummaryStyle = lipgloss.NewStyle().
+				Padding(0, 1)
+	sectionTitleStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("223"))
+	primaryTextStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("252"))
-	hintStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("245"))
+	mutedTextStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("244"))
+	footerStyle = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), true, false, false, false).
+			BorderForeground(lipgloss.Color("238")).
+			Padding(1, 0, 0, 0)
 	hintBadgeStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("230")).
 			Background(lipgloss.Color("238")).
 			Padding(0, 1)
 )
 
-func RunMainMenu(catalog i18n.Catalog, version string, output io.Writer) (Action, bool, error) {
+func RunMainMenu(catalog i18n.Catalog, version string, panels []Panel, output io.Writer) (Action, bool, error) {
 	options := []Option{
 		{
 			Value:       string(ActionInstall),
@@ -157,9 +156,10 @@ func RunMainMenu(catalog i18n.Catalog, version string, output io.Writer) (Action
 	value, _, canceled, err := runSelection(output, selectionModel{
 		catalog:  catalog,
 		title:    fmt.Sprintf("AgentFlow v%s", version),
-		subtitle: catalog.Msg("跨平台 Go CLI。先选动作，再把 AgentFlow 布进你的代理工作流。", "Cross-platform Go CLI. Pick an action, then route AgentFlow into your agent workflow."),
-		hint:     catalog.Msg("↑/↓ 切换动作，Enter 执行，Esc 退出。", "Use ↑/↓ to switch actions, Enter to run, Esc to exit."),
+		subtitle: catalog.Msg("跨平台 Go CLI。操作列表保持紧凑，状态和结果统一收进右侧面板。", "Cross-platform Go CLI. Keep actions compact while status and results stay inside the right panel."),
+		hint:     catalog.Msg("↑/↓ 或滚轮切换动作，Enter 执行，Esc 退出。", "Use ↑/↓ or the mouse wheel to change actions, Enter to run, Esc to exit."),
 		options:  options,
+		panels:   panels,
 	})
 	return Action(value), canceled, err
 }
@@ -232,6 +232,7 @@ func runSelection(output io.Writer, model selectionModel) (string, []string, boo
 		model,
 		tea.WithOutput(output),
 		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
 	)
 	finalModel, err := program.Run()
 	if err != nil {
@@ -254,6 +255,17 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = value.Width
 		m.height = value.Height
+	case tea.MouseMsg:
+		switch value.Button {
+		case tea.MouseButtonWheelUp:
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case tea.MouseButtonWheelDown:
+			if m.cursor < len(m.options)-1 {
+				m.cursor++
+			}
+		}
 	case tea.KeyMsg:
 		switch value.String() {
 		case "ctrl+c", "esc", "q":
@@ -266,6 +278,22 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			if m.cursor < len(m.options)-1 {
 				m.cursor++
+			}
+		case "pgup":
+			m.cursor -= 5
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+		case "pgdown":
+			m.cursor += 5
+			if m.cursor > len(m.options)-1 {
+				m.cursor = len(m.options) - 1
+			}
+		case "home", "g":
+			m.cursor = 0
+		case "end", "G":
+			if len(m.options) > 0 {
+				m.cursor = len(m.options) - 1
 			}
 		case " ":
 			if m.multi && len(m.options) > 0 {
@@ -295,73 +323,100 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m selectionModel) View() string {
 	contentWidth := m.contentWidth()
-	var builder strings.Builder
+	header := m.renderHeader(contentWidth)
+	footer := m.renderFooter(contentWidth)
 
-	builder.WriteString("\n")
-	builder.WriteString(heroStyle.Width(contentWidth).Render(m.renderHeader(contentWidth)))
-	builder.WriteString("\n\n")
-
-	for index, option := range m.options {
-		builder.WriteString(m.renderOption(index, option, contentWidth))
-		builder.WriteString("\n")
+	bodyHeight := m.contentHeight() - lipgloss.Height(header) - lipgloss.Height(footer) - 1
+	if bodyHeight < 5 {
+		bodyHeight = 5
 	}
 
-	builder.WriteString("\n")
-	builder.WriteString(footerStyle.Width(contentWidth).Render(m.renderFooter()))
-	builder.WriteString("\n")
+	body := m.renderBody(contentWidth, bodyHeight)
+	view := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
 
-	view := builder.String()
 	if m.width > 0 && m.height > 0 {
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, view)
+		return cropBlock(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, view), m.height)
 	}
 	return view
 }
 
 func (m selectionModel) renderHeader(contentWidth int) string {
 	badges := []string{
-		headerBadgeStyle.Render("Go Binary"),
-		headerBadgeStyle.Render(m.catalog.Msg("跨平台", "Cross-platform")),
-		headerFocusBadgeStyle.Render(fmt.Sprintf("%d/%d", m.cursor+1, max(1, len(m.options)))),
+		pillStyle.Render("Go Binary"),
+		pillStyle.Render(m.catalog.Msg("跨平台", "Cross-platform")),
+		focusPillStyle.Render(fmt.Sprintf("%d/%d", m.cursor+1, max(1, len(m.options)))),
 	}
 	if m.multi {
-		badges = append(badges, headerBadgeStyle.Render(fmt.Sprintf(m.catalog.Msg("已选 %d", "%d selected"), selectedCount(m.options))))
+		badges = append(badges, pillStyle.Render(fmt.Sprintf(m.catalog.Msg("已选 %d", "%d selected"), selectedCount(m.options))))
 	}
 
 	lines := []string{
 		titleStyle.Render(m.title),
 		lipgloss.JoinHorizontal(lipgloss.Left, badges...),
 	}
-	if m.subtitle != "" {
-		lines = append(lines, subtitleStyle.Width(contentWidth-4).Render(m.subtitle))
+	if strings.TrimSpace(m.subtitle) != "" {
+		lines = append(lines, wrapStyledLine(subtitleStyle, contentWidth, m.subtitle)...)
 	}
-	return strings.Join(lines, "\n")
+
+	return headerStyle.Width(contentWidth).Render(strings.Join(lines, "\n"))
 }
 
-func (m selectionModel) renderOption(index int, option Option, contentWidth int) string {
-	card := cardStyle
-	badge := badgeStyle
-	label := labelStyle
-	description := descStyle
-	cursor := mutedCursorStyle.Render("·")
-
-	if index == m.cursor {
-		card = selectedCardStyle
-		badge = selectedBadgeStyle
-		label = selectedLabelStyle
-		description = selectedDescStyle
-		cursor = cursorStyle.Render("▶")
+func (m selectionModel) renderBody(contentWidth, bodyHeight int) string {
+	if contentWidth >= 92 && bodyHeight >= 6 {
+		listWidth := max(28, min(38, contentWidth/3))
+		detailWidth := max(24, contentWidth-listWidth-1)
+		list := clampBlockHeight(m.renderList(listWidth, bodyHeight), bodyHeight)
+		details := clampBlockHeight(m.renderDetails(detailWidth, bodyHeight), bodyHeight)
+		return lipgloss.JoinHorizontal(lipgloss.Top, list, " ", details)
 	}
 
-	prefix := cursor
+	listHeight := min(bodyHeight, max(5, len(m.options)+2))
+	if bodyHeight >= 8 {
+		listHeight = min(bodyHeight, max(4, min(len(m.options)+2, bodyHeight/2)))
+	}
+	if len(m.panels) > 0 && bodyHeight >= 9 {
+		listHeight = min(listHeight, bodyHeight-5)
+	}
+	if listHeight > bodyHeight {
+		listHeight = bodyHeight
+	}
+	detailHeight := bodyHeight - listHeight
+	if detailHeight < 3 {
+		detailHeight = 3
+		listHeight = max(2, bodyHeight-detailHeight)
+	}
+
+	list := clampBlockHeight(m.renderList(contentWidth, listHeight), listHeight)
+	details := clampBlockHeight(m.renderDetails(contentWidth, detailHeight), detailHeight)
+	return lipgloss.JoinVertical(lipgloss.Left, list, details)
+}
+
+func (m selectionModel) renderList(width, height int) string {
+	innerWidth := max(8, width-listPanelStyle.GetHorizontalFrameSize())
+	visibleRows := max(1, height-listPanelStyle.GetVerticalFrameSize())
+	start, end := m.visibleRange(visibleRows)
+
+	rows := make([]string, 0, end-start)
+	for index := start; index < end; index++ {
+		rows = append(rows, m.renderRow(index, m.options[index], innerWidth))
+	}
+	if len(rows) == 0 {
+		rows = append(rows, mutedTextStyle.Render(m.catalog.Msg("当前没有可显示的选项。", "There are no options to display.")))
+	}
+
+	content := strings.Join(rows, "\n")
+	return lipgloss.NewStyle().Width(width).Height(height).Render(listPanelStyle.Width(innerWidth).Render(content))
+}
+
+func (m selectionModel) renderRow(index int, option Option, width int) string {
+	prefix := "·"
+	if index == m.cursor {
+		prefix = "›"
+	}
 	if m.multi {
 		prefix = "[ ]"
 		if option.Selected {
 			prefix = "[x]"
-		}
-		if index == m.cursor {
-			prefix = cursorStyle.Render(prefix)
-		} else {
-			prefix = mutedCursorStyle.Render(prefix)
 		}
 	}
 
@@ -370,24 +425,88 @@ func (m selectionModel) renderOption(index int, option Option, contentWidth int)
 		badgeText = fmt.Sprintf("%02d", index+1)
 	}
 
-	lines := []string{
-		lipgloss.JoinHorizontal(
-			lipgloss.Left,
-			prefix,
-			" ",
-			badge.Render(badgeText),
-			" ",
-			label.Render(option.Label),
-		),
-	}
-	if strings.TrimSpace(option.Description) != "" {
-		lines = append(lines, "  "+description.Width(max(20, contentWidth-8)).Render(option.Description))
+	badge := badgeStyle
+	row := rowStyle
+	if index == m.cursor {
+		badge = selectedBadgeStyle
+		row = selectedRowStyle
 	}
 
-	return card.Width(contentWidth).Render(strings.Join(lines, "\n"))
+	prefixWidth := lipgloss.Width(prefix) + 1
+	badgeWidth := lipgloss.Width(badge.Render(badgeText)) + 1
+	labelWidth := max(4, width-prefixWidth-badgeWidth)
+	label := ansi.Truncate(option.Label, labelWidth, "…")
+
+	line := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		prefix,
+		" ",
+		badge.Render(badgeText),
+		" ",
+		label,
+	)
+	return row.Width(width).Render(line)
 }
 
-func (m selectionModel) renderFooter() string {
+func (m selectionModel) renderDetails(width, height int) string {
+	innerWidth := max(8, width-detailPanelStyle.GetHorizontalFrameSize())
+	visibleRows := max(1, height-detailPanelStyle.GetVerticalFrameSize())
+
+	lines := m.detailLines(innerWidth)
+	lines = clipLines(lines, visibleRows)
+	if len(lines) == 0 {
+		lines = []string{mutedTextStyle.Render(m.catalog.Msg("这里会显示当前动作的详情。", "Current action details appear here."))}
+	}
+
+	content := strings.Join(lines, "\n")
+	return lipgloss.NewStyle().Width(width).Height(height).Render(detailPanelStyle.Width(innerWidth).Render(content))
+}
+
+func (m selectionModel) detailLines(width int) []string {
+	if len(m.options) == 0 {
+		return nil
+	}
+
+	current := m.options[m.cursor]
+	lines := make([]string, 0, 12)
+
+	for _, panel := range m.panels {
+		if strings.TrimSpace(panel.Title) == "" && len(panel.Lines) == 0 {
+			continue
+		}
+		lines = append(lines, "")
+		if strings.TrimSpace(panel.Title) != "" {
+			lines = append(lines, sectionTitleStyle.Render(panel.Title))
+		}
+		for _, line := range panel.Lines {
+			if strings.TrimSpace(line) == "" {
+				lines = append(lines, "")
+				continue
+			}
+			lines = append(lines, primaryTextStyle.Render(ansi.Truncate(line, width, "…")))
+		}
+	}
+
+	if len(lines) > 0 {
+		lines = append(lines, "")
+	}
+	lines = append(lines,
+		sectionTitleStyle.Render(m.catalog.Msg("当前动作", "Current action")),
+		lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			selectedBadgeStyle.Render(defaultBadge(current, m.cursor)),
+			" ",
+			primaryTextStyle.Bold(true).Render(current.Label),
+		),
+	)
+	if strings.TrimSpace(current.Description) != "" {
+		lines = append(lines, wrapStyledLine(mutedTextStyle, width, current.Description)...)
+	}
+
+	return lines
+}
+
+func (m selectionModel) renderFooter(contentWidth int) string {
 	controls := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		hintBadgeStyle.Render("↑/↓"),
@@ -396,12 +515,14 @@ func (m selectionModel) renderFooter() string {
 		" ",
 		hintBadgeStyle.Render("Esc"),
 	)
-
-	lines := []string{
-		footerSummaryStyle.Render(m.currentSummary()),
-		lipgloss.JoinHorizontal(lipgloss.Left, controls, "  ", hintStyle.Render(m.hintText())),
+	if m.multi {
+		controls = lipgloss.JoinHorizontal(lipgloss.Left, controls, " ", hintBadgeStyle.Render("Space"))
 	}
-	return strings.Join(lines, "\n")
+
+	lines := []string{}
+	lines = append(lines, wrapStyledLine(primaryTextStyle, contentWidth, m.currentSummary())...)
+	lines = append(lines, wrapStyledLine(mutedTextStyle, contentWidth, lipgloss.JoinHorizontal(lipgloss.Left, controls, "  ", m.hintText()))...)
+	return footerStyle.Width(contentWidth).Render(strings.Join(lines, "\n"))
 }
 
 func (m selectionModel) hintText() string {
@@ -435,16 +556,102 @@ func (m selectionModel) currentSummary() string {
 	}
 
 	if strings.TrimSpace(current.Description) == "" {
-		return fmt.Sprintf(
-			m.catalog.Msg("当前动作: %s", "Current action: %s"),
-			current.Label,
-		)
+		return fmt.Sprintf(m.catalog.Msg("当前动作: %s", "Current action: %s"), current.Label)
 	}
-	return fmt.Sprintf(
-		m.catalog.Msg("当前动作: %s | %s", "Current action: %s | %s"),
-		current.Label,
-		current.Description,
-	)
+	return fmt.Sprintf(m.catalog.Msg("当前动作: %s | %s", "Current action: %s | %s"), current.Label, current.Description)
+}
+
+func (m selectionModel) visibleRange(visibleRows int) (int, int) {
+	if visibleRows <= 0 || len(m.options) == 0 {
+		return 0, 0
+	}
+	if len(m.options) <= visibleRows {
+		return 0, len(m.options)
+	}
+
+	start := m.cursor - visibleRows/2
+	if start < 0 {
+		start = 0
+	}
+	end := start + visibleRows
+	if end > len(m.options) {
+		end = len(m.options)
+		start = end - visibleRows
+	}
+	return start, end
+}
+
+func (m selectionModel) contentWidth() int {
+	if m.width <= 0 {
+		return 96
+	}
+
+	width := m.width - 4
+	switch {
+	case width > 112:
+		return 112
+	case width >= 24:
+		return width
+	case m.width > 4:
+		return m.width - 2
+	default:
+		return m.width
+	}
+}
+
+func (m selectionModel) contentHeight() int {
+	if m.height <= 0 {
+		return 24
+	}
+	if m.height > 3 {
+		return m.height - 1
+	}
+	return m.height
+}
+
+func wrapStyledLine(style lipgloss.Style, width int, text string) []string {
+	if width <= 0 {
+		return nil
+	}
+	rendered := style.Width(width).MaxWidth(width).Render(text)
+	return strings.Split(rendered, "\n")
+}
+
+func clipLines(lines []string, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	if len(lines) <= limit {
+		return lines
+	}
+	clipped := append([]string{}, lines[:limit]...)
+	clipped[limit-1] = mutedTextStyle.Render("…")
+	return clipped
+}
+
+func clampBlockHeight(content string, height int) string {
+	if height <= 0 {
+		return ""
+	}
+	return lipgloss.NewStyle().Height(height).MaxHeight(height).Render(content)
+}
+
+func cropBlock(content string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) <= limit {
+		return content
+	}
+	return strings.Join(lines[:limit], "\n")
+}
+
+func defaultBadge(option Option, index int) string {
+	if strings.TrimSpace(option.Badge) != "" {
+		return option.Badge
+	}
+	return fmt.Sprintf("%02d", index+1)
 }
 
 func selectedValues(options []Option) []string {
@@ -467,20 +674,11 @@ func selectedCount(options []Option) int {
 	return count
 }
 
-func (m selectionModel) contentWidth() int {
-	if m.width <= 0 {
-		return 84
+func min(a, b int) int {
+	if a < b {
+		return a
 	}
-
-	width := m.width - 10
-	switch {
-	case width < 58:
-		return 58
-	case width > 94:
-		return 94
-	default:
-		return width
-	}
+	return b
 }
 
 func max(a, b int) int {

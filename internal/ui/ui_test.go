@@ -122,3 +122,75 @@ func TestMultiSelectSummaryPromptsForSelection(t *testing.T) {
 		t.Fatalf("expected summary to guide selection, got %q", summary)
 	}
 }
+
+func TestMouseWheelMovesCursor(t *testing.T) {
+	model := selectionModel{
+		catalog: i18n.NewCatalog(),
+		options: []Option{
+			{Value: "install", Label: "install"},
+			{Value: "status", Label: "status"},
+			{Value: "clean", Label: "clean"},
+		},
+		cursor: 1,
+	}
+
+	next, _ := model.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Type: tea.MouseWheelDown})
+	model = next.(selectionModel)
+	if model.cursor != 2 {
+		t.Fatalf("expected cursor to move down to 2, got %d", model.cursor)
+	}
+
+	next, _ = model.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress, Type: tea.MouseWheelUp})
+	model = next.(selectionModel)
+	if model.cursor != 1 {
+		t.Fatalf("expected cursor to move up to 1, got %d", model.cursor)
+	}
+}
+
+func TestViewKeepsContentInsideAvailableHeight(t *testing.T) {
+	model := selectionModel{
+		catalog:  i18n.NewCatalog(),
+		title:    "AgentFlow",
+		subtitle: "Compact layout should not overflow when the terminal is short.",
+		options: []Option{
+			{Value: "install", Label: "Install", Badge: "SETUP", Description: "Write AgentFlow into CLI configs."},
+			{Value: "uninstall", Label: "Uninstall", Badge: "REMOVE", Description: "Remove AgentFlow from detected CLIs."},
+			{Value: "update", Label: "Update", Badge: "UPDATE", Description: "Replace the current Go binary."},
+			{Value: "status", Label: "Status", Badge: "STATUS", Description: "Inspect CLI status and executable path."},
+			{Value: "clean", Label: "Clean", Badge: "CLEAN", Description: "Remove caches and temporary files."},
+			{Value: "exit", Label: "Exit", Badge: "EXIT", Description: "Leave the menu."},
+		},
+		panels: []Panel{
+			{Title: "Environment", Lines: []string{"Executable: /tmp/agentflow", "CLI status:", "  [OK] codex"}},
+		},
+		width:  90,
+		height: 12,
+	}
+
+	view := model.View()
+	if lines := strings.Count(view, "\n") + 1; lines > model.height {
+		t.Fatalf("expected view height <= %d, got %d", model.height, lines)
+	}
+}
+
+func TestViewRendersPanelsInsideDetailsPane(t *testing.T) {
+	model := selectionModel{
+		catalog: i18n.NewCatalog(),
+		title:   "AgentFlow",
+		options: []Option{
+			{Value: "status", Label: "Status", Badge: "STATUS", Description: "Inspect status."},
+		},
+		panels: []Panel{
+			{Title: "Environment", Lines: []string{"Executable: /tmp/agentflow", "CLI status:", "  [OK] codex"}},
+		},
+		width:  100,
+		height: 18,
+	}
+
+	view := model.View()
+	for _, needle := range []string{"Environment", "Executable: /tmp/agentflow", "CLI status:", "[OK] codex"} {
+		if !strings.Contains(view, needle) {
+			t.Fatalf("expected %q in view, got %q", needle, view)
+		}
+	}
+}

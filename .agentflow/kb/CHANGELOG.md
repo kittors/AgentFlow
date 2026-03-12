@@ -6,6 +6,8 @@
 - 在 `internal/config` 增加 marker、target、备份/rename-aside 命名辅助
 - 在 `internal/install` 增加安装器骨架、安全写入、备份与目录复制逻辑
 - 新增基础测试，`go test ./...` 通过
-- Release 工作流改为 `main` push 自动发布 continuous release
+- Release 工作流改为 `main` push 自动发布 continuous release，并阻止旧 run rerun 后覆盖最新 `continuous`
 - `internal/update` 现在优先读取 release `name` 作为版本号，兼容固定 `continuous` tag
 - README / README_CN 已补充“`main` 自动 continuous release”说明
+- 交互式 TUI 主菜单改为“动作列表 + 内嵌状态/结果面板”，`status` 等信息不再打印到 TUI 外部
+- 选择器现在会按终端高度裁剪显示，并启用鼠标滚轮事件接管，避免界面溢出和滚轮触发终端外层滚动

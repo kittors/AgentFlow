@@ -93,8 +93,9 @@ func (a *App) runInteractiveMainMenu() int {
 		return code
 	}
 
+	var notice *ui.Panel
 	for {
-		action, canceled, err := ui.RunMainMenu(a.Catalog, a.Version, a.Stdout)
+		action, canceled, err := ui.RunMainMenu(a.Catalog, a.Version, a.mainMenuPanels(notice), a.Stdout)
 		if err != nil {
 			fmt.Fprintln(a.Stderr, err.Error())
 			return 1
@@ -103,19 +104,24 @@ func (a *App) runInteractiveMainMenu() int {
 			return 0
 		}
 
+		notice = nil
 		switch action {
 		case ui.ActionInstall:
-			_ = a.runInstall(nil)
+			panel, _ := a.runInteractiveInstallPanel()
+			notice = nonEmptyPanel(panel)
 		case ui.ActionUninstall:
-			_ = a.runUninstall(nil)
+			panel, _ := a.runInteractiveUninstallPanel()
+			notice = nonEmptyPanel(panel)
 		case ui.ActionUpdate:
-			_ = a.runUpdate(nil)
+			panel := a.updatePanel(nil)
+			notice = nonEmptyPanel(panel)
 		case ui.ActionStatus:
-			a.printStatus()
+			panel := a.statusPanel()
+			panel.Title = a.Catalog.Msg("当前状态", "Current status")
+			notice = nonEmptyPanel(panel)
 		case ui.ActionClean:
-			if err := a.runClean(); err != nil {
-				fmt.Fprintln(a.Stderr, err.Error())
-			}
+			panel := a.cleanPanel()
+			notice = nonEmptyPanel(panel)
 		default:
 			return 0
 		}
@@ -236,19 +242,26 @@ func (a *App) runUninstall(args []string) int {
 }
 
 func (a *App) runInteractiveInstall() int {
+	panel, code := a.runInteractiveInstallPanel()
+	a.printPanel(panel)
+	return code
+}
+
+func (a *App) runInteractiveInstallPanel() (ui.Panel, int) {
 	detected := a.Installer.DetectInstalledCLIs()
 	if len(detected) == 0 {
-		fmt.Fprintln(a.Stdout, a.Catalog.Msg("未检测到任何已安装的 CLI。", "No installed CLIs detected."))
-		return 0
+		return ui.Panel{
+			Title: a.Catalog.Msg("安装结果", "Install result"),
+			Lines: []string{a.Catalog.Msg("未检测到任何已安装的 CLI。", "No installed CLIs detected.")},
+		}, 0
 	}
 
 	profile, canceled, err := ui.SelectProfile(a.Catalog, a.Stdout)
 	if err != nil {
-		fmt.Fprintln(a.Stderr, err.Error())
-		return 1
+		return errorPanel(a.Catalog.Msg("安装失败", "Install failed"), err), 1
 	}
 	if canceled {
-		return 0
+		return ui.Panel{}, 0
 	}
 
 	installed := sliceToSet(a.Installer.DetectInstalledTargets())
@@ -274,33 +287,53 @@ func (a *App) runInteractiveInstall() int {
 		options,
 	)
 	if err != nil {
-		fmt.Fprintln(a.Stderr, err.Error())
-		return 1
+		return errorPanel(a.Catalog.Msg("安装失败", "Install failed"), err), 1
 	}
 	if canceled {
-		return 0
+		return ui.Panel{}, 0
 	}
 
 	success := 0
+	lines := []string{
+		fmt.Sprintf(a.Catalog.Msg("Profile: %s", "Profile: %s"), profile),
+	}
 	for _, name := range selected {
 		if err := a.Installer.Install(name, profile); err != nil {
-			fmt.Fprintln(a.Stderr, err.Error())
+			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
 			continue
 		}
 		success++
+		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), name))
 	}
-	fmt.Fprintf(a.Stdout, a.Catalog.Msg("已完成 %d/%d 个目标安装。\n", "Completed installation for %d/%d targets.\n"), success, len(selected))
+
+	lines = append([]string{
+		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个目标安装。", "Completed installation for %d/%d targets."), success, len(selected)),
+	}, lines...)
 	if success == 0 {
-		return 1
+		return ui.Panel{
+			Title: a.Catalog.Msg("安装失败", "Install failed"),
+			Lines: lines,
+		}, 1
 	}
-	return 0
+	return ui.Panel{
+		Title: a.Catalog.Msg("安装结果", "Install result"),
+		Lines: lines,
+	}, 0
 }
 
 func (a *App) runInteractiveUninstall() int {
+	panel, code := a.runInteractiveUninstallPanel()
+	a.printPanel(panel)
+	return code
+}
+
+func (a *App) runInteractiveUninstallPanel() (ui.Panel, int) {
 	installed := a.Installer.DetectInstalledTargets()
 	if len(installed) == 0 {
-		fmt.Fprintln(a.Stdout, a.Catalog.Msg("未检测到已安装的 AgentFlow。", "No AgentFlow installations found."))
-		return 0
+		return ui.Panel{
+			Title: a.Catalog.Msg("卸载结果", "Uninstall result"),
+			Lines: []string{a.Catalog.Msg("未检测到已安装的 AgentFlow。", "No AgentFlow installations found.")},
+		}, 0
 	}
 
 	options := make([]ui.Option, 0, len(installed))
@@ -321,48 +354,75 @@ func (a *App) runInteractiveUninstall() int {
 		options,
 	)
 	if err != nil {
-		fmt.Fprintln(a.Stderr, err.Error())
-		return 1
+		return errorPanel(a.Catalog.Msg("卸载失败", "Uninstall failed"), err), 1
 	}
 	if canceled {
-		return 0
+		return ui.Panel{}, 0
 	}
 
 	success := 0
+	lines := make([]string, 0, len(selected)+1)
 	for _, name := range selected {
 		if err := a.Installer.Uninstall(name); err != nil {
-			fmt.Fprintln(a.Stderr, err.Error())
+			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
 			continue
 		}
 		success++
+		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), name))
 	}
-	fmt.Fprintf(a.Stdout, a.Catalog.Msg("已完成 %d/%d 个目标卸载。\n", "Completed uninstall for %d/%d targets.\n"), success, len(selected))
+
+	lines = append([]string{
+		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个目标卸载。", "Completed uninstall for %d/%d targets."), success, len(selected)),
+	}, lines...)
 	if success == 0 {
+		return ui.Panel{
+			Title: a.Catalog.Msg("卸载失败", "Uninstall failed"),
+			Lines: lines,
+		}, 1
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("卸载结果", "Uninstall result"),
+		Lines: lines,
+	}, 0
+}
+
+func (a *App) runUpdate(args []string) int {
+	panel := a.updatePanel(args)
+	a.printPanel(panel)
+	if strings.Contains(strings.ToLower(panel.Title), "失败") || strings.Contains(strings.ToLower(panel.Title), "failed") {
 		return 1
 	}
 	return 0
 }
 
-func (a *App) runUpdate(args []string) int {
+func (a *App) updatePanel(args []string) ui.Panel {
 	branch := ""
 	if len(args) > 0 {
 		branch = args[0]
 	}
 	if branch != "" {
-		fmt.Fprintf(a.Stdout, a.Catalog.Msg("当前 Go update 不支持分支参数: %s\n", "The Go update command does not support branch arguments: %s\n"), branch)
-		return 1
+		return ui.Panel{
+			Title: a.Catalog.Msg("更新失败", "Update failed"),
+			Lines: []string{fmt.Sprintf(a.Catalog.Msg("当前 Go update 不支持分支参数: %s", "The Go update command does not support branch arguments: %s"), branch)},
+		}
 	}
 	result, err := a.Checker.SelfUpdate(a.Version)
 	if err != nil {
-		fmt.Fprintf(a.Stdout, a.Catalog.Msg("更新失败: %v\n", "Update failed: %v\n"), err)
-		return 1
+		return errorPanel(a.Catalog.Msg("更新失败", "Update failed"), err)
 	}
 	if !result.UpdateAvailable {
-		fmt.Fprintln(a.Stdout, a.Catalog.Msg("当前已是最新版本。", "Already on the latest version."))
-		return 0
+		return ui.Panel{
+			Title: a.Catalog.Msg("更新结果", "Update result"),
+			Lines: []string{a.Catalog.Msg("当前已是最新版本。", "Already on the latest version.")},
+		}
 	}
-	fmt.Fprintf(a.Stdout, a.Catalog.Msg("已更新到 v%s，请重新运行 agentflow。\n", "Updated to v%s. Restart agentflow to use the new binary.\n"), result.Latest)
-	return 0
+	return ui.Panel{
+		Title: a.Catalog.Msg("更新结果", "Update result"),
+		Lines: []string{
+			fmt.Sprintf(a.Catalog.Msg("已更新到 v%s。", "Updated to v%s."), result.Latest),
+			a.Catalog.Msg("请重新运行 agentflow，进入新版本。", "Restart agentflow to enter the new version."),
+		},
+	}
 }
 
 func (a *App) runClean() error {
@@ -376,14 +436,8 @@ func (a *App) runClean() error {
 
 func (a *App) printStatus() {
 	fmt.Fprintf(a.Stdout, "AgentFlow v%s\n", a.Version)
-	if executable, err := os.Executable(); err == nil {
-		fmt.Fprintf(a.Stdout, a.Catalog.Msg("可执行文件: %s\n", "Executable: %s\n"), executable)
-	}
-	for _, line := range a.Installer.StatusLines() {
+	for _, line := range a.statusPanel().Lines {
 		fmt.Fprintln(a.Stdout, line)
-	}
-	if result, err := a.Checker.Check(a.Version, update.Options{CacheTTLHours: 72}); err == nil && result.UpdateAvailable {
-		fmt.Fprintf(a.Stdout, a.Catalog.Msg("可更新到 v%s\n", "Update available: v%s\n"), result.Latest)
 	}
 }
 
@@ -435,4 +489,66 @@ func (a *App) printVersionCheck(showVersion bool, ttl int) {
 		fmt.Fprintf(a.Stdout, a.Catalog.Msg("  ⬆️ 新版本可用: v%s (当前 v%s)\n", "  ⬆️ Update available: v%s (current v%s)\n"), result.Latest, result.Current)
 		fmt.Fprintln(a.Stdout, a.Catalog.Msg("     运行 agentflow update 更新", "     Run: agentflow update"))
 	}
+}
+
+func (a *App) cleanPanel() ui.Panel {
+	cleaned, err := a.Installer.Clean()
+	if err != nil {
+		return errorPanel(a.Catalog.Msg("清理失败", "Clean failed"), err)
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("清理结果", "Clean result"),
+		Lines: []string{
+			fmt.Sprintf(a.Catalog.Msg("已清理 %d 个缓存目录。", "Cleaned %d cache directories."), cleaned),
+		},
+	}
+}
+
+func (a *App) statusPanel() ui.Panel {
+	lines := make([]string, 0, 10)
+	if executable, err := os.Executable(); err == nil {
+		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("可执行文件: %s", "Executable: %s"), executable))
+	}
+	lines = append(lines, "")
+	lines = append(lines, a.Installer.StatusLines()...)
+	if result, err := a.Checker.Check(a.Version, update.Options{CacheTTLHours: 72}); err == nil && result.UpdateAvailable {
+		lines = append(lines, "")
+		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("可更新到 v%s", "Update available: v%s"), result.Latest))
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("环境状态", "Environment"),
+		Lines: lines,
+	}
+}
+
+func (a *App) mainMenuPanels(notice *ui.Panel) []ui.Panel {
+	panels := make([]ui.Panel, 0, 2)
+	if notice != nil && (strings.TrimSpace(notice.Title) != "" || len(notice.Lines) > 0) {
+		panels = append(panels, *notice)
+	}
+	panels = append(panels, a.statusPanel())
+	return panels
+}
+
+func (a *App) printPanel(panel ui.Panel) {
+	if strings.TrimSpace(panel.Title) != "" {
+		fmt.Fprintln(a.Stdout, panel.Title)
+	}
+	for _, line := range panel.Lines {
+		fmt.Fprintln(a.Stdout, line)
+	}
+}
+
+func errorPanel(title string, err error) ui.Panel {
+	return ui.Panel{
+		Title: title,
+		Lines: []string{err.Error()},
+	}
+}
+
+func nonEmptyPanel(panel ui.Panel) *ui.Panel {
+	if strings.TrimSpace(panel.Title) == "" && len(panel.Lines) == 0 {
+		return nil
+	}
+	return &panel
 }

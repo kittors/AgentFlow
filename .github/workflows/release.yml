@@ -26,6 +26,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Ensure run targets current main HEAD
+        shell: bash
+        run: |
+          REMOTE_HEAD="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ -z "${REMOTE_HEAD}" ]; then
+            echo "failed to resolve origin/main head" >&2
+            exit 1
+          fi
+          if [ "${GITHUB_SHA}" != "${REMOTE_HEAD}" ]; then
+            echo "refusing to publish continuous release from stale commit ${GITHUB_SHA}; current main head is ${REMOTE_HEAD}" >&2
+            exit 1
+          fi
+
       - id: vars
         shell: bash
         run: |

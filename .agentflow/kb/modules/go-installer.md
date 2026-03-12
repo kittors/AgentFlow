@@ -12,7 +12,9 @@
 - `internal/config` 提供 marker、target 定义、备份与 rename-aside 命名规则
 - `internal/install` 提供 `Installer` / `TargetInstaller`、安全写入、备份、目录复制与最小 target 安装流程
 - GitHub Release 现已切换为 `main` 自动刷新 `continuous` release，安装脚本默认跟随最新 `main` 构建
+- Release metadata 阶段会校验当前 run 的 `GITHUB_SHA` 是否仍为 `origin/main` 头部，避免 rerun 旧任务把 continuous 回滚到旧提交
 - `internal/update` 使用 release `name` 解析版本号，避免固定 tag 影响版本比较
+- 主菜单交互结果不再直接写到终端普通缓冲区，而是通过 TUI 内部状态/结果面板展示
 
 ## 未完成
 
