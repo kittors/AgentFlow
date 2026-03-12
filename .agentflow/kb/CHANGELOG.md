@@ -8,6 +8,7 @@
 - 更新缓存现在会忽略畸形版本值 `continuous` / `unknown`，避免升级后仍误报“有新版本”
 - 排查确认用户终端可能仍先命中 `~/.local/bin/agentflow` 的旧 uv 版本；Go 二进制实际安装路径仍是 `~/.agentflow/bin/agentflow`
 - `install.sh` 现在会在用户目录内自动备份并重定向旧的 `agentflow` 入口到 `~/.agentflow/bin/agentflow`，减少安装成功后仍命中旧版 CLI 的情况
+- `internal/update` 的默认 HTTP 超时从 5 秒放宽到 2 分钟，并增加慢下载回归测试，修复网络稍慢时 `agentflow update` / TUI 更新容易超时失败的问题
 - Bubble Tea 交互入口现在显式启用 `WithInputTTY()`，把键盘和鼠标事件绑定到真实 TTY，修复部分 macOS/终端环境里菜单无法响应方向键、Enter 和滚轮的问题
 - 修复 `interactiveFlowModel.moveCursor` / `setCursor` 使用值接收者导致游标状态写回副本的问题；这正是主菜单方向键和滚轮在 macOS 上看似“完全失效”的直接根因
 

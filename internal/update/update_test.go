@@ -299,3 +299,66 @@ func TestSelfUpdateReplacesExecutableOnUnix(t *testing.T) {
 		t.Fatalf("expected executable to be replaced, got %q", string(content))
 	}
 }
+
+func TestSelfUpdateAllowsSlowDownloadWithDefaultCheckerTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("self-update replacement test is Unix-only")
+	}
+
+	assetName, err := assetNameForPlatform(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatalf("assetNameForPlatform returned error: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/latest":
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = writer.Write([]byte(`{"tag_name":"continuous","name":"1.2.4-main.abcdef2","assets":[{"name":"` + assetName + `","browser_download_url":"http://` + request.Host + `/download"}]}`))
+		case "/download":
+			time.Sleep(6 * time.Second)
+			_, _ = writer.Write([]byte("slow-binary"))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	originalAPI := releaseAPIOverride
+	originalExecutablePath := executablePath
+	originalEvalSymlinks := evalSymlinks
+	t.Cleanup(func() {
+		releaseAPIOverride = originalAPI
+		executablePath = originalExecutablePath
+		evalSymlinks = originalEvalSymlinks
+	})
+
+	executable := filepath.Join(t.TempDir(), "agentflow")
+	if err := os.WriteFile(executable, []byte("old-binary"), 0o755); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	releaseAPIOverride = server.URL + "/latest"
+	executablePath = func() (string, error) { return executable, nil }
+	evalSymlinks = func(path string) (string, error) { return path, nil }
+
+	checker := NewChecker()
+	checker.CacheFile = filepath.Join(t.TempDir(), "version_cache.json")
+	checker.Now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+
+	result, err := checker.SelfUpdate("1.0.0")
+	if err != nil {
+		t.Fatalf("SelfUpdate returned error after slow download: %v", err)
+	}
+	if !result.UpdateAvailable || result.Latest != "1.2.4-main.abcdef2" {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+
+	content, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	if string(content) != "slow-binary" {
+		t.Fatalf("expected executable to be replaced after slow download, got %q", string(content))
+	}
+}

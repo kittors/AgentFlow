@@ -22,6 +22,8 @@ var (
 	evalSymlinks       = filepath.EvalSymlinks
 )
 
+const defaultHTTPTimeout = 2 * time.Minute
+
 type Options struct {
 	Force         bool
 	CacheTTLHours int
@@ -58,7 +60,7 @@ type Checker struct {
 func NewChecker() *Checker {
 	homeDir, _ := os.UserHomeDir()
 	return &Checker{
-		Client: &http.Client{Timeout: 5 * time.Second},
+		Client: &http.Client{Timeout: defaultHTTPTimeout},
 		Now:    time.Now,
 		CacheFile: filepath.Join(
 			homeDir,
