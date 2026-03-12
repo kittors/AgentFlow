@@ -54,7 +54,7 @@ Windows PowerShell：
 irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
-安装脚本下载的是最新已发布的 release 二进制。如果你本机还有旧的 `uv` / Python 版 `agentflow` 排在 `PATH` 前面，请重开终端，或者执行 `export PATH="$HOME/.agentflow/bin:$PATH" && hash -r`，然后用 `which agentflow` 确认当前命中的路径。
+安装脚本下载的是最新已发布的 release 二进制。现在只要 push 到 `main`，GitHub 就会自动刷新一个 continuous release，所以 `curl | bash`、`npx agentflow` 和 `agentflow update` 都会跟随最新的 `main` 构建。如果你本机还有旧的 `uv` / Python 版 `agentflow` 排在 `PATH` 前面，请重开终端，或者执行 `export PATH="$HOME/.agentflow/bin:$PATH" && hash -r`，然后用 `which agentflow` 确认当前命中的路径。
 
 ### `npx` 启动
 

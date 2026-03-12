@@ -45,6 +45,7 @@ type releaseAsset struct {
 
 type releasePayload struct {
 	TagName string         `json:"tag_name"`
+	Name    string         `json:"name"`
 	Assets  []releaseAsset `json:"assets"`
 }
 
@@ -94,7 +95,7 @@ func (c *Checker) Check(current string, options Options) (Result, error) {
 	if err != nil {
 		return result, err
 	}
-	result.Latest = normalizeVersion(release.TagName)
+	result.Latest = releaseVersion(release)
 	result.UpdateAvailable = shouldUpdate(current, result.Latest)
 	_ = c.writeCache(cacheEntry{Latest: result.Latest, Timestamp: c.Now().Unix()})
 	return result, nil
@@ -109,7 +110,7 @@ func (c *Checker) SelfUpdate(current string) (Result, error) {
 
 	result := Result{
 		Current: current,
-		Latest:  normalizeVersion(release.TagName),
+		Latest:  releaseVersion(release),
 	}
 	result.UpdateAvailable = shouldUpdate(current, result.Latest)
 	if !result.UpdateAvailable {
@@ -177,6 +178,20 @@ func (c *Checker) fetchLatestRelease() (releasePayload, error) {
 		return releasePayload{}, err
 	}
 	return payload, nil
+}
+
+func releaseVersion(release releasePayload) string {
+	if strings.TrimSpace(release.Name) != "" {
+		if version := normalizeVersion(release.Name); version != "" && version != "unknown" {
+			return version
+		}
+	}
+	if strings.TrimSpace(release.TagName) != "" {
+		if version := normalizeVersion(release.TagName); version != "" && version != "unknown" {
+			return version
+		}
+	}
+	return "unknown"
 }
 
 func (c *Checker) downloadAndReplace(downloadURL, destination string) error {
@@ -285,7 +300,19 @@ func shouldUpdate(current, latest string) bool {
 				return false
 			}
 		}
-		return len(latestParts) > len(currentParts)
+		if len(latestParts) > len(currentParts) {
+			return true
+		}
+		if len(latestParts) < len(currentParts) {
+			return false
+		}
+		if current == latest {
+			return false
+		}
+		if strings.HasPrefix(current, "dev") {
+			return false
+		}
+		return true
 	}
 
 	if strings.HasPrefix(current, "dev") {
@@ -305,11 +332,21 @@ func parseReleaseVersion(version string) ([]int, bool) {
 		if part == "" {
 			return nil, false
 		}
-		value, err := strconv.Atoi(part)
+		limit := 0
+		for limit < len(part) && part[limit] >= '0' && part[limit] <= '9' {
+			limit++
+		}
+		if limit == 0 {
+			return nil, false
+		}
+		value, err := strconv.Atoi(part[:limit])
 		if err != nil {
 			return nil, false
 		}
 		values = append(values, value)
+		if limit != len(part) {
+			break
+		}
 	}
 	return values, true
 }

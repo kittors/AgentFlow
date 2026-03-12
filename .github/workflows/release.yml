@@ -2,14 +2,50 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-main
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.vars.outputs.version }}
+      commit: ${{ steps.vars.outputs.commit }}
+      build_date: ${{ steps.vars.outputs.build_date }}
+      release_tag: ${{ steps.vars.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: vars
+        shell: bash
+        run: |
+          VERSION_BASE="$(grep -m1 '"version"' package.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+          if [ -z "${VERSION_BASE}" ]; then
+            echo "failed to resolve version from package.json" >&2
+            exit 1
+          fi
+
+          COMMIT="${GITHUB_SHA::7}"
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          VERSION="${VERSION_BASE}-main.${COMMIT}"
+
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "commit=${COMMIT}" >> "${GITHUB_OUTPUT}"
+          echo "build_date=${BUILD_DATE}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=continuous" >> "${GITHUB_OUTPUT}"
+
   build:
+    needs: [metadata]
     strategy:
       fail-fast: false
       matrix:
@@ -49,10 +85,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          VERSION="${GITHUB_REF_NAME#v}"
-          COMMIT="${GITHUB_SHA::7}"
-          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -ldflags "-s -w -X github.com/kittors/AgentFlow/internal/buildinfo.Version=${VERSION} -X github.com/kittors/AgentFlow/internal/buildinfo.Commit=${COMMIT} -X github.com/kittors/AgentFlow/internal/buildinfo.BuildDate=${BUILD_DATE}" -o dist/${{ matrix.asset_name }} ./cmd/agentflow
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -ldflags "-s -w -X github.com/kittors/AgentFlow/internal/buildinfo.Version=${{ needs.metadata.outputs.version }} -X github.com/kittors/AgentFlow/internal/buildinfo.Commit=${{ needs.metadata.outputs.commit }} -X github.com/kittors/AgentFlow/internal/buildinfo.BuildDate=${{ needs.metadata.outputs.build_date }}" -o dist/${{ matrix.asset_name }} ./cmd/agentflow
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -61,7 +94,7 @@ jobs:
           path: dist/${{ matrix.asset_name }}
 
   test-install:
-    needs: [build]
+    needs: [metadata, build]
     strategy:
       fail-fast: false
       matrix:
@@ -114,7 +147,7 @@ jobs:
           Write-Host "install.ps1 syntax check passed"
 
   release:
-    needs: [build, test-install]
+    needs: [metadata, build, test-install]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -128,8 +161,27 @@ jobs:
           find release-assets -type f -maxdepth 2 -exec cp {} final-assets/ \;
           ls -la final-assets
 
+      - name: Delete previous continuous release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "${{ needs.metadata.outputs.release_tag }}" --cleanup-tag -y || true
+
+      - name: Delete previous continuous tag ref
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/${{ needs.metadata.outputs.release_tag }}" || true
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: final-assets/*
-          generate_release_notes: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ needs.metadata.outputs.release_tag }}" final-assets/* \
+            --target "${GITHUB_SHA}" \
+            --title "${{ needs.metadata.outputs.version }}" \
+            --notes "Continuous release from main commit ${{ needs.metadata.outputs.commit }}" \
+            --latest

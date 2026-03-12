@@ -49,7 +49,7 @@ func TestCheckUsesCacheAndTrimsVersionPrefix(t *testing.T) {
 func TestCheckDoesNotOfferDowngrade(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"tag_name":"v1.0.1"}`))
+		_, _ = writer.Write([]byte(`{"tag_name":"continuous","name":"1.0.1-main.deadbee"}`))
 	}))
 	defer server.Close()
 
@@ -67,6 +67,42 @@ func TestCheckDoesNotOfferDowngrade(t *testing.T) {
 	}
 	if result.UpdateAvailable {
 		t.Fatalf("expected no downgrade suggestion, got %#v", result)
+	}
+}
+
+func TestCheckPrefersReleaseNameForContinuousRelease(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"tag_name":"continuous","name":"1.0.3-main.abcdef1"}`))
+	}))
+	defer server.Close()
+
+	checker := NewChecker()
+	checker.Client = server.Client()
+	checker.CacheFile = filepath.Join(t.TempDir(), "version_cache.json")
+
+	originalAPI := releaseAPIOverride
+	releaseAPIOverride = server.URL
+	defer func() { releaseAPIOverride = originalAPI }()
+
+	result, err := checker.Check("1.0.3", Options{Force: true, CacheTTLHours: 72})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if !result.UpdateAvailable {
+		t.Fatalf("expected continuous release to be treated as an update, got %#v", result)
+	}
+	if result.Latest != "1.0.3-main.abcdef1" {
+		t.Fatalf("expected release name to be used as latest version, got %#v", result)
+	}
+}
+
+func TestShouldUpdateHandlesEqualCoreVersionWithDifferentMainBuild(t *testing.T) {
+	if !shouldUpdate("1.0.3-main.aaaaaaa", "1.0.3-main.bbbbbbb") {
+		t.Fatal("expected different main builds with same core version to offer an update")
+	}
+	if shouldUpdate("1.1.0", "1.0.3-main.bbbbbbb") {
+		t.Fatal("expected newer local stable version not to downgrade to older continuous release")
 	}
 }
 
@@ -106,7 +142,7 @@ func TestSelfUpdateReplacesExecutableOnUnix(t *testing.T) {
 		switch request.URL.Path {
 		case "/latest":
 			writer.Header().Set("Content-Type", "application/json")
-			_, _ = writer.Write([]byte(`{"tag_name":"v1.2.3","assets":[{"name":"` + assetName + `","browser_download_url":"http://` + request.Host + `/download"}]}`))
+			_, _ = writer.Write([]byte(`{"tag_name":"continuous","name":"1.2.3-main.abcdef1","assets":[{"name":"` + assetName + `","browser_download_url":"http://` + request.Host + `/download"}]}`))
 		case "/download":
 			_, _ = writer.Write([]byte("new-binary"))
 		default:
@@ -142,7 +178,7 @@ func TestSelfUpdateReplacesExecutableOnUnix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SelfUpdate returned error: %v", err)
 	}
-	if !result.UpdateAvailable || result.Latest != "1.2.3" {
+	if !result.UpdateAvailable || result.Latest != "1.2.3-main.abcdef1" {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 
