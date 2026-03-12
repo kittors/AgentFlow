@@ -6,23 +6,24 @@
 
 ```yaml
 L0 — 用户记忆（全局）:
-  位置: {AGENTFLOW_ROOT}/user/profile.md
+  位置: ~/.agentflow/user/profile.md
   内容: 用户偏好、常用技术栈、沟通风格、全局规则
   生命周期: 跨项目持久化
   更新时机: 用户显式修改 或 ~memory set 命令
 
 L1 — 项目知识库（项目级）:
-  位置: {KB_ROOT}/ (通过 KnowledgeService 管理)
+  位置: .agentflow/kb/ (通过 KnowledgeService 管理)
   内容: 项目结构、模块文档、架构决策、编码规范
-  生命周期: 项目级持久化
+  生命周期: 项目级持久化（跨会话共享）
   更新时机: ~init, DEVELOP 完成后 KB 同步
   AgentFlow 增强: GRAPH_MODE=1 时使用知识图谱存储
 
-L2 — 会话摘要（会话级）:
-  位置: {KB_ROOT}/sessions/{session_id}.md 或 {AGENTFLOW_ROOT}/user/sessions/
-  内容: 本次会话的关键决策、进度、上下文
+L2 — 会话记录（会话级）:
+  位置: .agentflow/sessions/
+  内容: 本次会话的任务进度、关键决策、遇到的问题、上下文快照
   生命周期: 会话结束时自动保存
   更新时机: 阶段切换时自动保存快照
+  注意: 会话数据不在 kb/ 下，因为是会话级非共享数据
 ```
 
 ## 操作协议
@@ -30,25 +31,34 @@ L2 — 会话摘要（会话级）:
 ```yaml
 会话启动:
   1. 加载 L0 profile.md（如存在）
-  2. 加载最近1个 L2 会话摘要（如存在且相关）
+  2. 加载最近 1 个 L2 会话摘要（如存在且相关）
+     命令: python -m agentflow.scripts.session_manager
+     或手动读取 .agentflow/sessions/ 下最新的 .md 文件
   3. L1 按需通过 KnowledgeService 加载
 
-会话结束:
+阶段切换时自动保存快照（MUST）:
+  触发条件: CURRENT_STAGE 发生变化时（如 DESIGN → DEVELOP）
+  保存内容:
+    - 当前阶段: {CURRENT_STAGE}
+    - 任务进度: {completed}/{total}
+    - 关键上下文: 方案选择、EHRB 标记等
+  保存位置: .agentflow/sessions/{YYYYMMDD_HHMMSS}_snap.md
+  命令: python -m agentflow.scripts.session_manager
+  失败降级: 手动创建快照文件
+
+会话结束（MUST — 不可跳过）:
   1. 生成会话摘要:
-     - 执行的任务
+     - 执行的任务列表
      - 关键决策
      - 遇到的问题和解决方案
+     - 修改的文件清单
      - 未完成的事项
-  2. 保存到 L2 sessions/
+  2. 保存到 .agentflow/sessions/{YYYYMMDD_HHMMSS}.md
+  3. 验证: 确认文件已创建且非空
 
 L0 更新 (~memory set <key> <value>):
   - 更新 profile.md 中对应字段
   - 立即生效
-
-L2 快照（阶段切换时）:
-  - 当前阶段: {CURRENT_STAGE}
-  - 任务进度: {completed}/{total}
-  - 关键上下文: 方案选择、EHRB 标记等
 ```
 
 ## 会话摘要模板
@@ -56,7 +66,7 @@ L2 快照（阶段切换时）:
 ```markdown
 # Session: {session_id}
 Date: {date}
-Duration: {duration}
+Stage: {current_stage}
 
 ## Tasks
 - {task_list}
@@ -67,6 +77,20 @@ Duration: {duration}
 ## Issues
 - {issue_list}
 
+## Files Modified
+- {file_list}
+
 ## Next Steps
 - {next_steps}
+```
+
+## 路径规范（CRITICAL — 严格遵守）
+
+```yaml
+会话数据: .agentflow/sessions/           # 会话级，不在 kb/ 下
+知识库:   .agentflow/kb/                 # 项目级，跨会话共享
+全局记忆: ~/.agentflow/user/             # 用户级，跨项目共享
+
+禁止: 在 .agentflow/kb/sessions/ 下存放会话数据
+原因: sessions 是会话级临时数据，不属于项目知识库
 ```

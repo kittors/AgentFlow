@@ -18,16 +18,24 @@ class TestJSONConfigs:
         assert f.exists(), "claude_hooks.json missing"
         data = json.loads(f.read_text())
         assert "hooks" in data
-        assert isinstance(data["hooks"], list)
+        # Claude Code uses record-based format: hooks is a dict keyed by event type
+        assert isinstance(data["hooks"], dict)
         assert len(data["hooks"]) > 0
 
     def test_claude_hooks_types(self):
         f = AGENTFLOW_DIR / "hooks" / "claude_hooks.json"
         data = json.loads(f.read_text())
-        for hook in data["hooks"]:
-            assert "type" in hook
-            assert "command" in hook
-            assert "description" in hook
+        # Each event type maps to a list of matcher groups
+        for event_type, groups in data["hooks"].items():
+            assert isinstance(event_type, str)
+            assert isinstance(groups, list)
+            for group in groups:
+                assert "matcher" in group
+                assert "hooks" in group
+                for hook in group["hooks"]:
+                    assert "type" in hook
+                    assert "command" in hook
+                    assert "description" in hook
 
 
 # ── TOML configs ──────────────────────────────────────────────────────────────
@@ -48,8 +56,10 @@ class TestTOMLConfigs:
     def test_codex_hooks_valid_toml(self):
         f = AGENTFLOW_DIR / "hooks" / "codex_hooks.toml"
         assert f.exists(), "codex_hooks.toml missing"
-        data = self.tomllib.loads(f.read_text())
-        assert "notify" in data
+        content = f.read_text()
+        # Now a reference-only file (Codex has no hooks API), verify it's non-empty
+        assert len(content) > 20
+        assert "session_manager" in content or "kb_sync" in content
 
     def test_reviewer_toml(self):
         f = AGENTFLOW_DIR / "agents" / "reviewer.toml"

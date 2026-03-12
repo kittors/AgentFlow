@@ -14,12 +14,26 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Write|Edit|MultiEdit|Create",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m agentflow.scripts.kb_sync 2>/dev/null || true",
+            "description": "agentflow-kb-sync",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'AgentFlow progress recorded'",
-            "description": "agentflow-progress-snapshot"
+            "command": "python -m agentflow.scripts.session_manager 2>/dev/null || true",
+            "description": "agentflow-session-save",
+            "timeout": 10000
           }
         ]
       }
@@ -30,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agentflow --check-update --silent",
+            "command": "agentflow --check-update --silent 2>/dev/null || true",
             "description": "agentflow-update-check"
           }
         ]

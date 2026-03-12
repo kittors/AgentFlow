@@ -30,6 +30,46 @@
   🔄 下一步: ~exec 执行此方案 | ~plan show {id} 查看详情
 ```
 
+<file_persistence_protocol>
+
+## 文件持久化协议（CRITICAL — 违反此协议等于任务失败）
+
+> **核心原则**: 方案必须先写入文件，后输出摘要。绝不能只在对话中输出方案而不落盘。
+
+### 强制执行步骤
+
+```yaml
+步骤 4a: 创建方案包目录
+  命令: mkdir -p .agentflow/kb/plan/YYYYMMDDHHMM_<feature>/
+
+步骤 4b: 写入 proposal.md
+  - 使用文件写入工具将方案内容写入 proposal.md
+  - 内容包含: 方案摘要、技术选型、模块划分、接口定义、文件变更清单
+
+步骤 4c: 写入 tasks.md
+  - 使用文件写入工具将任务清单写入 tasks.md
+  - 格式必须遵循下方 Checklist 格式规范
+
+步骤 4d: 验证文件存在（MUST）
+  - 使用文件读取工具或 ls 命令确认两个文件都已创建
+  - 如果文件不存在，重新执行步骤 4b-4c
+  - 在输出中附带文件路径作为证据
+```
+
+### 禁止行为
+
+```yaml
+NEVER:
+  - 在对话中输出完整方案但不写入文件
+  - 用"方案目前在对话中"作为交付物
+  - 跳过步骤 4d 的验证
+  - 在步骤 4 完成前就输出"DESIGN ✅"
+
+违反后果: 不满足 ~plan 的完成标准，任务视为失败
+```
+
+</file_persistence_protocol>
+
 ## ~plan list
 
 ```yaml

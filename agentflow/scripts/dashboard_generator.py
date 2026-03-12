@@ -98,7 +98,7 @@ def generate_dashboard(project_root: Path) -> Path:
     """
     kb_root = project_root / ".agentflow" / "kb"
     modules_dir = kb_root / "modules"
-    sessions_dir = kb_root / "sessions"
+    sessions_dir = kb_root.parent / "sessions"  # .agentflow/sessions/ (not under kb/)
 
     # Gather metrics
     module_files = list(modules_dir.glob("*.md")) if modules_dir.is_dir() else []

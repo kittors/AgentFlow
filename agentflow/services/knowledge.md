@@ -16,8 +16,6 @@
 │   └── YYYYMMDDHHMM_<feature>/
 │       ├── proposal.md             # 方案文档
 │       └── tasks.md                # 任务清单
-├── sessions/
-│   └── {session_id}.md             # 会话摘要
 ├── graph/                          # AgentFlow 增强
 │   ├── nodes.json                  # 知识图谱节点
 │   └── edges.json                  # 知识图谱边

@@ -1,3 +1,13 @@
 # Codex CLI hooks for AgentFlow
-[notify]
-command = "agentflow --check-update --silent"
+# NOTE: Codex CLI does not have a hooks API like Claude Code.
+# These are reference commands that the AI agent should execute
+# via the prompt rules in AGENTS.md, not via config.toml injection.
+#
+# KB sync (after file changes):
+#   python -m agentflow.scripts.kb_sync
+#
+# Session save (on session end):
+#   python -m agentflow.scripts.session_manager
+#
+# Update check:
+#   agentflow --check-update --silent

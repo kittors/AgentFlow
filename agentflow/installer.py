@@ -313,12 +313,11 @@ def _deploy_hooks(target: str, cli_dir: Path) -> bool:
             print(msg(f"  ✅ Hooks 已部署 ({deployed_count} 个)", f"  ✅ Hooks deployed ({deployed_count})"))
 
     elif target == "codex":
-        hooks_src = hooks_dir / "codex_hooks.toml"
-        if hooks_src.exists():
-            config_file = cli_dir / "config.toml"
-            if not config_file.exists():
-                shutil.copy2(hooks_src, config_file)
-            print(msg("  ✅ Hooks 已部署", "  ✅ Hooks deployed"))
+        # Codex CLI does not have a hooks API like Claude Code.
+        # The hook commands are documented in codex_hooks.toml as reference
+        # and enforced via prompt rules in AGENTS.md instead.
+        # The toml file is already deployed as part of _deploy_module_dir.
+        pass
 
     return True
 

@@ -66,7 +66,8 @@ class TestGenerateDashboard:
 
     def test_with_sessions(self, tmp_path: Path):
         kb = tmp_path / ".agentflow" / "kb"
-        sessions = kb / "sessions"
+        kb.mkdir(parents=True)
+        sessions = tmp_path / ".agentflow" / "sessions"  # sessions at project root, NOT under kb/
         sessions.mkdir(parents=True)
         (sessions / "20260227_120000.md").write_text("# Session\n")
 

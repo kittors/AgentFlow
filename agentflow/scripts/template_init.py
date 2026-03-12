@@ -100,9 +100,12 @@ def init_from_template(project_root: Path, project_type: str | None = None) -> d
                 shutil.copy2(bp, dest)
                 files_created.append(str(dest.relative_to(project_root)))
 
-    # Create standard directories
-    for subdir in ["modules", "plan", "sessions", "graph", "conventions", "archive"]:
+    # Create standard KB directories (sessions is NOT under kb/)
+    for subdir in ["modules", "plan", "graph", "conventions", "archive"]:
         (kb_root / subdir).mkdir(exist_ok=True)
+
+    # Sessions directory lives at .agentflow/sessions/ (project root level)
+    (project_root / ".agentflow" / "sessions").mkdir(exist_ok=True)
 
     return {"project_type": ptype, "files_created": files_created}
 

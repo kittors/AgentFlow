@@ -73,13 +73,26 @@ R3/R4 标准流程（含多方案对比）:
   - 每个任务包含: id, 标题, 描述, 涉及文件, 依赖关系, 验收标准
   - 按依赖顺序排列
 
-步骤12: 方案包打包
+步骤12: 方案包打包（CRITICAL — 必须写入文件）
   - [RLM:pkg_keeper] 通过 PackageService 创建方案包
   - 保存到 {KB_ROOT}/plan/YYYYMMDDHHMM_<feature>/
+  - 具体操作:
+    a. mkdir -p {KB_ROOT}/plan/YYYYMMDDHHMM_<feature>/
+    b. 使用文件写入工具将 proposal.md 写入方案包目录
+    c. 使用文件写入工具将 tasks.md 写入方案包目录
+    d. 缺少任何一个文件 = Phase 3 未完成
+
+步骤12a: 文件写入验证（MUST — 不可跳过）
+  - 验证 proposal.md 和 tasks.md 文件确实存在且非空
+  - 命令: ls -la {KB_ROOT}/plan/YYYYMMDDHHMM_<feature>/
+  - 如果验证失败，重新执行步骤12
+  - 禁止: 在文件验证通过前输出"DESIGN ✅"
 
 步骤13: 阶段切换
-  - 输出方案摘要和任务清单
+  - 输出方案摘要和任务清单（附带文件路径作为证据）
   - DELEGATED / TURBO: 自动进入 DEVELOP
   - DELEGATED_PLAN: ⛔ END_TURN（规划完成，不进入开发）
   - INTERACTIVE: 询问是否进入 DEVELOP → ⛔ END_TURN
 ```
+
+> **⚠️ 绝对禁止**: 在终端/对话中输出方案内容但不写入文件。方案内容必须先持久化到文件，然后在对话中输出摘要和文件路径。

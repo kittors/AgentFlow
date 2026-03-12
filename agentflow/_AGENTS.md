@@ -74,14 +74,13 @@ AGENTFLOW_GLOBAL: ~/.agentflow        # 全局级（跨项目记忆）
     │   │   └── YYYYMMDDHHMM_<feature>/
     │   │       ├── proposal.md
     │   │       └── tasks.md
-    │   ├── sessions/              # 会话摘要
     │   ├── graph/                 # 知识图谱 (AgentFlow 增强)
     │   │   ├── nodes.json
     │   │   └── edges.json
     │   ├── conventions/           # 编码规范 (AgentFlow 增强)
     │   │   └── extracted.json
     │   └── archive/               # 归档
-    └── sessions/                  # 会话记录
+    └── sessions/                  # 会话记录（不在 kb/ 下）
 ```
 
 **全局记忆目录（跨项目）:**
@@ -100,6 +99,91 @@ AGENTFLOW_GLOBAL: ~/.agentflow        # 全局级（跨项目记忆）
 优先级: 使用CLI内置工具进行文件操作；无内置工具时降级为 Shell 命令
 降级优先级: CLI内置工具 > CLI内置Shell工具 > 运行环境原生Shell命令
 Shell选择: Bash工具/Unix信号→Bash | Windows信号→PowerShell | 不明确→PowerShell
+```
+
+**~plan 门控检查（CRITICAL — 违反此规则等于失败）:**
+
+```yaml
+规则: ~plan 命令必须先写文件再做其它事情
+序列:
+  1. 创建方案包目录: .agentflow/kb/plan/{YYYYMMDDHHMM}_{feature}/
+  2. 写入 proposal.md（方案文档）
+  3. 写入 tasks.md（任务清单）
+  4. 验证方案包: ls -la .agentflow/kb/plan/{目录名}/  ← 必须看到 proposal.md 和 tasks.md
+  5. 创建会话摘要: 写入 .agentflow/sessions/{YYYYMMDD_HHMMSS}.md
+  6. 验证会话摘要: ls .agentflow/sessions/  ← 必须看到新文件
+  ⛔ 只有步骤 5+6 都完成后才允许结束。跳过会话摘要保存等于 ~plan 失败。
+
+~plan 的执行范围限制（CRITICAL — 违反等于失败）:
+  允许:
+    - 读取项目源码进行分析
+    - 创建方案包文件 (proposal.md + tasks.md)
+    - 创建会话摘要文件
+  禁止:
+    - 修改项目源文件（.go, .py, .ts, .js, .yaml 等）
+    - 创建新的项目文件（test_*.*, *.go 等）
+    - 执行构建、测试或部署命令
+    - 进入 DEVELOP 阶段
+  完成条件: 方案包 + 会话摘要都落盘后才能结束
+
+禁止:
+  - 在 proposal.md + tasks.md 未创建时修改任何项目源文件
+  - 将方案内容仅输出到对话中而不写入文件
+  - 跳过步骤 4 或步骤 6 的验证
+  - 在步骤 5 完成前结束对话
+
+失败判定:
+  - 对话结束时 .agentflow/kb/plan/ 下没有新增目录 → 失败
+  - 对话结束时 .agentflow/sessions/ 下没有新增文件 → 失败
+```
+
+**会话摘要保存（CRITICAL — 每次对话结束前必须执行）:**
+
+```yaml
+触发: 每次对话即将结束时（无论是否执行了 ~plan/~init/~exec）
+保存位置: .agentflow/sessions/{YYYYMMDD_HHMMSS}.md
+保存内容:
+  - 本次执行的任务列表
+  - 关键决策
+  - 修改的文件清单
+  - 未完成事项
+
+保存时机（CRITICAL — 防止 token 截断导致丢失）:
+  - 核心任务完成后立即保存，不要等到所有后续步骤（验证、KB同步）完成
+  - ~plan 模式: 方案包落盘验证通过后立即保存
+  - ~auto 模式: 主要文件修改完成后立即保存，再做后续验证
+  - 会话摘要保存的优先级高于 KB 同步和验收检查
+
+如何执行:
+  方式1（优先）: python -m agentflow.scripts.session_manager
+  方式2（降级）: 手动写入 .agentflow/sessions/{timestamp}.md
+
+验证: 对话结束前执行 ls .agentflow/sessions/ 确认新文件已创建
+```
+
+**非交互模式规则（CRITICAL — 单轮执行环境必须遵守）:**
+
+```yaml
+触发条件（满足任一即进入非交互模式）:
+  - codex exec 环境（单轮执行，无法等待第二轮用户输入）
+  - stdin 不是 TTY（管道/重定向）
+  - 用户指令中包含 ~auto 或 ~plan 且附带了「自动执行」「直接执行」「不要确认」等关键词
+
+检测方法:
+  1. 执行 test -t 0 检测 TTY
+  2. 检查当前是否为单轮环境（codex exec = 只有 1 个 turn，不可能收到第二次用户输入）
+  3. 解析用户指令中的自动执行意图关键词
+
+非交互模式行为:
+  - 自动选择「全自动执行」（模式 2），不显示确认菜单
+  - ~plan 命令: 自动进入 DELEGATED_PLAN 模式
+  - ~auto 命令: 自动进入 DELEGATED 模式
+  - 完成后自动保存会话摘要
+
+关键约束:
+  - codex exec 是单轮环境 → 如果你显示了 "请直接回复 1/2/3/4" 然后等待，你永远收不到回复
+  - 因此在 codex exec 中，必须在同一轮内完成所有工作
+  - 如果不确定当前是否为 codex exec，默认按全自动模式执行
 ```
 
 **Shell 语法规范:**

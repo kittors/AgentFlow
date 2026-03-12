@@ -68,7 +68,7 @@ class TestInitFromTemplate:
         assert kb.is_dir()
         assert (kb / "modules").is_dir()
         assert (kb / "plan").is_dir()
-        assert (kb / "sessions").is_dir()
+        assert (tmp_path / ".agentflow" / "sessions").is_dir()  # sessions at project root, NOT under kb/
         assert (kb / "graph").is_dir()
         assert (kb / "conventions").is_dir()
         assert (kb / "archive").is_dir()

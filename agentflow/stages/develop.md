@@ -61,12 +61,15 @@ DIRECT 入口（~exec 直接执行）:
   - [RLM:reviewer] 审查代码质量和安全性
   - 发现问题: 回到步骤6 修复
 
-步骤11: 知识库同步（KB_SKIPPED=false 时）
+步骤11: 知识库同步（KB_SKIPPED=false 时，CRITICAL — 必须实际执行）
   - [RLM:kb_keeper] 通过 KnowledgeService 更新:
     - CHANGELOG.md
     - 涉及模块的 modules/{module}.md
     - GRAPH_MODE=1: 更新知识图谱节点和边
   - 更新 tasks.md 状态
+  - 辅助脚本调用（推荐，自动完成模块扫描和同步）:
+    命令: python -m agentflow.scripts.kb_sync
+    失败降级: 手动更新 modules/ 目录下的文档
 
 步骤12: 方案包归档
   - [RLM:pkg_keeper] 更新方案包状态
@@ -79,6 +82,9 @@ DIRECT 入口（~exec 直接执行）:
     - 测试结果
     - 知识库更新内容
   - CURRENT_STAGE = COMPLETE
+  - 保存会话摘要（MUST）:
+    命令: python -m agentflow.scripts.session_manager
+    失败降级: 手动创建 .agentflow/sessions/{YYYYMMDD_HHMMSS}.md，内容包含任务摘要、决策记录、修改文件清单
 ```
 
 ## 失败处理
