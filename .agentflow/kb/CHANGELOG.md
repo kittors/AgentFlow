@@ -7,6 +7,7 @@
 - 更新缓存现在会忽略畸形版本值 `continuous` / `unknown`，避免升级后仍误报“有新版本”
 - 排查确认用户终端可能仍先命中 `~/.local/bin/agentflow` 的旧 uv 版本；Go 二进制实际安装路径仍是 `~/.agentflow/bin/agentflow`
 - Bubble Tea 交互入口现在显式启用 `WithInputTTY()`，把键盘和鼠标事件绑定到真实 TTY，修复部分 macOS/终端环境里菜单无法响应方向键、Enter 和滚轮的问题
+- 修复 `interactiveFlowModel.moveCursor` / `setCursor` 使用值接收者导致游标状态写回副本的问题；这正是主菜单方向键和滚轮在 macOS 上看似“完全失效”的直接根因
 
 ## 2026-03-12
 

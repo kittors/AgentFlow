@@ -185,22 +185,21 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.busy {
 			return m, nil
 		}
-		switch value.Button {
-		case tea.MouseButtonWheelUp:
+		switch {
+		case value.Button == tea.MouseButtonWheelUp || value.Type == tea.MouseWheelUp:
 			m.moveCursor(-1)
-		case tea.MouseButtonWheelDown:
+		case value.Button == tea.MouseButtonWheelDown || value.Type == tea.MouseWheelDown:
 			m.moveCursor(1)
 		}
 		return m, nil
 	case tea.KeyMsg:
-		switch value.String() {
-		case "ctrl+c":
+		if value.Type == tea.KeyCtrlC {
 			return m, tea.Quit
 		}
 		if m.busy {
 			return m, nil
 		}
-		return m.handleKey(value.String())
+		return m.handleKey(value)
 	}
 
 	return m, nil
@@ -211,27 +210,27 @@ func (m interactiveFlowModel) View() string {
 	return screen.View()
 }
 
-func (m interactiveFlowModel) handleKey(key string) (tea.Model, tea.Cmd) {
-	switch key {
-	case "up":
+func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch key.Type {
+	case tea.KeyUp:
 		m.moveCursor(-1)
 		return m, nil
-	case "down":
+	case tea.KeyDown:
 		m.moveCursor(1)
 		return m, nil
-	case "pgup":
+	case tea.KeyPgUp:
 		m.moveCursor(-5)
 		return m, nil
-	case "pgdown":
+	case tea.KeyPgDown:
 		m.moveCursor(5)
 		return m, nil
-	case "home":
+	case tea.KeyHome:
 		m.setCursor(0)
 		return m, nil
-	case "end":
+	case tea.KeyEnd:
 		m.setCursor(m.currentOptionsLen() - 1)
 		return m, nil
-	case " ":
+	case tea.KeySpace:
 		if m.screen == flowScreenInstallTargets {
 			m.toggleSelected(&m.installOptions, m.installCursor)
 		}
@@ -239,10 +238,19 @@ func (m interactiveFlowModel) handleKey(key string) (tea.Model, tea.Cmd) {
 			m.toggleSelected(&m.uninstallOptions, m.uninstallCursor)
 		}
 		return m, nil
-	case "esc":
+	case tea.KeyEsc:
 		return m.handleBack()
-	case "enter":
+	case tea.KeyEnter:
 		return m.handleEnter()
+	case tea.KeyRunes:
+		if key.String() == " " {
+			if m.screen == flowScreenInstallTargets {
+				m.toggleSelected(&m.installOptions, m.installCursor)
+			}
+			if m.screen == flowScreenUninstallTargets {
+				m.toggleSelected(&m.uninstallOptions, m.uninstallCursor)
+			}
+		}
 	}
 	return m, nil
 }
@@ -335,7 +343,7 @@ func (m interactiveFlowModel) startBusy(action flowAction, message string) (tea.
 	return m, tea.Batch(m.runActionCmd(action), busyTickCmd())
 }
 
-func (m interactiveFlowModel) moveCursor(delta int) {
+func (m *interactiveFlowModel) moveCursor(delta int) {
 	length := m.currentOptionsLen()
 	if length == 0 {
 		return
@@ -351,7 +359,7 @@ func (m interactiveFlowModel) moveCursor(delta int) {
 	m.setCursor(current)
 }
 
-func (m interactiveFlowModel) setCursor(cursor int) {
+func (m *interactiveFlowModel) setCursor(cursor int) {
 	if cursor < 0 {
 		cursor = 0
 	}

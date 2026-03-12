@@ -2,6 +2,7 @@ package ui
 
 import (
 	"io"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -230,16 +231,20 @@ func TestNewInteractiveProgramUsesTTYInputAndMouseAltScreen(t *testing.T) {
 	inputType := value.FieldByName("inputType").Int()
 	startupOptions := value.FieldByName("startupOptions").Int()
 
-	expected := reflect.ValueOf(tea.NewProgram(
-		nil,
+	options := []tea.ProgramOption{
 		tea.WithOutput(io.Discard),
-		tea.WithInputTTY(),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
-	)).Elem()
+	}
+	if stdinIsInteractive() {
+		options = append(options, tea.WithInput(os.Stdin))
+	} else {
+		options = append(options, tea.WithInputTTY())
+	}
+	expected := reflect.ValueOf(tea.NewProgram(nil, options...)).Elem()
 
 	if inputType != expected.FieldByName("inputType").Int() {
-		t.Fatalf("expected tty input mode, got inputType=%d", inputType)
+		t.Fatalf("expected compatible interactive input mode, got inputType=%d", inputType)
 	}
 	if startupOptions != expected.FieldByName("startupOptions").Int() {
 		t.Fatalf("expected alt screen + mouse startup options, got %d", startupOptions)

@@ -96,6 +96,42 @@ func TestFlowPrintableKeysDoNotTriggerHiddenShortcuts(t *testing.T) {
 	}
 }
 
+func TestFlowArrowKeysMoveMainCursor(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+	})
+
+	next, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = next.(interactiveFlowModel)
+	if model.mainCursor != 1 {
+		t.Fatalf("expected down arrow to move cursor to 1, got %d", model.mainCursor)
+	}
+
+	next, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = next.(interactiveFlowModel)
+	if model.mainCursor != 0 {
+		t.Fatalf("expected up arrow to move cursor back to 0, got %d", model.mainCursor)
+	}
+}
+
+func TestFlowMouseWheelMovesMainCursor(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+	})
+
+	next, _ := model.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Type: tea.MouseWheelDown})
+	model = next.(interactiveFlowModel)
+	if model.mainCursor != 1 {
+		t.Fatalf("expected mouse wheel down to move cursor to 1, got %d", model.mainCursor)
+	}
+
+	next, _ = model.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress, Type: tea.MouseWheelUp})
+	model = next.(interactiveFlowModel)
+	if model.mainCursor != 0 {
+		t.Fatalf("expected mouse wheel up to move cursor back to 0, got %d", model.mainCursor)
+	}
+}
+
 func TestFlowUpdateActionRefreshesVersionAndNotice(t *testing.T) {
 	model := newTestInteractiveFlowModel(InteractiveCallbacks{
 		Status: func() Panel {

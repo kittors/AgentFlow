@@ -14,7 +14,8 @@
   - 环境状态（可执行文件路径、CLI 状态、更新提示）
   - 最近一次交互式动作结果
 - 启动 Bubble Tea 时启用 `WithMouseCellMotion()`，滚轮上/下被映射为菜单游标切换
-- 交互入口统一通过 `newInteractiveProgram(...)` 构建，并显式启用 `WithInputTTY()`，避免真实终端里输入事件没有从默认 stdin 正确送达 Bubble Tea
+- 交互入口统一通过 `newInteractiveProgram(...)` 构建；当 `stdin` 已经是终端时优先直接使用 `os.Stdin`，否则再回退到 `WithInputTTY()`
+- `interactiveFlowModel` 的游标更新函数现在使用指针接收者，保证方向键和滚轮修改的是真实菜单状态，而不是方法调用时的副本
 - `internal/app` 为交互式 `install` / `uninstall` / `update` / `clean` 提供 panel 化结果，避免信息泄漏到 TUI 外部终端缓冲区
 - 交互式动作执行时会在当前 TUI 内显示 busy panel，而不是退出后打印普通终端输出
 - 交互只响应标准导航键：`↑/↓`、`PgUp/PgDn`、`Home/End`、`Enter`、`Esc`、`Space`；普通字母键不再作为隐藏快捷键生效
@@ -23,7 +24,7 @@
   - `install targets` `Esc` 返回 `profile`
   - `profile` `Esc` 返回主菜单
   - `uninstall targets` `Esc` 返回主菜单
-- UI 测试覆盖滚轮切换、受限高度裁剪、面板内容内嵌渲染、普通字母键无副作用，以及 `update` / `clean` / `uninstall` 的原位执行与回退层级
+- UI 测试覆盖滚轮切换、方向键移动、受限高度裁剪、面板内容内嵌渲染、普通字母键无副作用，以及 `update` / `clean` / `uninstall` 的原位执行与回退层级
 
 ## 已知边界
 

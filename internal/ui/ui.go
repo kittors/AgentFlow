@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -242,13 +243,25 @@ func runSelection(output io.Writer, model selectionModel) (string, []string, boo
 }
 
 func newInteractiveProgram(model tea.Model, output io.Writer) *tea.Program {
-	return tea.NewProgram(
-		model,
+	options := []tea.ProgramOption{
 		tea.WithOutput(output),
-		tea.WithInputTTY(),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
-	)
+	}
+	if stdinIsInteractive() {
+		options = append(options, tea.WithInput(os.Stdin))
+	} else {
+		options = append(options, tea.WithInputTTY())
+	}
+	return tea.NewProgram(model, options...)
+}
+
+func stdinIsInteractive() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
 }
 
 func (m selectionModel) Init() tea.Cmd {
@@ -261,50 +274,53 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = value.Width
 		m.height = value.Height
 	case tea.MouseMsg:
-		switch value.Button {
-		case tea.MouseButtonWheelUp:
+		switch {
+		case value.Button == tea.MouseButtonWheelUp || value.Type == tea.MouseWheelUp:
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case tea.MouseButtonWheelDown:
+		case value.Button == tea.MouseButtonWheelDown || value.Type == tea.MouseWheelDown:
 			if m.cursor < len(m.options)-1 {
 				m.cursor++
 			}
 		}
 	case tea.KeyMsg:
-		switch value.String() {
-		case "ctrl+c", "esc":
+		switch value.Type {
+		case tea.KeyCtrlC:
 			m.canceled = true
 			return m, tea.Quit
-		case "up":
+		case tea.KeyEsc:
+			m.canceled = true
+			return m, tea.Quit
+		case tea.KeyUp:
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case "down":
+		case tea.KeyDown:
 			if m.cursor < len(m.options)-1 {
 				m.cursor++
 			}
-		case "pgup":
+		case tea.KeyPgUp:
 			m.cursor -= 5
 			if m.cursor < 0 {
 				m.cursor = 0
 			}
-		case "pgdown":
+		case tea.KeyPgDown:
 			m.cursor += 5
 			if m.cursor > len(m.options)-1 {
 				m.cursor = len(m.options) - 1
 			}
-		case "home":
+		case tea.KeyHome:
 			m.cursor = 0
-		case "end":
+		case tea.KeyEnd:
 			if len(m.options) > 0 {
 				m.cursor = len(m.options) - 1
 			}
-		case " ":
+		case tea.KeySpace:
 			if m.multi && len(m.options) > 0 {
 				m.options[m.cursor].Selected = !m.options[m.cursor].Selected
 			}
-		case "enter":
+		case tea.KeyEnter:
 			if len(m.options) == 0 {
 				m.canceled = true
 				return m, tea.Quit
@@ -320,6 +336,10 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.done = true
 			return m, tea.Quit
+		case tea.KeyRunes:
+			if value.String() == " " && m.multi && len(m.options) > 0 {
+				m.options[m.cursor].Selected = !m.options[m.cursor].Selected
+			}
 		}
 	}
 
