@@ -422,6 +422,13 @@ func (i *Installer) deployAgentTomlFiles(cliDir string) error {
 	}
 
 	for _, roleFile := range []string{"reviewer.toml", "architect.toml"} {
+		targetPath := filepath.Join(agentsDir, roleFile)
+		if _, err := os.Stat(targetPath); err == nil && !config.IsAgentFlowFile(targetPath) {
+			if _, err := config.BackupUserFile(targetPath); err != nil {
+				return err
+			}
+		}
+
 		content, err := readAssetWithFallback(filepath.ToSlash(filepath.Join("agentflow", "agents", roleFile)))
 		if err != nil {
 			return err
@@ -430,7 +437,7 @@ func (i *Installer) deployAgentTomlFiles(cliDir string) error {
 		if !strings.Contains(rendered, config.Marker) {
 			rendered = "# AGENTFLOW_ROUTER: managed by AgentFlow\n" + rendered
 		}
-		if err := config.SafeWrite(filepath.Join(agentsDir, roleFile), []byte(rendered), 0o644); err != nil {
+		if err := config.SafeWrite(targetPath, []byte(rendered), 0o644); err != nil {
 			return err
 		}
 	}
@@ -449,6 +456,7 @@ func (i *Installer) mergeCodexConfig(configPath string) error {
 		text,
 		"agents.reviewer",
 		"[agents.reviewer]\n"+
+			"# AGENTFLOW_ROUTER: managed by AgentFlow\n"+
 			"description = \"AgentFlow code reviewer: security, correctness, test quality analysis.\"\n"+
 			"config_file = \"agents/reviewer.toml\"\n",
 	)
@@ -456,6 +464,7 @@ func (i *Installer) mergeCodexConfig(configPath string) error {
 		text,
 		"agents.architect",
 		"[agents.architect]\n"+
+			"# AGENTFLOW_ROUTER: managed by AgentFlow\n"+
 			"description = \"AgentFlow architect: architectural evaluation, dependency analysis, multi-approach comparison.\"\n"+
 			"config_file = \"agents/architect.toml\"\n",
 	)
@@ -485,8 +494,8 @@ func (i *Installer) cleanCodexConfig(configPath string) error {
 	}
 
 	text := string(data)
-	text = removeSection(text, "agents.reviewer")
-	text = removeSection(text, "agents.architect")
+	text = removeSection(text, "agents.reviewer", "AgentFlow", `config_file = "agents/reviewer.toml"`)
+	text = removeSection(text, "agents.architect", "AgentFlow", `config_file = "agents/architect.toml"`)
 	text = removeFeatureMultiAgent(text)
 	text = collapseBlankLines(text)
 
@@ -638,16 +647,21 @@ func ensureFeatureMultiAgent(text string) string {
 	start, end, section := sectionRange(text, "features")
 	if start == -1 {
 		if strings.TrimSpace(text) == "" {
-			return "[features]\nmulti_agent = true\n"
+			return "[features]\n# AGENTFLOW_ROUTER: managed by AgentFlow\nmulti_agent = true\n"
 		}
-		return strings.TrimRight(text, "\n") + "\n\n[features]\nmulti_agent = true\n"
+		return strings.TrimRight(text, "\n") + "\n\n[features]\n# AGENTFLOW_ROUTER: managed by AgentFlow\nmulti_agent = true\n"
 	}
 
 	linePattern := regexp.MustCompile(`(?m)^multi_agent\s*=.*$`)
 	if linePattern.MatchString(section) {
-		section = linePattern.ReplaceAllString(section, "multi_agent = true")
+		current := linePattern.FindString(section)
+		if strings.TrimSpace(current) == "multi_agent = true" && !strings.Contains(section, "# AGENTFLOW_ROUTER: managed by AgentFlow") {
+			return text
+		}
+		replacement := "# AGENTFLOW_ROUTER: managed by AgentFlow\nmulti_agent = true"
+		section = linePattern.ReplaceAllString(section, replacement)
 	} else {
-		section = strings.TrimRight(section, "\n") + "\nmulti_agent = true\n"
+		section = strings.TrimRight(section, "\n") + "\n# AGENTFLOW_ROUTER: managed by AgentFlow\nmulti_agent = true\n"
 	}
 	return text[:start] + section + text[end:]
 }
@@ -662,9 +676,13 @@ func ensureSection(text, header, section string) string {
 	return strings.TrimRight(text, "\n") + "\n\n" + section
 }
 
-func removeSection(text, header string) string {
+func removeSection(text, header string, signatures ...string) string {
 	start, end, _ := sectionRange(text, header)
 	if start == -1 {
+		return text
+	}
+	section := text[start:end]
+	if !isManagedSection(section, signatures...) {
 		return text
 	}
 	return text[:start] + text[end:]
@@ -676,7 +694,7 @@ func removeFeatureMultiAgent(text string) string {
 		return text
 	}
 
-	linePattern := regexp.MustCompile(`(?m)^multi_agent\s*=\s*true\s*\n?`)
+	linePattern := regexp.MustCompile(`(?m)^# AGENTFLOW_ROUTER: managed by AgentFlow\nmulti_agent\s*=\s*true\s*\n?`)
 	cleaned := linePattern.ReplaceAllString(section, "")
 	cleaned = collapseBlankLines(cleaned)
 	if strings.TrimSpace(cleaned) == "[features]" {
@@ -711,4 +729,16 @@ func sectionRange(text, header string) (int, int, string) {
 		end = searchStart + nextRel[0]
 	}
 	return start, end, text[start:end]
+}
+
+func isManagedSection(section string, signatures ...string) bool {
+	if strings.Contains(section, config.Marker) {
+		return true
+	}
+	for _, signature := range signatures {
+		if !strings.Contains(section, signature) {
+			return false
+		}
+	}
+	return len(signatures) > 0
 }

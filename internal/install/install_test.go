@@ -212,3 +212,92 @@ func TestInstallAndUninstallClaudeHooks(t *testing.T) {
 		t.Fatal("expected AgentFlow Claude hooks to be removed on uninstall")
 	}
 }
+
+func TestUninstallCodexPreservesUserManagedMultiAgentFlagAndReviewerSection(t *testing.T) {
+	homeDir := t.TempDir()
+	codexDir := filepath.Join(homeDir, ".codex")
+	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+		t.Fatalf("mkdir codex dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "AGENTS.md"), []byte("<!-- AGENTFLOW_ROUTER: v1.0.0 -->\n"), 0o644); err != nil {
+		t.Fatalf("write AGENTS.md: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(codexDir, "agentflow"), 0o755); err != nil {
+		t.Fatalf("mkdir agentflow dir: %v", err)
+	}
+
+	configPath := filepath.Join(codexDir, "config.toml")
+	seed := "[features]\nmulti_agent = true\ntelemetry = false\n\n[agents.reviewer]\ndescription = \"custom reviewer\"\nconfig_file = \"agents/custom-reviewer.toml\"\n"
+	if err := os.WriteFile(configPath, []byte(seed), 0o644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+
+	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
+	installer.HomeDir = homeDir
+
+	if err := installer.Uninstall("codex"); err != nil {
+		t.Fatalf("Uninstall returned error: %v", err)
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config.toml: %v", err)
+	}
+	text := string(content)
+	if !strings.Contains(text, "multi_agent = true") {
+		t.Fatalf("expected existing multi_agent flag to be preserved, got %q", text)
+	}
+	if !strings.Contains(text, "custom reviewer") {
+		t.Fatalf("expected existing reviewer section to be preserved, got %q", text)
+	}
+}
+
+func TestInstallCodexBacksUpUserManagedReviewerRole(t *testing.T) {
+	homeDir := t.TempDir()
+	codexDir := filepath.Join(homeDir, ".codex")
+	roleDir := filepath.Join(codexDir, "agents")
+	if err := os.MkdirAll(roleDir, 0o755); err != nil {
+		t.Fatalf("mkdir agents dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "AGENTS.md"), []byte("# custom\n"), 0o644); err != nil {
+		t.Fatalf("write AGENTS.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte("[features]\n"), 0o644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+
+	reviewerPath := filepath.Join(roleDir, "reviewer.toml")
+	if err := os.WriteFile(reviewerPath, []byte("description = \"my reviewer\"\n"), 0o644); err != nil {
+		t.Fatalf("write reviewer.toml: %v", err)
+	}
+
+	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
+	installer.HomeDir = homeDir
+
+	if err := installer.Install("codex", "full"); err != nil {
+		t.Fatalf("Install returned error: %v", err)
+	}
+
+	content, err := os.ReadFile(reviewerPath)
+	if err != nil {
+		t.Fatalf("read reviewer.toml: %v", err)
+	}
+	if strings.Contains(string(content), "my reviewer") {
+		t.Fatalf("expected reviewer.toml to be replaced during install, got %q", string(content))
+	}
+
+	entries, err := os.ReadDir(roleDir)
+	if err != nil {
+		t.Fatalf("ReadDir returned error: %v", err)
+	}
+	foundBackup := false
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "reviewer_") && strings.HasSuffix(entry.Name(), "_bak.toml") {
+			foundBackup = true
+			break
+		}
+	}
+	if !foundBackup {
+		t.Fatal("expected backup for overwritten reviewer.toml")
+	}
+}
