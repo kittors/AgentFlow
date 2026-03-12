@@ -14,6 +14,7 @@
 - GitHub Release 现已切换为 `main` 自动刷新 `continuous` release，安装脚本默认跟随最新 `main` 构建
 - Release metadata 阶段会校验当前 run 的 `GITHUB_SHA` 是否仍为 `origin/main` 头部，避免 rerun 旧任务把 continuous 回滚到旧提交
 - `internal/update` 使用 release `name` 解析版本号，避免固定 tag 影响版本比较
+- Release workflow 在创建 `continuous` 后会通过 GitHub REST API 立即 patch 为已发布状态，并显式标记 latest，避免 `gh release edit` 在 Actions 中留下 draft
 - 安装脚本解析下载地址时会优先读取 `releases/tags/continuous`，仅在该接口不可用时回退到 `releases/latest`
 - Go 自更新同样优先读取 `continuous` release，并在读取缓存时跳过 `continuous` 这类不可比较的畸形版本值
 - 主菜单交互结果不再直接写到终端普通缓冲区，而是通过 TUI 内部状态/结果面板展示
