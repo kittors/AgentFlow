@@ -61,6 +61,27 @@ function Show-ShadowWarning {
     }
 }
 
+function Start-AgentFlowMenu {
+    if ($env:AGENTFLOW_NO_TUI -eq "1") {
+        return
+    }
+
+    try {
+        if (-not [Environment]::UserInteractive) {
+            return
+        }
+    } catch {
+        return
+    }
+
+    Write-Info (msg "首次启动 AgentFlow..." "Launching AgentFlow for the first time...")
+    try {
+        & $exePath
+    } catch {
+        Write-Host ("  [!]  " + (msg "未能自动进入 AgentFlow 菜单，请稍后手动运行 agentflow。" "AgentFlow could not be started automatically; run agentflow manually.")) -ForegroundColor Yellow
+    }
+}
+
 Write-Host ""
 Write-Host "AgentFlow" -ForegroundColor Cyan
 Write-Host (msg "Go Binary Installer" "Go Binary Installer") -ForegroundColor DarkGray
@@ -85,13 +106,8 @@ if ($currentPath -notlike "*$INSTALL_DIR*") {
 }
 $env:Path = "$INSTALL_DIR;$env:Path"
 
-if ($USE_ZH) {
-    [Environment]::SetEnvironmentVariable("AGENTFLOW_LANG", "zh", "User")
-} else {
-    [Environment]::SetEnvironmentVariable("AGENTFLOW_LANG", "en", "User")
-}
-
 & $exePath version
 Show-ShadowWarning
 Write-Host ""
 Write-Host (msg "  ✅ 安装完成" "  ✅ Installation complete") -ForegroundColor Green
+Start-AgentFlowMenu

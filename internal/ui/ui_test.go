@@ -80,8 +80,8 @@ func TestViewShowsCurrentSummaryAndBadges(t *testing.T) {
 		title:    "AgentFlow v1.0.3",
 		subtitle: "Cross-platform Go executable.",
 		options: []Option{
-			{Value: "install", Label: "Install", Description: "Write AgentFlow into CLI configs."},
-			{Value: "update", Label: "Update AgentFlow", Description: "Download and replace the current Go binary."},
+			{Value: "install", Label: "Install", Badge: "SETUP", Description: "Write AgentFlow into CLI configs."},
+			{Value: "update", Label: "Update AgentFlow", Badge: "UPDATE", Description: "Download and replace the current Go binary."},
 		},
 		cursor: 1,
 		width:  100,
@@ -96,10 +96,29 @@ func TestViewShowsCurrentSummaryAndBadges(t *testing.T) {
 	if !strings.Contains(view, "Go Binary") {
 		t.Fatalf("expected Go Binary badge in view, got %q", view)
 	}
+	if !strings.Contains(view, "UPDATE") {
+		t.Fatalf("expected card badge in view, got %q", view)
+	}
 	if !strings.Contains(view, "2/2") {
 		t.Fatalf("expected cursor badge in view, got %q", view)
 	}
 	if !strings.Contains(view, model.currentSummary()) {
 		t.Fatalf("expected current summary in view, got %q", view)
+	}
+}
+
+func TestMultiSelectSummaryPromptsForSelection(t *testing.T) {
+	model := selectionModel{
+		catalog: i18n.NewCatalog(),
+		multi:   true,
+		options: []Option{
+			{Value: "codex", Label: "codex", Badge: "CODEX"},
+			{Value: "claude", Label: "claude", Badge: "CLAUDE"},
+		},
+	}
+
+	summary := model.currentSummary()
+	if !strings.Contains(summary, "Space") && !strings.Contains(summary, "选中") {
+		t.Fatalf("expected summary to guide selection, got %q", summary)
 	}
 }

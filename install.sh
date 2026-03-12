@@ -21,23 +21,6 @@ case "${locale_value}" in
     zh*|ZH*) USE_ZH=true ;;
 esac
 
-if [ -t 0 ] 2>/dev/null || (tty -s 2>/dev/null && [ -r /dev/tty ]); then
-    printf "\n"
-    printf "  ${BOLD}Select language / 选择语言:${RESET}\n"
-    printf "  [1] 中文\n"
-    printf "  [2] English\n\n"
-    lang_choice=""
-    if [ -t 0 ]; then
-        printf "  (1/2): " && read -r lang_choice
-    elif tty -s 2>/dev/null && [ -r /dev/tty ]; then
-        printf "  (1/2): " && read -r lang_choice </dev/tty
-    fi
-    case "${lang_choice}" in
-        1) USE_ZH=true ;;
-        2) USE_ZH=false ;;
-    esac
-fi
-
 msg() {
     if [ "${USE_ZH}" = true ]; then echo "$1"; else echo "$2"; fi
 }
@@ -73,12 +56,6 @@ ensure_line_in_profile() {
     fi
 }
 
-persist_lang_choice() {
-    lang="en"
-    [ "${USE_ZH}" = true ] && lang="zh"
-    ensure_line_in_profile "AGENTFLOW_LANG" "export AGENTFLOW_LANG=\"${lang}\"" "AGENTFLOW_LANG"
-}
-
 persist_path() {
     ensure_line_in_profile "${INSTALL_DIR}" "export PATH=\"${INSTALL_DIR}:\$PATH\"" "PATH"
 }
@@ -88,6 +65,21 @@ print_shell_refresh_notice() {
         warn "$(msg "检测到旧的 agentflow 仍可能在当前终端中抢先命中: ${PREVIOUS_AGENTFLOW}" "An older agentflow may still shadow the new binary in your current shell: ${PREVIOUS_AGENTFLOW}")"
         printf "     %s\n" "$(msg "运行: export PATH=\"${INSTALL_DIR}:\$PATH\" && hash -r" "Run: export PATH=\"${INSTALL_DIR}:\$PATH\" && hash -r")"
         printf "     %s\n" "$(msg "或重新打开终端 / source 对应 shell 配置文件" "Or reopen your terminal / source your shell profile")"
+    fi
+}
+
+can_launch_tui() {
+    [ "${AGENTFLOW_NO_TUI:-0}" != "1" ] && [ -r /dev/tty ] && [ -w /dev/tty ]
+}
+
+launch_tui() {
+    if ! can_launch_tui; then
+        return 0
+    fi
+
+    info "$(msg "首次启动 AgentFlow..." "Launching AgentFlow for the first time...")"
+    if ! "${INSTALL_DIR}/agentflow" </dev/tty >/dev/tty 2>/dev/tty; then
+        warn "$(msg "未能自动进入 AgentFlow 菜单，请稍后手动运行 agentflow。" "AgentFlow could not be started automatically; run agentflow manually.")"
     fi
 }
 
@@ -163,7 +155,6 @@ ok "$(msg "下载工具可用" "Download tool available")"
 step "$(msg "步骤 2/3: 下载 AgentFlow Go 二进制" "Step 2/3: Download AgentFlow Go binary")"
 download_binary
 persist_path
-persist_lang_choice
 ok "$(msg "已安装到 ${INSTALL_DIR}/agentflow" "Installed to ${INSTALL_DIR}/agentflow")"
 
 step "$(msg "步骤 3/3: 验证安装" "Step 3/3: Verify installation")"
@@ -177,3 +168,4 @@ else
 fi
 
 printf "\n${BOLD}${GREEN}  ✅ %s${RESET}\n" "$(msg "安装完成" "Installation complete")"
+launch_tui

@@ -1,9 +1,13 @@
 package i18n
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/kittors/AgentFlow/internal/config"
 )
 
 type Locale string
@@ -21,7 +25,21 @@ func NewCatalog() Catalog {
 	return Catalog{lang: DetectLocale()}
 }
 
+func NewCatalogWithLanguage(lang string) Catalog {
+	if locale, ok := normalizeLocale(lang); ok {
+		return Catalog{lang: string(locale)}
+	}
+	return NewCatalog()
+}
+
 func DetectLocale() string {
+	if locale, ok := LoadPreferredLocale(); ok {
+		return locale
+	}
+	return DetectLocaleFromEnvironment()
+}
+
+func DetectLocaleFromEnvironment() string {
 	if locale, ok := normalizeLocale(os.Getenv("AGENTFLOW_LANG")); ok {
 		return string(locale)
 	}
@@ -39,6 +57,41 @@ func DetectLocale() string {
 	}
 
 	return string(LocaleEN)
+}
+
+func LoadPreferredLocale() (string, bool) {
+	path, err := preferredLocalePath()
+	if err != nil {
+		return "", false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	if locale, ok := normalizeLocale(string(data)); ok {
+		return string(locale), true
+	}
+	return "", false
+}
+
+func SavePreferredLocale(lang string) error {
+	locale, ok := normalizeLocale(lang)
+	if !ok {
+		return fmt.Errorf("unsupported locale: %s", lang)
+	}
+	path, err := preferredLocalePath()
+	if err != nil {
+		return err
+	}
+	return config.SafeWrite(path, []byte(string(locale)+"\n"), 0o644)
+}
+
+func preferredLocalePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, ".agentflow", "preferences", "locale"), nil
 }
 
 func (c Catalog) Language() string {

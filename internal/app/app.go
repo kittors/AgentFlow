@@ -89,6 +89,9 @@ func (a *App) runInteractiveMainMenu() int {
 		a.printUsage()
 		return 0
 	}
+	if code, ok := a.ensureInteractiveLanguage(); !ok {
+		return code
+	}
 
 	for {
 		action, canceled, err := ui.RunMainMenu(a.Catalog, a.Version, a.Stdout)
@@ -116,6 +119,36 @@ func (a *App) runInteractiveMainMenu() int {
 		default:
 			return 0
 		}
+	}
+}
+
+func (a *App) ensureInteractiveLanguage() (int, bool) {
+	if language, ok := i18n.LoadPreferredLocale(); ok {
+		a.setCatalog(i18n.NewCatalogWithLanguage(language))
+		return 0, true
+	}
+
+	language, canceled, err := ui.SelectLanguage(i18n.DetectLocaleFromEnvironment(), a.Stdout)
+	if err != nil {
+		fmt.Fprintln(a.Stderr, err.Error())
+		return 1, false
+	}
+	if canceled {
+		return 0, false
+	}
+	if err := i18n.SavePreferredLocale(language); err != nil {
+		fmt.Fprintln(a.Stderr, err.Error())
+		return 1, false
+	}
+
+	a.setCatalog(i18n.NewCatalogWithLanguage(language))
+	return 0, true
+}
+
+func (a *App) setCatalog(catalog i18n.Catalog) {
+	a.Catalog = catalog
+	if a.Installer != nil {
+		a.Installer.Catalog = catalog
 	}
 }
 
@@ -221,13 +254,14 @@ func (a *App) runInteractiveInstall() int {
 	installed := sliceToSet(a.Installer.DetectInstalledTargets())
 	options := make([]ui.Option, 0, len(detected))
 	for _, name := range detected {
-		description := ""
+		description := a.Catalog.Msg("已检测到该 CLI，可直接部署 AgentFlow。", "Detected on this machine and ready for AgentFlow deployment.")
 		if _, ok := installed[name]; ok {
-			description = a.Catalog.Msg("(已安装)", "(installed)")
+			description = a.Catalog.Msg("该 CLI 已接入 AgentFlow，再次执行会覆盖为当前版本。", "AgentFlow is already installed for this CLI; rerunning refreshes it to the current version.")
 		}
 		options = append(options, ui.Option{
 			Value:       name,
 			Label:       name,
+			Badge:       strings.ToUpper(name),
 			Description: description,
 		})
 	}
@@ -271,7 +305,12 @@ func (a *App) runInteractiveUninstall() int {
 
 	options := make([]ui.Option, 0, len(installed))
 	for _, name := range installed {
-		options = append(options, ui.Option{Value: name, Label: name})
+		options = append(options, ui.Option{
+			Value:       name,
+			Label:       name,
+			Badge:       strings.ToUpper(name),
+			Description: a.Catalog.Msg("移除该 CLI 中由 AgentFlow 写入的规则、技能和 hooks。", "Remove the AgentFlow rules, skills, and hooks written into this CLI."),
+		})
 	}
 
 	selected, canceled, err := ui.SelectTargets(
