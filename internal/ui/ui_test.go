@@ -99,7 +99,7 @@ func TestViewShowsCurrentSummaryAndBadges(t *testing.T) {
 	if !strings.Contains(view, "2/2") {
 		t.Fatalf("expected cursor badge in view, got %q", view)
 	}
-	if !strings.Contains(view, "当前动作: Update AgentFlow") {
+	if !strings.Contains(view, model.currentSummary()) {
 		t.Fatalf("expected current summary in view, got %q", view)
 	}
 }
