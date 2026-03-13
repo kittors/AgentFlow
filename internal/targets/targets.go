@@ -3,17 +3,17 @@ package targets
 import "sort"
 
 type Target struct {
-	Name                   string
-	DisplayName            string
-	Dir                    string
-	RulesFile              string
-	HooksSummary           string
-	Command                string
-	NPMPackage             string
-	MinNodeMajor           int
-	DocsURL                string
-	BootstrapSupported     bool
-	RecommendWSLOnWindows  bool
+	Name                  string
+	DisplayName           string
+	Dir                   string
+	RulesFile             string
+	HooksSummary          string
+	Command               string
+	NPMPackage            string
+	MinNodeMajor          int
+	DocsURL               string
+	BootstrapSupported    bool
+	RecommendWSLOnWindows bool
 }
 
 var All = map[string]Target{
@@ -56,11 +56,28 @@ var All = map[string]Target{
 		RecommendWSLOnWindows: true,
 	},
 	"qwen": {
-		Name:         "qwen",
-		DisplayName:  "Qwen CLI",
-		Dir:          ".qwen",
-		RulesFile:    "QWEN.md",
-		HooksSummary: "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
+		Name:                  "qwen",
+		DisplayName:           "Qwen CLI",
+		Dir:                   ".qwen",
+		RulesFile:             "QWEN.md",
+		HooksSummary:          "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
+		Command:               "qwen",
+		NPMPackage:            "@qwen-code/qwen-code",
+		MinNodeMajor:          20,
+		DocsURL:               "https://qwen-code.github.io/qwen-code-docs/",
+		BootstrapSupported:    true,
+		RecommendWSLOnWindows: true,
+	},
+	"kiro": {
+		Name:                  "kiro",
+		DisplayName:           "Kiro CLI",
+		Dir:                   ".kiro",
+		RulesFile:             "KIRO.md",
+		HooksSummary:          "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
+		Command:               "kiro-cli",
+		DocsURL:               "https://kiro.dev/cli/",
+		BootstrapSupported:    true,
+		RecommendWSLOnWindows: true,
 	},
 	"grok": {
 		Name:         "grok",
@@ -81,7 +98,7 @@ var All = map[string]Target{
 var SupportedTargets = All
 
 func Names() []string {
-	return []string{"codex", "claude", "gemini", "qwen", "grok", "opencode"}
+	return []string{"codex", "claude", "gemini", "qwen", "kiro", "grok", "opencode"}
 }
 
 func Lookup(name string) (Target, bool) {
@@ -96,5 +113,5 @@ func SortedTargetNames() []string {
 }
 
 func BootstrapNames() []string {
-	return []string{"codex", "claude", "gemini"}
+	return []string{"codex", "claude", "gemini", "qwen", "kiro"}
 }

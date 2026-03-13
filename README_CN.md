@@ -54,6 +54,8 @@ Windows PowerShell：
 irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
+Windows 常见问题（DNS/代理/raw 域名解析失败等）：见 [docs/troubleshooting/windows.md](docs/troubleshooting/windows.md)。
+
 安装脚本下载的是最新已发布的 release 二进制。现在只要 push 到 `main`，GitHub 就会自动刷新一个 continuous release，所以 `curl | bash`、`npx agentflow` 和 `agentflow update` 都会跟随最新的 `main` 构建。如果你本机还有旧的 `uv` / Python 版 `agentflow` 排在 `PATH` 前面，请重开终端，或者执行 `export PATH="$HOME/.agentflow/bin:$PATH" && hash -r`，然后用 `which agentflow` 确认当前命中的路径。
 
 ### `npx` 启动
@@ -98,6 +100,7 @@ agentflow                       # 交互式 TUI
 agentflow install codex         # 安装到指定 CLI
 agentflow install --all         # 安装到所有检测到的目标
 agentflow uninstall codex       # 从指定 CLI 卸载
+agentflow uninstall codex --cli # 完整卸载：卸载 CLI 本体并默认删除配置目录（如需保留配置加 --keep-config）
 agentflow uninstall --all       # 从所有已安装目标卸载
 agentflow status                # 查看安装状态
 agentflow clean                 # 清理 AgentFlow 缓存

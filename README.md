@@ -53,6 +53,8 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
+Windows troubleshooting: see [docs/troubleshooting/windows.md](docs/troubleshooting/windows.md).
+
 The installer downloads the latest published release binary. Pushes to `main` now refresh a continuous GitHub Release automatically, so `curl | bash`, `npx agentflow`, and `agentflow update` all follow the latest `main` build. If you still have an older `uv`/Python install earlier on `PATH`, reopen the terminal or run `export PATH="$HOME/.agentflow/bin:$PATH" && hash -r`, then verify with `which agentflow`.
 
 ### `npx` bootstrap
@@ -97,6 +99,7 @@ agentflow                       # Interactive TUI
 agentflow install codex         # Install to a specific CLI
 agentflow install --all         # Install to all detected CLIs
 agentflow uninstall codex       # Uninstall from a specific CLI
+agentflow uninstall codex --cli # Full uninstall: remove the CLI tool + purge its config directory (use --keep-config to preserve config)
 agentflow uninstall --all       # Uninstall from all installed targets
 agentflow status                # Show installation status
 agentflow clean                 # Remove AgentFlow caches

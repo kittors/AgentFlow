@@ -14,6 +14,7 @@ var targets = map[string]Target{
 	"claude":   {Name: "claude", Dir: ".claude", RulesFile: "CLAUDE.md"},
 	"gemini":   {Name: "gemini", Dir: ".gemini", RulesFile: "GEMINI.md"},
 	"grok":     {Name: "grok", Dir: ".grok", RulesFile: "GROK.md"},
+	"kiro":     {Name: "kiro", Dir: ".kiro", RulesFile: "KIRO.md"},
 	"opencode": {Name: "opencode", Dir: ".config/opencode", RulesFile: "AGENTS.md"},
 	"qwen":     {Name: "qwen", Dir: ".qwen", RulesFile: "QWEN.md"},
 }

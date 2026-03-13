@@ -20,8 +20,10 @@ type InteractiveCallbacks struct {
 	BootstrapManual        func(target string) Panel
 	InstallOptions         func() []Option
 	UninstallOptions       func() []Option
+	UninstallCLIOptions    func() []Option
 	Install                func(profile string, targets []string) Panel
 	Uninstall              func(targets []string) Panel
+	UninstallCLI           func(targets []string) Panel
 	Update                 func() (Panel, string)
 	Clean                  func() Panel
 }
@@ -47,6 +49,7 @@ const (
 	flowActionBootstrapAuto
 	flowActionInstall
 	flowActionUninstall
+	flowActionUninstallCLI
 )
 
 type flowResultMsg struct {
@@ -78,6 +81,7 @@ type interactiveFlowModel struct {
 	profileOptions         []Option
 	installOptions         []Option
 	uninstallOptions       []Option
+	uninstallCLIMode       bool
 
 	mainCursor            int
 	installHubCursor      int
@@ -122,6 +126,12 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Description: catalog.Msg("从已接入 CLI 中清理 AgentFlow 产物，同时保留你的原有配置。", "Remove AgentFlow assets from integrated CLIs while preserving your own config where possible."),
 			},
 			{
+				Value:       string(ActionUninstallCLI),
+				Label:       catalog.Msg("卸载 CLI 工具", "Uninstall CLI tools"),
+				Badge:       catalog.Msg("CLI", "CLI"),
+				Description: catalog.Msg("卸载 Codex / Claude / Gemini / Qwen / Kiro 等 CLI 本体，并默认删除配置目录（完整卸载）。", "Uninstall CLI tools like Codex / Claude / Gemini / Qwen / Kiro and purge their config directories by default (full uninstall)."),
+			},
+			{
 				Value:       string(ActionUpdate),
 				Label:       catalog.Msg("更新 AgentFlow", "Update AgentFlow"),
 				Badge:       catalog.Msg("更新", "UPDATE"),
@@ -151,7 +161,7 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Value:       "bootstrap-cli",
 				Label:       catalog.Msg("安装 CLI 工具", "Install CLI tools"),
 				Badge:       catalog.Msg("CLI", "CLI"),
-				Description: catalog.Msg("快速安装 Codex、Claude Code、Gemini CLI，并补齐 Node / nvm / WSL2 依赖。", "Quickly install Codex, Claude Code, and Gemini CLI, including Node / nvm / WSL2 prerequisites."),
+				Description: catalog.Msg("快速安装 Codex、Claude Code、Gemini、Qwen、Kiro CLI，并补齐 Node / nvm / WSL2 依赖（Kiro 使用官方脚本）。", "Quickly install Codex, Claude Code, Gemini, Qwen, and Kiro CLI, including Node / nvm / WSL2 prerequisites (Kiro uses the official install script)."),
 			},
 			{
 				Value:       "install-agentflow",
@@ -232,10 +242,11 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = value.notice
 			}
 			m.refreshBootstrapDetail()
-		case flowActionInstall, flowActionUninstall, flowActionUpdate, flowActionClean:
+		case flowActionInstall, flowActionUninstall, flowActionUninstallCLI, flowActionUpdate, flowActionClean:
 			m.screen = flowScreenMain
 			m.installOptions = nil
 			m.uninstallOptions = nil
+			m.uninstallCLIMode = false
 			m.clearSelections()
 			if value.notice != nil {
 				m.notice = value.notice
@@ -332,6 +343,7 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 		m.screen = flowScreenProfile
 	case flowScreenUninstallTargets:
 		m.screen = flowScreenMain
+		m.uninstallCLIMode = false
 	}
 	m.notice = nil
 	return m, nil
@@ -346,11 +358,29 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.notice = nil
 			return m, nil
 		case ActionUninstall:
+			m.uninstallCLIMode = false
 			m.uninstallOptions = cloneOptions(m.callbacks.UninstallOptions())
 			if len(m.uninstallOptions) == 0 {
 				m.notice = panelRef(Panel{
 					Title: m.catalog.Msg("卸载结果", "Uninstall result"),
 					Lines: []string{m.catalog.Msg("未检测到已安装的 AgentFlow。", "No AgentFlow installations found.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenUninstallTargets
+			m.notice = nil
+			return m, nil
+		case ActionUninstallCLI:
+			m.uninstallCLIMode = true
+			if m.callbacks.UninstallCLIOptions != nil {
+				m.uninstallOptions = cloneOptions(m.callbacks.UninstallCLIOptions())
+			} else {
+				m.uninstallOptions = nil
+			}
+			if len(m.uninstallOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("卸载结果", "Uninstall result"),
+					Lines: []string{m.catalog.Msg("未检测到可卸载的 CLI。", "No CLI installations found.")},
 				})
 				return m, nil
 			}
@@ -450,6 +480,9 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 				Lines: []string{m.catalog.Msg("请至少选择一个目标。", "Choose at least one target.")},
 			})
 			return m, nil
+		}
+		if m.uninstallCLIMode {
+			return m.startBusy(flowActionUninstallCLI, m.catalog.Msg("正在卸载所选 CLI…", "Uninstalling selected CLIs..."))
 		}
 		return m.startBusy(flowActionUninstall, m.catalog.Msg("正在卸载所选目标…", "Uninstalling selected targets..."))
 	}
@@ -663,6 +696,16 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 				notice: panelRef(notice),
 				status: m.callbacks.Status(),
 			}
+		case flowActionUninstallCLI:
+			notice := Panel{}
+			if m.callbacks.UninstallCLI != nil {
+				notice = m.callbacks.UninstallCLI(selectedUninstallTargets)
+			}
+			return flowResultMsg{
+				action: action,
+				notice: panelRef(notice),
+				status: m.callbacks.Status(),
+			}
 		default:
 			return flowResultMsg{
 				action: action,
@@ -713,8 +756,13 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.multi = true
 		model.panels = m.installPanels()
 	case flowScreenUninstallTargets:
-		model.subtitle = m.catalog.Msg("选择要卸载的目标。Esc 返回主菜单。", "Choose uninstall targets. Press Esc to return to the main menu.")
-		model.hint = m.catalog.Msg("Space 选择多个目标，Enter 卸载，Esc 返回。", "Use Space to select multiple targets, Enter to uninstall, Esc to go back.")
+		if m.uninstallCLIMode {
+			model.subtitle = m.catalog.Msg("选择要卸载的 CLI 工具。Esc 返回主菜单。", "Choose which CLI tools to uninstall. Press Esc to return to the main menu.")
+			model.hint = m.catalog.Msg("Space 选择多个目标，Enter 卸载 CLI，Esc 返回。", "Use Space to select multiple targets, Enter to uninstall CLIs, Esc to go back.")
+		} else {
+			model.subtitle = m.catalog.Msg("选择要卸载的目标。Esc 返回主菜单。", "Choose uninstall targets. Press Esc to return to the main menu.")
+			model.hint = m.catalog.Msg("Space 选择多个目标，Enter 卸载，Esc 返回。", "Use Space to select multiple targets, Enter to uninstall, Esc to go back.")
+		}
 		model.options = cloneOptions(m.uninstallOptions)
 		model.cursor = m.uninstallCursor
 		model.multi = true
@@ -824,6 +872,17 @@ func (m interactiveFlowModel) uninstallPanels() []Panel {
 	if m.notice != nil {
 		panels = append(panels, *m.notice)
 	}
+	if m.uninstallCLIMode {
+		panels = append(panels, Panel{
+			Title: m.catalog.Msg("准备卸载 CLI", "CLI uninstall plan"),
+			Lines: []string{
+				fmt.Sprintf(m.catalog.Msg("已选择 %d 个目标。", "%d targets selected."), selectedCount(m.uninstallOptions)),
+				m.catalog.Msg("该操作会卸载 CLI 本体，并默认删除配置目录（完整卸载）。", "This will uninstall the CLI tool and purge its config directory by default (full uninstall)."),
+				m.catalog.Msg("按 Enter 执行卸载，按 Esc 返回主菜单。", "Press Enter to uninstall, Esc to go back."),
+			},
+		})
+		return panels
+	}
 	panels = append(panels, Panel{
 		Title: m.catalog.Msg("准备卸载", "Uninstall plan"),
 		Lines: []string{
@@ -850,6 +909,9 @@ func (m interactiveFlowModel) busyMessage() string {
 	case m.screen == flowScreenInstallTargets:
 		return m.catalog.Msg("正在安装所选目标…", "Installing selected targets...")
 	case m.screen == flowScreenUninstallTargets:
+		if m.uninstallCLIMode {
+			return m.catalog.Msg("正在卸载所选 CLI…", "Uninstalling selected CLIs...")
+		}
 		return m.catalog.Msg("正在卸载所选目标…", "Uninstalling selected targets...")
 	case m.mainOptions[m.mainCursor].Value == string(ActionUpdate):
 		return m.catalog.Msg("正在检查最新版本并更新…", "Checking the latest release and updating...")

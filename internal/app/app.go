@@ -102,8 +102,10 @@ func (a *App) runInteractiveMainMenu() int {
 		BootstrapManual:        a.bootstrapManualPanel,
 		InstallOptions:         a.installTargetOptions,
 		UninstallOptions:       a.uninstallTargetOptions,
+		UninstallCLIOptions:    a.uninstallCLITargetOptions,
 		Install:                a.installTargetsPanel,
 		Uninstall:              a.uninstallTargetsPanel,
+		UninstallCLI:           a.uninstallCLITargetsPanel,
 		Update:                 a.updatePanel,
 		Clean:                  a.cleanPanel,
 	}, a.Stdout); err != nil {
@@ -190,11 +192,20 @@ func (a *App) runInstall(args []string) int {
 func (a *App) runUninstall(args []string) int {
 	targetName := ""
 	uninstallAll := false
+	removeCLI := false
+	purgeConfig := false
+	keepConfig := false
 
 	for _, arg := range args {
 		switch {
 		case arg == "--all":
 			uninstallAll = true
+		case arg == "--cli":
+			removeCLI = true
+		case arg == "--purge-config":
+			purgeConfig = true
+		case arg == "--keep-config":
+			keepConfig = true
 		case strings.HasPrefix(arg, "--"):
 			fmt.Fprintln(a.Stderr, a.Catalog.Msg("未知参数。", "Unknown flag."))
 			return 1
@@ -203,9 +214,58 @@ func (a *App) runUninstall(args []string) int {
 		}
 	}
 
+	if purgeConfig && keepConfig {
+		fmt.Fprintln(a.Stderr, a.Catalog.Msg("--purge-config 与 --keep-config 不能同时使用。", "--purge-config and --keep-config are mutually exclusive."))
+		return 1
+	}
+	if purgeConfig && !removeCLI {
+		fmt.Fprintln(a.Stderr, a.Catalog.Msg("--purge-config 需要与 --cli 一起使用。", "--purge-config requires --cli."))
+		return 1
+	}
+	// Full uninstall defaults to purging the config directory unless explicitly kept.
+	if removeCLI && !keepConfig {
+		purgeConfig = true
+	}
+
 	if uninstallAll {
-		if _, err := a.Installer.UninstallAll(); err != nil {
-			fmt.Fprintln(a.Stderr, err.Error())
+		targetsToProcess := a.Installer.DetectInstalledTargets()
+		if removeCLI {
+			targetSet := make(map[string]bool, len(targetsToProcess))
+			for _, name := range targetsToProcess {
+				targetSet[name] = true
+			}
+			for _, name := range a.Installer.DetectInstalledCLIs() {
+				targetSet[name] = true
+			}
+			targetsToProcess = targetsToProcess[:0]
+			for name := range targetSet {
+				targetsToProcess = append(targetsToProcess, name)
+			}
+		}
+
+		success := 0
+		for _, name := range targetsToProcess {
+			if err := a.Installer.Uninstall(name); err != nil {
+				fmt.Fprintln(a.Stderr, err.Error())
+				continue
+			}
+			if removeCLI {
+				if _, err := a.Installer.UninstallCLI(name); err != nil {
+					fmt.Fprintln(a.Stderr, err.Error())
+					continue
+				}
+				if purgeConfig {
+					if err := a.Installer.PurgeConfigDir(name); err != nil {
+						fmt.Fprintln(a.Stderr, err.Error())
+						continue
+					}
+				}
+			}
+			success++
+		}
+		if success == 0 {
+			fmt.Fprintln(a.Stderr, a.Catalog.Msg("未卸载任何目标。", "No targets were uninstalled."))
+			return 1
 		}
 		return 0
 	}
@@ -221,6 +281,18 @@ func (a *App) runUninstall(args []string) int {
 	if err := a.Installer.Uninstall(targetName); err != nil {
 		fmt.Fprintln(a.Stderr, err.Error())
 		return 1
+	}
+	if removeCLI {
+		if _, err := a.Installer.UninstallCLI(targetName); err != nil {
+			fmt.Fprintln(a.Stderr, err.Error())
+			return 1
+		}
+		if purgeConfig {
+			if err := a.Installer.PurgeConfigDir(targetName); err != nil {
+				fmt.Fprintln(a.Stderr, err.Error())
+				return 1
+			}
+		}
 	}
 	fmt.Fprintln(a.Stdout, a.Catalog.Msg("卸载完成。", "Uninstall complete."))
 	return 0
@@ -367,7 +439,7 @@ func (a *App) printUsage() {
 	fmt.Fprintln(a.Stdout, "")
 	fmt.Fprintln(a.Stdout, "Commands:")
 	fmt.Fprintln(a.Stdout, "  install [target|--all] [--profile=<lite|standard|full>]")
-	fmt.Fprintln(a.Stdout, "  uninstall [target|--all]")
+	fmt.Fprintln(a.Stdout, "  uninstall [target|--all] [--cli] [--keep-config] [--purge-config]")
 	fmt.Fprintln(a.Stdout, "  update [branch]")
 	fmt.Fprintln(a.Stdout, "  status")
 	fmt.Fprintln(a.Stdout, "  clean")
@@ -587,6 +659,20 @@ func (a *App) uninstallTargetOptions() []ui.Option {
 	return options
 }
 
+func (a *App) uninstallCLITargetOptions() []ui.Option {
+	installed := a.Installer.DetectInstalledCLIs()
+	options := make([]ui.Option, 0, len(installed))
+	for _, name := range installed {
+		options = append(options, ui.Option{
+			Value:       name,
+			Label:       name,
+			Badge:       strings.ToUpper(name),
+			Description: a.Catalog.Msg("卸载该 CLI 本体，并默认删除配置目录（完整卸载）。", "Uninstall the CLI tool and purge its config directory by default (full uninstall)."),
+		})
+	}
+	return options
+}
+
 func (a *App) installTargetsPanel(profile string, targets []string) ui.Panel {
 	success := 0
 	lines := []string{
@@ -628,6 +714,40 @@ func (a *App) uninstallTargetsPanel(targets []string) ui.Panel {
 	}
 	lines = append([]string{
 		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个目标卸载。", "Completed uninstall for %d/%d targets."), success, len(targets)),
+	}, lines...)
+	if success == 0 {
+		return ui.Panel{
+			Title: a.Catalog.Msg("卸载失败", "Uninstall failed"),
+			Lines: lines,
+		}
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("卸载结果", "Uninstall result"),
+		Lines: lines,
+	}
+}
+
+func (a *App) uninstallCLITargetsPanel(targets []string) ui.Panel {
+	success := 0
+	lines := make([]string, 0, len(targets)+1)
+	for _, name := range targets {
+		if err := a.Installer.Uninstall(name); err != nil {
+			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
+			continue
+		}
+		if _, err := a.Installer.UninstallCLI(name); err != nil {
+			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
+			continue
+		}
+		if err := a.Installer.PurgeConfigDir(name); err != nil {
+			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
+			continue
+		}
+		success++
+		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), name))
+	}
+	lines = append([]string{
+		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个 CLI 卸载。", "Completed CLI uninstall for %d/%d targets."), success, len(targets)),
 	}, lines...)
 	if success == 0 {
 		return ui.Panel{

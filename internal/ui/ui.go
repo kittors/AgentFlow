@@ -16,12 +16,13 @@ import (
 type Action string
 
 const (
-	ActionInstall   Action = "install"
-	ActionUninstall Action = "uninstall"
-	ActionUpdate    Action = "update"
-	ActionStatus    Action = "status"
-	ActionClean     Action = "clean"
-	ActionExit      Action = "exit"
+	ActionInstall      Action = "install"
+	ActionUninstall    Action = "uninstall"
+	ActionUninstallCLI Action = "uninstall-cli"
+	ActionUpdate       Action = "update"
+	ActionStatus       Action = "status"
+	ActionClean        Action = "clean"
+	ActionExit         Action = "exit"
 )
 
 type Option struct {
@@ -127,6 +128,12 @@ func RunMainMenu(catalog i18n.Catalog, version string, panels []Panel, output io
 			Label:       catalog.Msg("卸载已安装目标", "Uninstall from installed targets"),
 			Badge:       catalog.Msg("移除", "REMOVE"),
 			Description: catalog.Msg("从已接入 CLI 中清理 AgentFlow 产物，同时保留你的原有配置。", "Remove AgentFlow assets from integrated CLIs while preserving your own config where possible."),
+		},
+		{
+			Value:       string(ActionUninstallCLI),
+			Label:       catalog.Msg("卸载 CLI 工具", "Uninstall CLI tools"),
+			Badge:       catalog.Msg("CLI", "CLI"),
+			Description: catalog.Msg("卸载 Codex / Claude / Gemini / Qwen / Kiro 等 CLI 本体，并默认删除配置目录（完整卸载）。", "Uninstall CLI tools like Codex / Claude / Gemini / Qwen / Kiro and purge their config directories by default (full uninstall)."),
 		},
 		{
 			Value:       string(ActionUpdate),

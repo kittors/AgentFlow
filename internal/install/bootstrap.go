@@ -15,6 +15,7 @@ import (
 )
 
 const nvmInstallScriptURL = "https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh"
+const kiroInstallScriptURL = "https://cli.kiro.dev/install"
 
 var (
 	runtimeGOOS = runtime.GOOS
@@ -194,6 +195,24 @@ func (i *Installer) autoInstallSupported(target targets.Target, runtimeStatus Ru
 	if !target.BootstrapSupported {
 		return false
 	}
+
+	if target.Name == "kiro" {
+		switch runtimeStatus.Platform {
+		case platformDarwin, platformLinux:
+			return runtimeStatus.BashPath != "" && (i.hasNativeCommand("curl") || i.hasNativeCommand("wget"))
+		case platformWindows:
+			if runtimeStatus.InWSL {
+				return runtimeStatus.BashPath != "" && (i.hasNativeCommand("curl") || i.hasNativeCommand("wget"))
+			}
+			if !runtimeStatus.WSLReady {
+				return false
+			}
+			return i.hasWSLCommand("curl") || i.hasWSLCommand("wget")
+		default:
+			return false
+		}
+	}
+
 	switch runtimeStatus.Platform {
 	case platformDarwin, platformLinux:
 		return runtimeStatus.BashPath != ""
@@ -250,7 +269,13 @@ func (i *Installer) BootstrapCLI(targetName string) ([]string, error) {
 		return nil, errors.New(strings.Join(i.manualInstallLines(target, runtimeStatus), "\n"))
 	}
 
-	output, err := i.runBootstrapScript(target, runtimeStatus)
+	var output []byte
+	var err error
+	if target.Name == "kiro" {
+		output, err = i.runKiroBootstrapScript(runtimeStatus)
+	} else {
+		output, err = i.runBootstrapScript(target, runtimeStatus)
+	}
 	if err != nil {
 		return failureLines(target, output), err
 	}
@@ -258,7 +283,12 @@ func (i *Installer) BootstrapCLI(targetName string) ([]string, error) {
 	status := i.detectTargetStatus(target)
 	lines := []string{
 		fmt.Sprintf(i.Catalog.Msg("已准备 %s 的运行环境。", "Prepared the runtime environment for %s."), target.DisplayName),
-		fmt.Sprintf(i.Catalog.Msg("安装命令: npm install -g %s", "Install command: npm install -g %s"), target.NPMPackage),
+	}
+	if target.Name == "kiro" {
+		lines = append(lines, fmt.Sprintf(i.Catalog.Msg("安装命令: curl -sSL %s | bash", "Install command: curl -sSL %s | bash"), kiroInstallScriptURL))
+		lines = append(lines, i.Catalog.Msg("接下来可执行: kiro-cli login", "Next: run: kiro-cli login"))
+	} else {
+		lines = append(lines, fmt.Sprintf(i.Catalog.Msg("安装命令: npm install -g %s", "Install command: npm install -g %s"), target.NPMPackage))
 	}
 	if status.CLIInstalled {
 		lines = append(lines, fmt.Sprintf(i.Catalog.Msg("CLI 可执行文件: %s", "CLI executable: %s"), status.CLIPath))
@@ -284,6 +314,21 @@ func (i *Installer) ManualInstallLines(targetName string) ([]string, error) {
 }
 
 func (i *Installer) manualInstallLines(target targets.Target, runtimeStatus RuntimeStatus) []string {
+	if target.Name == "kiro" {
+		lines := []string{
+			fmt.Sprintf(i.Catalog.Msg("%s 的推荐安装命令:", "Recommended install command for %s:"), target.DisplayName),
+			fmt.Sprintf("curl -sSL %s | bash", kiroInstallScriptURL),
+		}
+		if target.DocsURL != "" {
+			lines = append(lines, fmt.Sprintf(i.Catalog.Msg("官方文档: %s", "Official docs: %s"), target.DocsURL))
+		}
+		if runtimeStatus.Platform == platformWindows && !runtimeStatus.InWSL {
+			lines = append(lines, "")
+			lines = append(lines, i.Catalog.Msg("Windows 建议先开启 WSL2，并在 WSL2 Bash 中安装与使用 Kiro CLI。", "On Windows, enable WSL2 and install/use Kiro CLI inside WSL2 Bash."))
+		}
+		return lines
+	}
+
 	lines := []string{
 		fmt.Sprintf(i.Catalog.Msg("%s 的推荐安装命令:", "Recommended install command for %s:"), target.DisplayName),
 		fmt.Sprintf("npm install -g %s", target.NPMPackage),
@@ -414,6 +459,36 @@ npm --version
 	default:
 		return runCombined("bash", "-lc", script)
 	}
+}
+
+func (i *Installer) runKiroBootstrapScript(runtimeStatus RuntimeStatus) ([]byte, error) {
+	script := fmt.Sprintf(`set -e
+if command -v curl >/dev/null 2>&1; then
+  curl -sSL %s | bash
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO- %s | bash
+else
+  echo "AgentFlow: curl or wget is required to install Kiro CLI." >&2
+  exit 11
+fi
+command -v kiro-cli >/dev/null 2>&1
+kiro-cli --version || true
+`, shellLiteral(kiroInstallScriptURL), shellLiteral(kiroInstallScriptURL))
+
+	switch runtimeStatus.Platform {
+	case platformWindows:
+		return runCombined("wsl.exe", "bash", "-lc", script)
+	default:
+		return runCombined("bash", "-lc", script)
+	}
+}
+
+func (i *Installer) hasNativeCommand(command string) bool {
+	return strings.TrimSpace(i.nativeCommandValue(fmt.Sprintf("command -v %s 2>/dev/null || true", shellLiteral(command)))) != ""
+}
+
+func (i *Installer) hasWSLCommand(command string) bool {
+	return strings.TrimSpace(i.wslCommandValue(fmt.Sprintf("command -v %s 2>/dev/null || true", shellLiteral(command)))) != ""
 }
 
 func (i *Installer) RuntimeSummaryLines() []string {

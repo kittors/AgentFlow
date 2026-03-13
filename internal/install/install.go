@@ -21,16 +21,18 @@ var (
 		"codex":    "subagent_codex.md",
 		"claude":   "subagent_claude.md",
 		"gemini":   "subagent_gemini.md",
-		"opencode": "subagent_opencode.md",
 		"qwen":     "subagent_other.md",
+		"kiro":     "subagent_other.md",
+		"opencode": "subagent_opencode.md",
 		"grok":     "subagent_other.md",
 	}
 	targetHooksFiles = map[string]string{
 		"codex":    "hooks_codex.md",
 		"claude":   "hooks_claude.md",
 		"gemini":   "hooks_other.md",
-		"opencode": "hooks_other.md",
 		"qwen":     "hooks_other.md",
+		"kiro":     "hooks_other.md",
+		"opencode": "hooks_other.md",
 		"grok":     "hooks_other.md",
 	}
 )
@@ -84,6 +86,11 @@ func (i *Installer) Install(targetName, profile string) error {
 			return err
 		}
 	}
+	if target.Name == "kiro" {
+		if err := i.deployKiroAgent(target, profile); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -127,6 +134,53 @@ func (i *Installer) Uninstall(targetName string) error {
 	if target.Name == "claude" {
 		if err := i.cleanClaudeHooks(filepath.Join(cliDir, "settings.json")); err != nil {
 			return err
+		}
+	}
+	if target.Name == "kiro" {
+		if err := i.cleanKiroAgent(cliDir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *Installer) deployKiroAgent(target targets.Target, profile string) error {
+	cliDir := filepath.Join(i.HomeDir, target.Dir)
+
+	// Kiro custom agents can reference a local prompt file.
+	promptContent, err := i.buildRulesContent(target.Name, profile)
+	if err != nil {
+		return err
+	}
+	promptPath := filepath.Join(cliDir, "prompts", "agentflow.md")
+	if err := config.SafeWrite(promptPath, []byte(promptContent), 0o644); err != nil {
+		return err
+	}
+
+	agentPath := filepath.Join(cliDir, "agents", "agentflow.json")
+	payload := map[string]any{
+		"name":        "agentflow",
+		"description": "AGENTFLOW_ROUTER: managed by AgentFlow (R0-R4 router, EHRB safety, KB-first workflow).",
+		"prompt":      "file://../prompts/agentflow.md",
+		"resources":   []string{},
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return config.SafeWrite(agentPath, data, 0o644)
+}
+
+func (i *Installer) cleanKiroAgent(cliDir string) error {
+	for _, path := range []string{
+		filepath.Join(cliDir, "agents", "agentflow.json"),
+		filepath.Join(cliDir, "prompts", "agentflow.md"),
+	} {
+		if config.IsAgentFlowFile(path) {
+			if err := config.SafeRemove(path); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
