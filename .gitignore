@@ -35,6 +35,5 @@ htmlcov/
 .coverage
 coverage.xml
 
-# AgentFlow data
-.agentflow/cache/
-.agentflow/sessions/
+# AgentFlow local-only data
+.agentflow/

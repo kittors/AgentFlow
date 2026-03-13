@@ -94,13 +94,18 @@ func (a *App) runInteractiveMainMenu() int {
 	}
 
 	if err := ui.RunInteractiveFlow(a.Catalog, a.Version, ui.InteractiveCallbacks{
-		Status:           a.statusPanel,
-		InstallOptions:   a.installTargetOptions,
-		UninstallOptions: a.uninstallTargetOptions,
-		Install:          a.installTargetsPanel,
-		Uninstall:        a.uninstallTargetsPanel,
-		Update:           a.updatePanel,
-		Clean:            a.cleanPanel,
+		Status:                 a.statusPanel,
+		BootstrapOptions:       a.bootstrapTargetOptions,
+		BootstrapAutoSupported: a.bootstrapAutoSupported,
+		BootstrapDetails:       a.bootstrapTargetPanel,
+		BootstrapAuto:          a.bootstrapAutoPanel,
+		BootstrapManual:        a.bootstrapManualPanel,
+		InstallOptions:         a.installTargetOptions,
+		UninstallOptions:       a.uninstallTargetOptions,
+		Install:                a.installTargetsPanel,
+		Uninstall:              a.uninstallTargetsPanel,
+		Update:                 a.updatePanel,
+		Clean:                  a.cleanPanel,
 	}, a.Stdout); err != nil {
 		fmt.Fprintln(a.Stderr, err.Error())
 		return 1
@@ -421,10 +426,12 @@ func (a *App) cleanPanel() ui.Panel {
 }
 
 func (a *App) statusPanel() ui.Panel {
-	lines := make([]string, 0, 10)
+	lines := make([]string, 0, 16)
 	if executable, err := os.Executable(); err == nil {
 		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("可执行文件: %s", "Executable: %s"), executable))
 	}
+	lines = append(lines, "")
+	lines = append(lines, a.Installer.RuntimeSummaryLines()...)
 	lines = append(lines, "")
 	lines = append(lines, a.Installer.StatusLines()...)
 	if result, err := a.Checker.Check(a.Version, update.Options{CacheTTLHours: 72}); err == nil && result.UpdateAvailable {
@@ -447,22 +454,123 @@ func (a *App) mainMenuPanels(notice *ui.Panel) []ui.Panel {
 }
 
 func (a *App) installTargetOptions() []ui.Option {
-	detected := a.Installer.DetectInstalledCLIs()
-	installed := sliceToSet(a.Installer.DetectInstalledTargets())
-	options := make([]ui.Option, 0, len(detected))
-	for _, name := range detected {
-		description := a.Catalog.Msg("已检测到该 CLI，可直接部署 AgentFlow。", "Detected on this machine and ready for AgentFlow deployment.")
-		if _, ok := installed[name]; ok {
-			description = a.Catalog.Msg("该 CLI 已接入 AgentFlow，再次执行会覆盖为当前版本。", "AgentFlow is already installed for this CLI; rerunning refreshes it to the current version.")
+	statuses := a.Installer.DetectTargetStatuses()
+	options := make([]ui.Option, 0, len(statuses))
+	for _, status := range statuses {
+		if !status.CLIInstalled && !status.AgentFlowInstalled && !status.ConfigDirExists {
+			continue
+		}
+
+		description := a.Catalog.Msg("可继续部署 AgentFlow。", "Ready for AgentFlow deployment.")
+		switch {
+		case status.CLIInstalled && status.AgentFlowInstalled:
+			description = a.Catalog.Msg("CLI 与 AgentFlow 都已就绪；再次执行会刷新到当前版本。", "Both the CLI and AgentFlow are ready; rerunning refreshes to the current version.")
+		case status.CLIInstalled:
+			description = a.Catalog.Msg("CLI 已安装，可直接部署 AgentFlow。", "The CLI is installed and ready for AgentFlow.")
+		case status.AgentFlowInstalled:
+			description = a.Catalog.Msg("已存在 AgentFlow 文件，但未检测到 CLI 可执行文件。", "AgentFlow files exist, but the CLI executable was not detected.")
+		case status.ConfigDirExists:
+			description = a.Catalog.Msg("已检测到配置目录，可提前写入 AgentFlow。", "A config directory was detected, so AgentFlow can be written in advance.")
 		}
 		options = append(options, ui.Option{
-			Value:       name,
-			Label:       name,
-			Badge:       strings.ToUpper(name),
+			Value:       status.Target.Name,
+			Label:       status.Target.DisplayName,
+			Badge:       strings.ToUpper(status.Target.Name),
 			Description: description,
 		})
 	}
 	return options
+}
+
+func (a *App) bootstrapTargetOptions() []ui.Option {
+	statuses := a.Installer.DetectBootstrapTargetStatuses()
+	options := make([]ui.Option, 0, len(statuses))
+	for _, status := range statuses {
+		description := a.Catalog.Msg("未检测到该 CLI，可执行快速安装。", "The CLI was not detected and can be installed quickly.")
+		switch {
+		case status.CLIInstalled && status.AgentFlowInstalled:
+			description = a.Catalog.Msg("CLI 与 AgentFlow 都已就绪；可重装 CLI 或直接返回。", "Both the CLI and AgentFlow are ready; reinstall if needed or go back.")
+		case status.CLIInstalled:
+			description = a.Catalog.Msg("CLI 已安装，可直接切到 AgentFlow 安装分支。", "The CLI is already installed; switch to the AgentFlow install branch if needed.")
+		case !status.AutoInstallSupported:
+			description = a.Catalog.Msg("当前环境不满足自动安装条件；按 Enter 进入安装方式，再查看手动安装提示。", "Automatic installation is not available in this environment; press Enter to open install modes, then view the manual guidance.")
+		}
+		options = append(options, ui.Option{
+			Value:       status.Target.Name,
+			Label:       status.Target.DisplayName,
+			Badge:       strings.ToUpper(status.Target.Name),
+			Description: description,
+		})
+	}
+	return options
+}
+
+func (a *App) bootstrapAutoSupported(targetName string) bool {
+	status, err := a.Installer.DetectTargetStatus(targetName)
+	if err != nil {
+		return true
+	}
+	return status.AutoInstallSupported
+}
+
+func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
+	status, err := a.Installer.DetectTargetStatus(targetName)
+	if err != nil {
+		return errorPanel(a.Catalog.Msg("CLI 信息", "CLI details"), err)
+	}
+
+	lines := make([]string, 0, 16)
+	switch {
+	case status.CLIInstalled:
+		location := status.CLIPath
+		if strings.TrimSpace(status.CLIPathScope) != "" {
+			location = fmt.Sprintf("%s (%s)", status.CLIPath, status.CLIPathScope)
+		}
+		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("CLI 可执行文件: %s", "CLI executable: %s"), location))
+	default:
+		lines = append(lines, a.Catalog.Msg("CLI 可执行文件: 未检测到", "CLI executable: not detected"))
+	}
+
+	lines = append(lines, fmt.Sprintf(a.Catalog.Msg("AgentFlow 目录: %s", "AgentFlow directory: %s"), status.ConfigDir))
+	if status.AgentFlowInstalled {
+		lines = append(lines, a.Catalog.Msg("AgentFlow: 已安装", "AgentFlow: installed"))
+	} else {
+		lines = append(lines, a.Catalog.Msg("AgentFlow: 未安装", "AgentFlow: not installed"))
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, a.Installer.RuntimeSummaryLines()...)
+	if len(status.Notes) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, status.Notes...)
+	}
+
+	return ui.Panel{
+		Title: fmt.Sprintf(a.Catalog.Msg("%s 安装信息", "%s install details"), status.Target.DisplayName),
+		Lines: lines,
+	}
+}
+
+func (a *App) bootstrapAutoPanel(targetName string) ui.Panel {
+	lines, err := a.Installer.BootstrapCLI(targetName)
+	if err != nil {
+		return errorPanel(a.Catalog.Msg("CLI 安装失败", "CLI install failed"), err)
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("CLI 安装结果", "CLI install result"),
+		Lines: lines,
+	}
+}
+
+func (a *App) bootstrapManualPanel(targetName string) ui.Panel {
+	lines, err := a.Installer.ManualInstallLines(targetName)
+	if err != nil {
+		return errorPanel(a.Catalog.Msg("手动安装提示", "Manual install guidance"), err)
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("手动安装提示", "Manual install guidance"),
+		Lines: lines,
+	}
 }
 
 func (a *App) uninstallTargetOptions() []ui.Option {
@@ -543,9 +651,13 @@ func (a *App) printPanel(panel ui.Panel) {
 }
 
 func errorPanel(title string, err error) ui.Panel {
+	lines := strings.Split(strings.ReplaceAll(err.Error(), "\r\n", "\n"), "\n")
+	if len(lines) == 0 {
+		lines = []string{err.Error()}
+	}
 	return ui.Panel{
 		Title: title,
-		Lines: []string{err.Error()},
+		Lines: lines,
 	}
 }
 

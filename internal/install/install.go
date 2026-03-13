@@ -63,9 +63,8 @@ func (i *Installer) Install(targetName, profile string) error {
 	}
 
 	cliDir := filepath.Join(i.HomeDir, target.Dir)
-	info, err := os.Stat(cliDir)
-	if err != nil || !info.IsDir() {
-		return fmt.Errorf(i.Catalog.Msg("目标目录不存在: %s", "target directory not found: %s"), cliDir)
+	if err := os.MkdirAll(cliDir, 0o755); err != nil {
+		return fmt.Errorf(i.Catalog.Msg("无法创建目标目录: %s", "failed to create target directory: %s"), cliDir)
 	}
 
 	if err := i.deployRulesFile(target, profile); err != nil {
@@ -90,10 +89,7 @@ func (i *Installer) Install(targetName, profile string) error {
 
 func (i *Installer) InstallAll(profile string) (int, error) {
 	success := 0
-	for _, name := range targets.Names() {
-		if _, err := os.Stat(filepath.Join(i.HomeDir, targets.All[name].Dir)); err != nil {
-			continue
-		}
+	for _, name := range i.AgentFlowInstallableTargets() {
 		if err := i.Install(name, profile); err == nil {
 			success++
 		}
@@ -148,9 +144,13 @@ func (i *Installer) UninstallAll() (int, error) {
 
 func (i *Installer) DetectInstalledCLIs() []string {
 	result := make([]string, 0)
-	for _, name := range targets.Names() {
-		if info, err := os.Stat(filepath.Join(i.HomeDir, targets.All[name].Dir)); err == nil && info.IsDir() {
-			result = append(result, name)
+	for _, status := range i.DetectTargetStatuses() {
+		if status.CLIInstalled {
+			result = append(result, status.Target.Name)
+			continue
+		}
+		if status.ConfigDirExists && status.Target.Command == "" {
+			result = append(result, status.Target.Name)
 		}
 	}
 	return result
@@ -197,22 +197,19 @@ func (i *Installer) StatusLines() []string {
 	lines := []string{
 		i.Catalog.Msg("CLI 状态:", "CLI status:"),
 	}
-	installed := make(map[string]struct{})
-	for _, name := range i.DetectInstalledTargets() {
-		installed[name] = struct{}{}
-	}
-	for _, name := range targets.Names() {
-		target := targets.All[name]
-		cliDir := filepath.Join(i.HomeDir, target.Dir)
-		if _, ok := installed[name]; ok {
-			lines = append(lines, fmt.Sprintf("  [OK] %s", name))
-			continue
+	for _, status := range i.DetectTargetStatuses() {
+		switch {
+		case status.CLIInstalled && status.AgentFlowInstalled:
+			lines = append(lines, fmt.Sprintf("  [OK] %s", status.Target.Name))
+		case status.CLIInstalled:
+			lines = append(lines, fmt.Sprintf("  [CLI] %s", status.Target.Name))
+		case status.AgentFlowInstalled:
+			lines = append(lines, fmt.Sprintf("  [AF] %s", status.Target.Name))
+		case status.ConfigDirExists:
+			lines = append(lines, fmt.Sprintf("  [..] %s", status.Target.Name))
+		default:
+			lines = append(lines, fmt.Sprintf("  [--] %s", status.Target.Name))
 		}
-		if _, err := os.Stat(cliDir); err == nil {
-			lines = append(lines, fmt.Sprintf("  [..] %s", name))
-			continue
-		}
-		lines = append(lines, fmt.Sprintf("  [--] %s", name))
 	}
 	return lines
 }

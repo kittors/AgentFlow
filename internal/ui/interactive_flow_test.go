@@ -51,8 +51,15 @@ func TestFlowEscReturnsSingleLevelFromInstallTargets(t *testing.T) {
 
 	next, _ := model.handleEnter()
 	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenInstallHub {
+		t.Fatalf("expected install hub after selecting install, got %v", model.screen)
+	}
+
+	model.installHubCursor = 1
+	next, _ = model.handleEnter()
+	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenProfile {
-		t.Fatalf("expected profile screen after selecting install, got %v", model.screen)
+		t.Fatalf("expected profile screen after selecting install-agentflow, got %v", model.screen)
 	}
 
 	next, _ = model.handleEnter()
@@ -69,8 +76,59 @@ func TestFlowEscReturnsSingleLevelFromInstallTargets(t *testing.T) {
 
 	next, _ = model.handleBack()
 	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenInstallHub {
+		t.Fatalf("expected second Esc to return to install hub, got %v", model.screen)
+	}
+
+	next, _ = model.handleBack()
+	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenMain {
-		t.Fatalf("expected second Esc to return to main, got %v", model.screen)
+		t.Fatalf("expected third Esc to return to main, got %v", model.screen)
+	}
+}
+
+func TestFlowBootstrapBranchNavigatesAndReturnsSingleLevel(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+		BootstrapOptions: func() []Option {
+			return []Option{{Value: "codex", Label: "Codex CLI", Badge: "CODEX"}}
+		},
+		BootstrapDetails: func(target string) Panel {
+			return Panel{Title: "CLI details", Lines: []string{"target=" + target}}
+		},
+	})
+
+	next, _ := model.handleEnter()
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenInstallHub {
+		t.Fatalf("expected install hub, got %v", model.screen)
+	}
+
+	next, _ = model.handleEnter()
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenBootstrapTargets {
+		t.Fatalf("expected bootstrap targets screen, got %v", model.screen)
+	}
+	if model.bootstrapDetail == nil || model.bootstrapDetail.Title != "CLI details" {
+		t.Fatalf("expected bootstrap detail panel, got %#v", model.bootstrapDetail)
+	}
+
+	next, _ = model.handleEnter()
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenBootstrapActions {
+		t.Fatalf("expected bootstrap actions screen, got %v", model.screen)
+	}
+
+	next, _ = model.handleBack()
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenBootstrapTargets {
+		t.Fatalf("expected Esc to return to bootstrap targets, got %v", model.screen)
+	}
+
+	next, _ = model.handleBack()
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenInstallHub {
+		t.Fatalf("expected second Esc to return to install hub, got %v", model.screen)
 	}
 }
 
@@ -316,10 +374,51 @@ func TestFlowUninstallActionReturnsToMainWithNotice(t *testing.T) {
 	}
 }
 
+func TestFlowBootstrapBranchDefaultsToManualWhenAutoUnsupported(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+		BootstrapOptions: func() []Option {
+			return []Option{{Value: "gemini", Label: "Gemini CLI", Badge: "GEMINI"}}
+		},
+		BootstrapAutoSupported: func(target string) bool {
+			return false
+		},
+	})
+
+	next, _ := model.handleEnter()
+	model = next.(interactiveFlowModel)
+	next, _ = model.handleEnter()
+	model = next.(interactiveFlowModel)
+	next, _ = model.handleEnter()
+	model = next.(interactiveFlowModel)
+
+	if model.screen != flowScreenBootstrapActions {
+		t.Fatalf("expected bootstrap actions screen, got %v", model.screen)
+	}
+	if model.bootstrapActionCursor != 1 {
+		t.Fatalf("expected manual action to be preselected when auto install is unavailable, got %d", model.bootstrapActionCursor)
+	}
+}
+
 func newTestInteractiveFlowModel(callbacks InteractiveCallbacks) interactiveFlowModel {
 	catalog := i18n.NewCatalog()
 	if callbacks.Status == nil {
 		callbacks.Status = func() Panel { return Panel{Title: "Environment"} }
+	}
+	if callbacks.BootstrapOptions == nil {
+		callbacks.BootstrapOptions = func() []Option { return nil }
+	}
+	if callbacks.BootstrapAutoSupported == nil {
+		callbacks.BootstrapAutoSupported = func(target string) bool { return true }
+	}
+	if callbacks.BootstrapDetails == nil {
+		callbacks.BootstrapDetails = func(target string) Panel { return Panel{Title: "CLI details"} }
+	}
+	if callbacks.BootstrapAuto == nil {
+		callbacks.BootstrapAuto = func(target string) Panel { return Panel{Title: "CLI install result"} }
+	}
+	if callbacks.BootstrapManual == nil {
+		callbacks.BootstrapManual = func(target string) Panel { return Panel{Title: "Manual install guidance"} }
 	}
 	if callbacks.InstallOptions == nil {
 		callbacks.InstallOptions = func() []Option { return nil }
@@ -353,6 +452,14 @@ func newTestInteractiveFlowModel(callbacks InteractiveCallbacks) interactiveFlow
 			{Value: string(ActionStatus), Label: "Status", Badge: "STATUS"},
 			{Value: string(ActionClean), Label: "Clean", Badge: "CLEAN"},
 			{Value: string(ActionExit), Label: "Exit", Badge: "EXIT"},
+		},
+		installHubOptions: []Option{
+			{Value: "bootstrap-cli", Label: "Install CLI tools", Badge: "CLI"},
+			{Value: "install-agentflow", Label: "Install AgentFlow into existing CLIs", Badge: "APPLY"},
+		},
+		bootstrapActionOptions: []Option{
+			{Value: "auto", Label: "Automatic install", Badge: "AUTO"},
+			{Value: "manual", Label: "Show manual install guidance", Badge: "MANUAL"},
 		},
 		profileOptions: []Option{
 			{Value: "lite", Label: "lite", Badge: "LITE"},

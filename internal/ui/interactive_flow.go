@@ -12,19 +12,27 @@ import (
 )
 
 type InteractiveCallbacks struct {
-	Status           func() Panel
-	InstallOptions   func() []Option
-	UninstallOptions func() []Option
-	Install          func(profile string, targets []string) Panel
-	Uninstall        func(targets []string) Panel
-	Update           func() (Panel, string)
-	Clean            func() Panel
+	Status                 func() Panel
+	BootstrapOptions       func() []Option
+	BootstrapAutoSupported func(target string) bool
+	BootstrapDetails       func(target string) Panel
+	BootstrapAuto          func(target string) Panel
+	BootstrapManual        func(target string) Panel
+	InstallOptions         func() []Option
+	UninstallOptions       func() []Option
+	Install                func(profile string, targets []string) Panel
+	Uninstall              func(targets []string) Panel
+	Update                 func() (Panel, string)
+	Clean                  func() Panel
 }
 
 type flowScreen int
 
 const (
 	flowScreenMain flowScreen = iota
+	flowScreenInstallHub
+	flowScreenBootstrapTargets
+	flowScreenBootstrapActions
 	flowScreenProfile
 	flowScreenInstallTargets
 	flowScreenUninstallTargets
@@ -36,15 +44,17 @@ const (
 	flowActionRefreshStatus flowAction = iota
 	flowActionUpdate
 	flowActionClean
+	flowActionBootstrapAuto
 	flowActionInstall
 	flowActionUninstall
 )
 
 type flowResultMsg struct {
-	action  flowAction
-	notice  *Panel
-	status  Panel
-	version string
+	action          flowAction
+	notice          *Panel
+	status          Panel
+	version         string
+	bootstrapDetail *Panel
 }
 
 type flowTickMsg struct{}
@@ -61,19 +71,27 @@ type interactiveFlowModel struct {
 	busy   bool
 	spin   int
 
-	mainOptions      []Option
-	profileOptions   []Option
-	installOptions   []Option
-	uninstallOptions []Option
+	mainOptions            []Option
+	installHubOptions      []Option
+	bootstrapOptions       []Option
+	bootstrapActionOptions []Option
+	profileOptions         []Option
+	installOptions         []Option
+	uninstallOptions       []Option
 
-	mainCursor      int
-	profileCursor   int
-	installCursor   int
-	uninstallCursor int
+	mainCursor            int
+	installHubCursor      int
+	bootstrapCursor       int
+	bootstrapActionCursor int
+	profileCursor         int
+	installCursor         int
+	uninstallCursor       int
 
-	selectedProfile string
-	notice          *Panel
-	status          Panel
+	selectedProfile         string
+	selectedBootstrapTarget string
+	notice                  *Panel
+	status                  Panel
+	bootstrapDetail         *Panel
 }
 
 func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks InteractiveCallbacks, output io.Writer) error {
@@ -93,9 +111,9 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 		mainOptions: []Option{
 			{
 				Value:       string(ActionInstall),
-				Label:       catalog.Msg("安装到 CLI", "Install to CLI targets"),
+				Label:       catalog.Msg("安装", "Install"),
 				Badge:       catalog.Msg("安装", "SETUP"),
-				Description: catalog.Msg("把 AgentFlow 规则、模块、技能和 hooks 部署到 Codex、Claude、Gemini 等 CLI。", "Deploy AgentFlow rules, modules, skills, and hooks into Codex, Claude, Gemini, and other CLIs."),
+				Description: catalog.Msg("先安装 Codex / Claude / Gemini 等 CLI，或继续把 AgentFlow 部署到已存在的 CLI。", "Install Codex / Claude / Gemini first, or deploy AgentFlow into CLIs that already exist."),
 			},
 			{
 				Value:       string(ActionUninstall),
@@ -126,6 +144,34 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Label:       catalog.Msg("退出", "Exit"),
 				Badge:       catalog.Msg("退出", "EXIT"),
 				Description: catalog.Msg("退出交互菜单并返回终端。", "Leave the interactive menu and return to the terminal."),
+			},
+		},
+		installHubOptions: []Option{
+			{
+				Value:       "bootstrap-cli",
+				Label:       catalog.Msg("安装 CLI 工具", "Install CLI tools"),
+				Badge:       catalog.Msg("CLI", "CLI"),
+				Description: catalog.Msg("快速安装 Codex、Claude Code、Gemini CLI，并补齐 Node / nvm / WSL2 依赖。", "Quickly install Codex, Claude Code, and Gemini CLI, including Node / nvm / WSL2 prerequisites."),
+			},
+			{
+				Value:       "install-agentflow",
+				Label:       catalog.Msg("安装 AgentFlow 到已安装 CLI", "Install AgentFlow into existing CLIs"),
+				Badge:       catalog.Msg("接入", "APPLY"),
+				Description: catalog.Msg("对已经存在的 CLI 写入 AgentFlow 规则、模块、技能和 hooks。", "Write AgentFlow rules, modules, skills, and hooks into CLIs that already exist."),
+			},
+		},
+		bootstrapActionOptions: []Option{
+			{
+				Value:       "auto",
+				Label:       catalog.Msg("自动安装", "Automatic install"),
+				Badge:       catalog.Msg("自动", "AUTO"),
+				Description: catalog.Msg("自动检查 nvm / Node，并安装所选 CLI。", "Automatically verify nvm / Node and install the selected CLI."),
+			},
+			{
+				Value:       "manual",
+				Label:       catalog.Msg("查看手动安装提示", "Show manual install guidance"),
+				Badge:       catalog.Msg("手动", "MANUAL"),
+				Description: catalog.Msg("显示适合当前平台的手动安装步骤和命令。", "Show manual installation steps and commands for the current platform."),
 			},
 		},
 		profileOptions: []Option{
@@ -166,11 +212,26 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if strings.TrimSpace(value.status.Title) != "" || len(value.status.Lines) > 0 {
 			m.status = value.status
 		}
+		if value.bootstrapDetail != nil {
+			m.bootstrapDetail = value.bootstrapDetail
+		}
 		switch value.action {
 		case flowActionRefreshStatus:
+			m.bootstrapOptions = m.bootstrapOptionsList()
+			m.installOptions = m.installOptionsList()
+			m.uninstallOptions = m.uninstallOptionsList()
 			if value.notice != nil {
 				m.notice = value.notice
 			}
+			m.refreshBootstrapDetail()
+		case flowActionBootstrapAuto:
+			m.bootstrapOptions = m.bootstrapOptionsList()
+			m.installOptions = m.installOptionsList()
+			m.uninstallOptions = m.uninstallOptionsList()
+			if value.notice != nil {
+				m.notice = value.notice
+			}
+			m.refreshBootstrapDetail()
 		case flowActionInstall, flowActionUninstall, flowActionUpdate, flowActionClean:
 			m.screen = flowScreenMain
 			m.installOptions = nil
@@ -259,8 +320,14 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case flowScreenMain:
 		return m, tea.Quit
-	case flowScreenProfile:
+	case flowScreenInstallHub:
 		m.screen = flowScreenMain
+	case flowScreenBootstrapTargets:
+		m.screen = flowScreenInstallHub
+	case flowScreenBootstrapActions:
+		m.screen = flowScreenBootstrapTargets
+	case flowScreenProfile:
+		m.screen = flowScreenInstallHub
 	case flowScreenInstallTargets:
 		m.screen = flowScreenProfile
 	case flowScreenUninstallTargets:
@@ -275,15 +342,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 	case flowScreenMain:
 		switch Action(m.mainOptions[m.mainCursor].Value) {
 		case ActionInstall:
-			m.installOptions = cloneOptions(m.callbacks.InstallOptions())
-			if len(m.installOptions) == 0 {
-				m.notice = panelRef(Panel{
-					Title: m.catalog.Msg("安装结果", "Install result"),
-					Lines: []string{m.catalog.Msg("未检测到任何已安装的 CLI。", "No installed CLIs detected.")},
-				})
-				return m, nil
-			}
-			m.screen = flowScreenProfile
+			m.screen = flowScreenInstallHub
 			m.notice = nil
 			return m, nil
 		case ActionUninstall:
@@ -306,6 +365,66 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m.startBusy(flowActionClean, m.catalog.Msg("正在清理缓存…", "Cleaning caches..."))
 		case ActionExit:
 			return m, tea.Quit
+		}
+	case flowScreenInstallHub:
+		switch m.installHubOptions[m.installHubCursor].Value {
+		case "bootstrap-cli":
+			m.bootstrapOptions = m.bootstrapOptionsList()
+			if len(m.bootstrapOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("CLI 安装", "CLI install"),
+					Lines: []string{m.catalog.Msg("当前没有可用的 CLI 安装目标。", "There are no CLI install targets available right now.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenBootstrapTargets
+			m.bootstrapCursor = 0
+			m.selectedBootstrapTarget = m.bootstrapOptions[0].Value
+			m.notice = nil
+			m.refreshBootstrapDetail()
+			return m, nil
+		case "install-agentflow":
+			m.installOptions = m.installOptionsList()
+			if len(m.installOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("安装提示", "Install hint"),
+					Lines: []string{
+						m.catalog.Msg("还没有可安装 AgentFlow 的 CLI。先进入“安装 CLI 工具”分支完成 Codex、Claude 或 Gemini 的安装。", "There are no CLI targets ready for AgentFlow yet. Use the CLI install branch first to install Codex, Claude, or Gemini."),
+					},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenProfile
+			m.notice = nil
+			return m, nil
+		}
+	case flowScreenBootstrapTargets:
+		if len(m.bootstrapOptions) == 0 {
+			return m, nil
+		}
+		m.selectedBootstrapTarget = m.bootstrapOptions[m.bootstrapCursor].Value
+		m.screen = flowScreenBootstrapActions
+		m.bootstrapActionCursor = 0
+		if !m.bootstrapAutoSupported(m.selectedBootstrapTarget) && len(m.bootstrapActionOptions) > 1 {
+			m.bootstrapActionCursor = 1
+		}
+		m.notice = nil
+		m.refreshBootstrapDetail()
+		return m, nil
+	case flowScreenBootstrapActions:
+		if len(m.bootstrapActionOptions) == 0 {
+			return m, nil
+		}
+		switch m.bootstrapActionOptions[m.bootstrapActionCursor].Value {
+		case "auto":
+			return m.startBusy(flowActionBootstrapAuto, m.catalog.Msg("正在安装所选 CLI…", "Installing the selected CLI..."))
+		case "manual":
+			if m.callbacks.BootstrapManual != nil {
+				panel := m.callbacks.BootstrapManual(m.selectedBootstrapTarget)
+				m.notice = panelRef(panel)
+			}
+			m.refreshBootstrapDetail()
+			return m, nil
 		}
 	case flowScreenProfile:
 		m.selectedProfile = m.profileOptions[m.profileCursor].Value
@@ -373,6 +492,35 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 			cursor = len(m.mainOptions) - 1
 		}
 		m.mainCursor = cursor
+	case flowScreenInstallHub:
+		if len(m.installHubOptions) == 0 {
+			m.installHubCursor = 0
+			return
+		}
+		if cursor > len(m.installHubOptions)-1 {
+			cursor = len(m.installHubOptions) - 1
+		}
+		m.installHubCursor = cursor
+	case flowScreenBootstrapTargets:
+		if len(m.bootstrapOptions) == 0 {
+			m.bootstrapCursor = 0
+			return
+		}
+		if cursor > len(m.bootstrapOptions)-1 {
+			cursor = len(m.bootstrapOptions) - 1
+		}
+		m.bootstrapCursor = cursor
+		m.selectedBootstrapTarget = m.bootstrapOptions[cursor].Value
+		m.refreshBootstrapDetail()
+	case flowScreenBootstrapActions:
+		if len(m.bootstrapActionOptions) == 0 {
+			m.bootstrapActionCursor = 0
+			return
+		}
+		if cursor > len(m.bootstrapActionOptions)-1 {
+			cursor = len(m.bootstrapActionOptions) - 1
+		}
+		m.bootstrapActionCursor = cursor
 	case flowScreenProfile:
 		if len(m.profileOptions) == 0 {
 			m.profileCursor = 0
@@ -405,6 +553,12 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 
 func (m interactiveFlowModel) currentCursor() int {
 	switch m.screen {
+	case flowScreenInstallHub:
+		return m.installHubCursor
+	case flowScreenBootstrapTargets:
+		return m.bootstrapCursor
+	case flowScreenBootstrapActions:
+		return m.bootstrapActionCursor
 	case flowScreenProfile:
 		return m.profileCursor
 	case flowScreenInstallTargets:
@@ -418,6 +572,12 @@ func (m interactiveFlowModel) currentCursor() int {
 
 func (m interactiveFlowModel) currentOptionsLen() int {
 	switch m.screen {
+	case flowScreenInstallHub:
+		return len(m.installHubOptions)
+	case flowScreenBootstrapTargets:
+		return len(m.bootstrapOptions)
+	case flowScreenBootstrapActions:
+		return len(m.bootstrapActionOptions)
 	case flowScreenProfile:
 		return len(m.profileOptions)
 	case flowScreenInstallTargets:
@@ -450,6 +610,7 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 	selectedProfile := m.selectedProfile
 	selectedInstallTargets := selectedValues(m.installOptions)
 	selectedUninstallTargets := selectedValues(m.uninstallOptions)
+	selectedBootstrapTarget := m.selectedBootstrapTarget
 
 	return func() tea.Msg {
 		switch action {
@@ -472,6 +633,21 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 				action: action,
 				notice: panelRef(notice),
 				status: m.callbacks.Status(),
+			}
+		case flowActionBootstrapAuto:
+			notice := Panel{}
+			if m.callbacks.BootstrapAuto != nil {
+				notice = m.callbacks.BootstrapAuto(selectedBootstrapTarget)
+			}
+			detail := Panel{}
+			if m.callbacks.BootstrapDetails != nil {
+				detail = m.callbacks.BootstrapDetails(selectedBootstrapTarget)
+			}
+			return flowResultMsg{
+				action:          action,
+				notice:          panelRef(notice),
+				status:          m.callbacks.Status(),
+				bootstrapDetail: panelRef(detail),
 			}
 		case flowActionInstall:
 			notice := m.callbacks.Install(selectedProfile, selectedInstallTargets)
@@ -505,8 +681,26 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 	}
 
 	switch m.screen {
+	case flowScreenInstallHub:
+		model.subtitle = m.catalog.Msg("先决定要安装 CLI 工具，还是把 AgentFlow 写入已经存在的 CLI。Esc 返回主菜单。", "Choose whether to install CLI tools first, or write AgentFlow into CLIs that already exist. Press Esc to return.")
+		model.hint = m.catalog.Msg("↑/↓ 切换安装路径，Enter 继续，Esc 返回。", "Use ↑/↓ to choose the install path, Enter to continue, Esc to go back.")
+		model.options = cloneOptions(m.installHubOptions)
+		model.cursor = m.installHubCursor
+		model.panels = m.installHubPanels()
+	case flowScreenBootstrapTargets:
+		model.subtitle = m.catalog.Msg("选择要安装的 CLI 工具。Esc 返回安装中心。", "Choose which CLI tool to install. Press Esc to return to the install hub.")
+		model.hint = m.catalog.Msg("↑/↓ 切换 CLI，Enter 选择安装方式，Esc 返回。", "Use ↑/↓ to switch CLIs, Enter to choose the install mode, Esc to go back.")
+		model.options = cloneOptions(m.bootstrapOptions)
+		model.cursor = m.bootstrapCursor
+		model.panels = m.bootstrapTargetPanels()
+	case flowScreenBootstrapActions:
+		model.subtitle = m.catalog.Msg("选择自动安装，或先查看当前平台的手动安装提示。Esc 返回 CLI 列表。", "Choose automatic installation, or inspect the manual guidance for this platform first. Press Esc to go back.")
+		model.hint = m.catalog.Msg("↑/↓ 切换安装方式，Enter 执行，Esc 返回。", "Use ↑/↓ to choose the install mode, Enter to run, Esc to go back.")
+		model.options = cloneOptions(m.bootstrapActionOptions)
+		model.cursor = m.bootstrapActionCursor
+		model.panels = m.bootstrapActionPanels()
 	case flowScreenProfile:
-		model.subtitle = m.catalog.Msg("选择部署 Profile。Esc 返回主菜单。", "Select a deployment profile. Press Esc to return.")
+		model.subtitle = m.catalog.Msg("选择部署 Profile。Esc 返回安装中心。", "Select a deployment profile. Press Esc to return to the install hub.")
 		model.hint = m.catalog.Msg("↑/↓ 切换 Profile，Enter 下一步，Esc 返回。", "Use ↑/↓ to switch profiles, Enter to continue, Esc to go back.")
 		model.options = cloneOptions(m.profileOptions)
 		model.cursor = m.profileCursor
@@ -550,6 +744,51 @@ func (m interactiveFlowModel) mainPanels() []Panel {
 	return panels
 }
 
+func (m interactiveFlowModel) installHubPanels() []Panel {
+	panels := make([]Panel, 0, 3)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("安装中心", "Install hub"),
+		Lines: []string{
+			m.catalog.Msg("先安装 CLI 工具时，AgentFlow 会帮你检查 Node / npm / nvm，并在 Windows 上提示 WSL2。", "When installing CLI tools first, AgentFlow checks Node / npm / nvm and warns about WSL2 on Windows."),
+			m.catalog.Msg("如果 CLI 已经存在，再进入 AgentFlow 安装分支写入规则、技能和 hooks。", "If the CLI already exists, continue into the AgentFlow install branch to write rules, skills, and hooks."),
+		},
+	})
+	panels = append(panels, m.status)
+	return panels
+}
+
+func (m interactiveFlowModel) bootstrapTargetPanels() []Panel {
+	panels := make([]Panel, 0, 2)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	if m.bootstrapDetail != nil {
+		panels = append(panels, *m.bootstrapDetail)
+	}
+	return panels
+}
+
+func (m interactiveFlowModel) bootstrapActionPanels() []Panel {
+	panels := make([]Panel, 0, 3)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	if m.bootstrapDetail != nil {
+		panels = append(panels, *m.bootstrapDetail)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("安装方式", "Install modes"),
+		Lines: []string{
+			m.catalog.Msg("自动安装会优先补齐 nvm / Node，再安装所选 CLI。", "Automatic installation ensures nvm / Node first, then installs the selected CLI."),
+			m.catalog.Msg("手动安装提示会给出当前平台对应的命令和建议。", "Manual guidance shows platform-specific commands and recommendations."),
+		},
+	})
+	return panels
+}
+
 func (m interactiveFlowModel) profilePanels() []Panel {
 	panels := make([]Panel, 0, 2)
 	if m.notice != nil {
@@ -559,7 +798,7 @@ func (m interactiveFlowModel) profilePanels() []Panel {
 		Title: m.catalog.Msg("部署说明", "Profile guide"),
 		Lines: []string{
 			m.catalog.Msg("先选 Profile，再选择要写入 AgentFlow 的 CLI。", "Pick a profile first, then choose which CLIs should receive AgentFlow."),
-			m.catalog.Msg("按一次 Esc 就能回到主菜单。", "A single Esc returns to the main menu."),
+			m.catalog.Msg("按一次 Esc 就能回到安装中心。", "A single Esc returns to the install hub."),
 		},
 	})
 	return panels
@@ -606,6 +845,8 @@ func (m interactiveFlowModel) busyPanel() Panel {
 
 func (m interactiveFlowModel) busyMessage() string {
 	switch {
+	case m.screen == flowScreenBootstrapActions:
+		return m.catalog.Msg("正在安装所选 CLI…", "Installing the selected CLI...")
 	case m.screen == flowScreenInstallTargets:
 		return m.catalog.Msg("正在安装所选目标…", "Installing selected targets...")
 	case m.screen == flowScreenUninstallTargets:
@@ -617,6 +858,55 @@ func (m interactiveFlowModel) busyMessage() string {
 	default:
 		return m.catalog.Msg("正在刷新状态…", "Refreshing status...")
 	}
+}
+
+func (m *interactiveFlowModel) refreshBootstrapDetail() {
+	if m.callbacks.BootstrapDetails == nil {
+		m.bootstrapDetail = nil
+		return
+	}
+	target := strings.TrimSpace(m.selectedBootstrapTarget)
+	if target == "" && m.screen == flowScreenBootstrapTargets && len(m.bootstrapOptions) > 0 {
+		target = m.bootstrapOptions[m.bootstrapCursor].Value
+	}
+	if target == "" {
+		m.bootstrapDetail = nil
+		return
+	}
+	panel := m.callbacks.BootstrapDetails(target)
+	m.bootstrapDetail = panelRef(panel)
+}
+
+func (m interactiveFlowModel) bootstrapAutoSupported(target string) bool {
+	if m.callbacks.BootstrapAutoSupported == nil {
+		return true
+	}
+	return m.callbacks.BootstrapAutoSupported(target)
+}
+
+func (m interactiveFlowModel) bootstrapOptionsList() []Option {
+	if m.callbacks.BootstrapOptions == nil {
+		return nil
+	}
+	options := cloneOptions(m.callbacks.BootstrapOptions())
+	if len(options) == 0 {
+		return nil
+	}
+	return options
+}
+
+func (m interactiveFlowModel) installOptionsList() []Option {
+	if m.callbacks.InstallOptions == nil {
+		return nil
+	}
+	return cloneOptions(m.callbacks.InstallOptions())
+}
+
+func (m interactiveFlowModel) uninstallOptionsList() []Option {
+	if m.callbacks.UninstallOptions == nil {
+		return nil
+	}
+	return cloneOptions(m.callbacks.UninstallOptions())
 }
 
 func (m *interactiveFlowModel) toggleSelected(options *[]Option, cursor int) {

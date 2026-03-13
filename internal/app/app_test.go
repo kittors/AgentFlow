@@ -31,3 +31,19 @@ func TestRunUnknownCommandReturnsOne(t *testing.T) {
 		t.Fatalf("expected unknown command output, got %q", stderr.String())
 	}
 }
+
+func TestErrorPanelSplitsMultilineErrors(t *testing.T) {
+	panel := errorPanel("CLI install failed", fakeError("line one\nline two"))
+	if len(panel.Lines) != 2 {
+		t.Fatalf("expected multiline error to be split, got %#v", panel.Lines)
+	}
+	if panel.Lines[0] != "line one" || panel.Lines[1] != "line two" {
+		t.Fatalf("unexpected panel lines: %#v", panel.Lines)
+	}
+}
+
+type fakeError string
+
+func (e fakeError) Error() string {
+	return string(e)
+}
