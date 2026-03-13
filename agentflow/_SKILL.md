@@ -40,6 +40,11 @@ AgentFlow is a multi-CLI agent workflow system that keeps going until tasks are 
 - **Convention Extraction**: Automatic coding pattern discovery from your codebase (AgentFlow unique).
 - **Architecture Scanning**: Proactive issue detection — large files, circular deps, missing tests (AgentFlow unique).
 
+## Recommended MCP Servers
+
+- **Context7 (Strongly recommended)**: for dependency / API / configuration documentation. Tip: append `use context7` in prompts, or provide a Context7 library ID (e.g. `/vercel/next.js`).
+- **Playwright MCP (Recommended)**: for browser automation workflows.
+
 ## Quick Commands
 
 | Command | Description |

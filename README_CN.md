@@ -54,6 +54,8 @@ Windows PowerShell：
 irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
+> Windows 建议：优先直接从 GitHub Releases 下载 `agentflow-windows-amd64.exe`，放到 `PATH` 后即可使用。
+
 Windows 常见问题（DNS/代理/raw 域名解析失败等）：见 [docs/troubleshooting/windows.md](docs/troubleshooting/windows.md)。
 
 安装脚本下载的是最新已发布的 release 二进制。现在只要 push 到 `main`，GitHub 就会自动刷新一个 continuous release，所以 `curl | bash`、`npx agentflow` 和 `agentflow update` 都会跟随最新的 `main` 构建。如果你本机还有旧的 `uv` / Python 版 `agentflow` 排在 `PATH` 前面，请重开终端，或者执行 `export PATH="$HOME/.agentflow/bin:$PATH" && hash -r`，然后用 `which agentflow` 确认当前命中的路径。
@@ -106,9 +108,25 @@ agentflow status                # 查看安装状态
 agentflow clean                 # 清理 AgentFlow 缓存
 agentflow update                # 自更新到最新 release 二进制
 agentflow version               # 输出当前版本与更新提示
+
+# Skills（Codex）
+agentflow skill list codex
+agentflow skill install codex https://skills.sh/vercel/turborepo/turborepo
+agentflow skill uninstall codex turborepo
+
+# MCP servers（Claude）
+agentflow mcp install claude context7 --set-env=CONTEXT7_API_KEY=YOUR_API_KEY
+agentflow mcp install claude playwright
+agentflow mcp list claude
+agentflow mcp search playwright
 ```
 
 当未传子命令且 stdin 是 TTY 时，AgentFlow 会进入 Bubble Tea TUI。方向键、`Enter`、`Space`、`Esc` 在 macOS 和 Windows 终端里保持一致。
+
+## Skills 与 MCP 生态
+
+- Skills 索引（Vercel）：https://vercel.com/docs/agent-resources/skills
+- MCP 置顶推荐（最实用）：`context7`、`playwright`、`filesystem`
 
 ## 支持的目标 CLI
 

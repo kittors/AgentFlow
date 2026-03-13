@@ -77,6 +77,10 @@ func (a *App) Run(args []string) int {
 		return a.runGraph(args[1:])
 	case "dashboard":
 		return a.runDashboard(args[1:])
+	case "skill":
+		return a.runSkill(args[1:])
+	case "mcp":
+		return a.runMCP(args[1:])
 	default:
 		fmt.Fprintln(a.Stderr, a.Catalog.Msg("未知命令。", "Unknown command."))
 		a.printUsage()
@@ -451,6 +455,8 @@ func (a *App) printUsage() {
 	fmt.Fprintln(a.Stdout, "  conventions [--root=<path>] [--quiet]")
 	fmt.Fprintln(a.Stdout, "  graph [--root=<path>] [--quiet]")
 	fmt.Fprintln(a.Stdout, "  dashboard [--root=<path>] [--quiet]")
+	fmt.Fprintln(a.Stdout, "  skill <install|uninstall|list> ...")
+	fmt.Fprintln(a.Stdout, "  mcp <install|remove|list|search> ...")
 	fmt.Fprintln(a.Stdout, "  --check-update [--silent]")
 }
 

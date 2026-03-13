@@ -101,6 +101,17 @@ AGENTFLOW_GLOBAL: ~/.agentflow        # 全局级（跨项目记忆）
 Shell选择: Bash工具/Unix信号→Bash | Windows信号→PowerShell | 不明确→PowerShell
 ```
 
+**依赖/文档检索（强烈推荐 Context7）:**
+
+```yaml
+触发: 需要第三方库/框架/SDK 的 API 文档、配置步骤、版本差异、依赖用法
+推荐:
+  - 优先使用 Context7（MCP 或 CLI），获取“最新 + 版本相关”的官方文档与代码示例
+  - 在你的问题里追加 "use context7" 或直接指定 libraryId（例如 /vercel/next.js）
+降级:
+  - Context7 不可用时，再使用 Web 搜索 / 官方文档站点
+```
+
 **~plan 门控检查（CRITICAL — 违反此规则等于失败）:**
 
 ```yaml

@@ -53,6 +53,8 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
+> Windows recommendation: download `agentflow-windows-amd64.exe` from GitHub Releases and put it on your `PATH`.
+
 Windows troubleshooting: see [docs/troubleshooting/windows.md](docs/troubleshooting/windows.md).
 
 The installer downloads the latest published release binary. Pushes to `main` now refresh a continuous GitHub Release automatically, so `curl | bash`, `npx agentflow`, and `agentflow update` all follow the latest `main` build. If you still have an older `uv`/Python install earlier on `PATH`, reopen the terminal or run `export PATH="$HOME/.agentflow/bin:$PATH" && hash -r`, then verify with `which agentflow`.
@@ -105,9 +107,25 @@ agentflow status                # Show installation status
 agentflow clean                 # Remove AgentFlow caches
 agentflow update                # Self-update to the latest release binary
 agentflow version               # Print current version + update hint
+
+# Skills (Codex)
+agentflow skill list codex
+agentflow skill install codex https://skills.sh/vercel/turborepo/turborepo
+agentflow skill uninstall codex turborepo
+
+# MCP servers (Claude)
+agentflow mcp install claude context7 --set-env=CONTEXT7_API_KEY=YOUR_API_KEY
+agentflow mcp install claude playwright
+agentflow mcp list claude
+agentflow mcp search playwright
 ```
 
 When no command is provided and stdin is a TTY, AgentFlow opens the Bubble Tea based menu. Arrow keys, `Enter`, `Space`, and `Esc` behave consistently across macOS and Windows terminals.
+
+## Skills & MCP Ecosystem
+
+- Skills directory: https://vercel.com/docs/agent-resources/skills
+- Recommended MCP servers (pinned): `context7`, `playwright`, `filesystem`
 
 ## Supported Targets
 
