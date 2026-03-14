@@ -317,7 +317,7 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Value:       string(ActionInstall),
 				Label:       catalog.Msg("安装", "Install"),
 				Badge:       catalog.Msg("安装", "SETUP"),
-				Description: catalog.Msg("先安装 Codex / Claude / Gemini 等 CLI，或继续把 AgentFlow 部署到已存在的 CLI。", "Install Codex / Claude / Gemini first, or deploy AgentFlow into CLIs that already exist."),
+				Description: catalog.Msg("先安装 Codex / Claude / Gemini 等 CLI，或继续把 AgentFlow 部署到已存在的 CLI（全局），也可安装到当前项目。", "Install Codex / Claude / Gemini first, or deploy AgentFlow into CLIs that already exist (global), or install into the current project."),
 			},
 			{
 				Value:       string(ActionMCP),
@@ -377,9 +377,15 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 			},
 			{
 				Value:       "install-agentflow",
-				Label:       catalog.Msg("安装 AgentFlow 到已安装 CLI", "Install AgentFlow into existing CLIs"),
-				Badge:       catalog.Msg("接入", "APPLY"),
-				Description: catalog.Msg("对已经存在的 CLI 写入 AgentFlow 规则、模块、技能和 hooks。", "Write AgentFlow rules, modules, skills, and hooks into CLIs that already exist."),
+				Label:       catalog.Msg("安装 AgentFlow 到已安装 CLI（全局）", "Install AgentFlow into existing CLIs (global)"),
+				Badge:       catalog.Msg("全局", "GLOBAL"),
+				Description: catalog.Msg("对已经存在的 CLI 写入 AgentFlow 规则、模块、技能和 hooks（写入用户级配置目录）。", "Write AgentFlow rules, modules, skills, and hooks into CLIs that already exist (user-level config directory)."),
+			},
+			{
+				Value:       "install-project",
+				Label:       catalog.Msg("安装 AgentFlow 到当前项目（项目级）", "Install AgentFlow into current project (project-level)"),
+				Badge:       catalog.Msg("项目", "PROJECT"),
+				Description: catalog.Msg("将 AgentFlow 规则文件写入当前工作目录，适合团队协作和项目级配置。", "Write AgentFlow rule files into the current working directory, ideal for team collaboration and project-level configuration."),
 			},
 		},
 		mcpActions: []Option{
@@ -551,7 +557,16 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if m.busy {
-			return m, nil
+			// Allow navigation keys during busy state;
+			// block action keys (Enter, Space) until async completes.
+			switch value.Type {
+			case tea.KeyUp, tea.KeyDown, tea.KeyLeft, tea.KeyRight,
+				tea.KeyTab, tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd,
+				tea.KeyEsc:
+				return m.handleBusyNavKey(value)
+			default:
+				return m, nil
+			}
 		}
 		return m.handleKey(value)
 	}
@@ -1042,6 +1057,28 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.screen = flowScreenProfile
 			m.notice = nil
 			return m, nil
+		case "install-project":
+			if m.callbacks.SkillTargetOptions == nil {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("项目级安装", "Project install"),
+					Lines: []string{m.catalog.Msg("当前构建未启用项目级安装回调。", "Project install callbacks are not enabled in this build.")},
+				})
+				return m, nil
+			}
+			m.skillTargets = cloneOptions(m.callbacks.SkillTargetOptions())
+			if len(m.skillTargets) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("项目级安装", "Project install"),
+					Lines: []string{m.catalog.Msg("未检测到可管理的目标。", "No manageable targets detected.")},
+				})
+				return m, nil
+			}
+			m.selectedSkillTarget = m.skillTargets[0].Value
+			m.screen = flowScreenSkillProjectProfile
+			m.notice = nil
+			m.focusDetails = false
+			m.detailScroll = 0
+			return m, nil
 		}
 	case flowScreenBootstrapTargets:
 		if len(m.bootstrapOptions) == 0 {
@@ -1108,6 +1145,61 @@ func (m interactiveFlowModel) startBusy(action flowAction, message string) (tea.
 	m.busy = true
 	m.spin = 0
 	return m, tea.Batch(m.runActionCmd(action), busyTickCmd())
+}
+
+// handleBusyNavKey handles navigation keys while an async operation is running.
+// This ensures menu navigation is never blocked by background tasks.
+// Only cursor movement and focus switching are allowed; no new async actions are started.
+func (m interactiveFlowModel) handleBusyNavKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch key.Type {
+	case tea.KeyUp:
+		if m.focusDetails {
+			m.detailScroll--
+		} else {
+			m.moveCursor(-1)
+		}
+	case tea.KeyDown:
+		if m.focusDetails {
+			m.detailScroll++
+		} else {
+			m.moveCursor(1)
+		}
+	case tea.KeyLeft:
+		m.focusDetails = false
+	case tea.KeyRight:
+		m.focusDetails = true
+	case tea.KeyTab:
+		m.focusDetails = !m.focusDetails
+	case tea.KeyPgUp:
+		if m.focusDetails {
+			m.detailScroll -= 5
+		} else {
+			m.moveCursor(-5)
+		}
+	case tea.KeyPgDown:
+		if m.focusDetails {
+			m.detailScroll += 5
+		} else {
+			m.moveCursor(5)
+		}
+	case tea.KeyHome:
+		if m.focusDetails {
+			m.detailScroll = 0
+		} else {
+			m.setCursor(0)
+		}
+	case tea.KeyEnd:
+		if m.focusDetails {
+			m.detailScroll = 1 << 30
+		} else {
+			m.setCursor(m.currentOptionsLen() - 1)
+		}
+	case tea.KeyEsc:
+		// During busy, Esc only switches focus back to left panel.
+		m.focusDetails = false
+		m.detailScroll = 0
+	}
+	return m, nil
 }
 
 func (m *interactiveFlowModel) moveCursor(delta int) {

@@ -134,7 +134,7 @@ func RunMainMenu(catalog i18n.Catalog, version string, panels []Panel, output io
 			Value:       string(ActionInstall),
 			Label:       catalog.Msg("安装到 CLI", "Install to CLI targets"),
 			Badge:       catalog.Msg("安装", "SETUP"),
-			Description: catalog.Msg("把 AgentFlow 规则、模块、技能和 hooks 部署到 Codex、Claude、Gemini 等 CLI。", "Deploy AgentFlow rules, modules, skills, and hooks into Codex, Claude, Gemini, and other CLIs."),
+			Description: catalog.Msg("先安装 Codex / Claude / Gemini 等 CLI，或继续把 AgentFlow 部署到已存在的 CLI（全局），也可安装到当前项目。", "Install Codex / Claude / Gemini first, or deploy AgentFlow into CLIs that already exist (global), or install into the current project."),
 		},
 		{
 			Value:       string(ActionMCP),
