@@ -1970,43 +1970,13 @@ func (m interactiveFlowModel) mainPanels() []Panel {
 }
 
 func (m interactiveFlowModel) installHubPanels() []Panel {
-	panels := make([]Panel, 0, 4)
+	panels := make([]Panel, 0, 3)
 	if m.notice != nil {
 		panels = append(panels, *m.notice)
 	}
-
-	// Show current install status for both global and project-level.
-	statusLines := []string{}
-
-	// Global install status.
-	if m.callbacks.InstallOptions != nil {
-		globalTargets := m.callbacks.InstallOptions()
-		if len(globalTargets) > 0 {
-			statusLines = append(statusLines, m.catalog.Msg("全局安装状态:", "Global install status:"))
-			for _, opt := range globalTargets {
-				statusLines = append(statusLines, fmt.Sprintf("  - %s: %s", opt.Label, opt.Description))
-			}
-		} else {
-			statusLines = append(statusLines, m.catalog.Msg("全局: 未检测到可安装的 CLI。", "Global: No installable CLIs detected."))
-		}
-	}
-
-	// Project-level status.
-	statusLines = append(statusLines, "")
-	if m.projectRoot != "" {
-		statusLines = append(statusLines, fmt.Sprintf(m.catalog.Msg("项目目录: %s", "Project directory: %s"), m.projectRoot))
-	}
-	if m.projectRulesDetail != nil && len(m.projectRulesDetail.Lines) > 0 {
-		statusLines = append(statusLines, m.catalog.Msg("项目级安装状态:", "Project install status:"))
-		statusLines = append(statusLines, m.projectRulesDetail.Lines...)
-	} else {
-		statusLines = append(statusLines, m.catalog.Msg("项目级: 选择「安装到当前项目」查看详情。", "Project-level: Select 'Install into current project' to see details."))
-	}
-
-	panels = append(panels, Panel{
-		Title: m.catalog.Msg("安装状态总览", "Install status overview"),
-		Lines: statusLines,
-	})
+	// Use the already-cached status panel; never call detection callbacks
+	// during rendering — those are expensive filesystem operations that
+	// block the UI on every keystroke.
 	panels = append(panels, m.status)
 	return panels
 }
