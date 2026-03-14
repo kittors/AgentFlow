@@ -24,6 +24,12 @@ func TestManagerInstallAndRemove(t *testing.T) {
 	if err := os.WriteFile(claudeConfigPath, seed, 0o600); err != nil {
 		t.Fatalf("write claude config seed: %v", err)
 	}
+	initialPerm := os.FileMode(0o0)
+	if info, err := os.Stat(claudeConfigPath); err != nil {
+		t.Fatalf("stat claude config: %v", err)
+	} else {
+		initialPerm = info.Mode().Perm()
+	}
 
 	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
 		t.Fatalf("install context7: %v", err)
@@ -77,8 +83,8 @@ func TestManagerInstallAndRemove(t *testing.T) {
 	}
 	if info, err := os.Stat(claudeConfigPath); err != nil {
 		t.Fatalf("stat claude config: %v", err)
-	} else if info.Mode().Perm() != 0o600 {
-		t.Fatalf("expected claude config to remain 0600, got %v", info.Mode().Perm())
+	} else if info.Mode().Perm() != initialPerm {
+		t.Fatalf("expected claude config perms to stay %v, got %v", initialPerm, info.Mode().Perm())
 	}
 }
 
