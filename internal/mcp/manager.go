@@ -32,6 +32,33 @@ type Manager struct {
 
 var codexMCPSrvHeader = regexp.MustCompile(`^\s*\[\s*mcp_servers\.([^\]]+)\s*\]\s*$`)
 
+func normalizeServerKey(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func deleteByNormalizedKey(values map[string]any, name string) {
+	target := normalizeServerKey(name)
+	if target == "" {
+		return
+	}
+	for key := range values {
+		if normalizeServerKey(key) == target {
+			delete(values, key)
+		}
+	}
+}
+
+func claudeServerKey(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if len(name) == 1 {
+		return strings.ToUpper(name)
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
+}
+
 func NewManager() *Manager {
 	homeDir, _ := os.UserHomeDir()
 	return &Manager{
@@ -56,6 +83,11 @@ func (m *Manager) Install(target targets.Target, server string, options InstallO
 	if err != nil {
 		return err
 	}
+
+	if target.Name == "claude" {
+		spec.Name = claudeServerKey(spec.Name)
+	}
+
 	managed[spec.Name] = spec.Config
 	if err := writeManagedMCP(managedPath, managed); err != nil {
 		return err
@@ -95,7 +127,7 @@ func (m *Manager) Remove(target targets.Target, server string) error {
 	if err != nil {
 		return err
 	}
-	delete(managed, server)
+	deleteByNormalizedKey(managed, server)
 	if err := writeManagedMCP(managedPath, managed); err != nil {
 		return err
 	}
@@ -125,19 +157,30 @@ func (m *Manager) List(target targets.Target) ([]string, error) {
 		return nil, err
 	}
 
-	names := make([]string, 0, len(managed))
-	for key := range managed {
-		names = append(names, key)
+	preferred := map[string]string{}
+	addPreferred := func(name string) {
+		key := normalizeServerKey(name)
+		if key == "" {
+			return
+		}
+		preferred[key] = strings.TrimSpace(name)
+	}
+	addFallback := func(name string) {
+		key := normalizeServerKey(name)
+		if key == "" {
+			return
+		}
+		if _, ok := preferred[key]; ok {
+			return
+		}
+		preferred[key] = strings.TrimSpace(name)
 	}
 
 	if target.Name == "codex" {
 		codexServers, err := m.listCodexConfig()
 		if err == nil {
 			for key := range codexServers {
-				if _, ok := managed[key]; ok {
-					continue
-				}
-				names = append(names, key)
+				addPreferred(key)
 			}
 		}
 	}
@@ -146,10 +189,7 @@ func (m *Manager) List(target targets.Target) ([]string, error) {
 		claudeServers, err := m.listClaudeSettings()
 		if err == nil {
 			for key := range claudeServers {
-				if _, ok := managed[key]; ok {
-					continue
-				}
-				names = append(names, key)
+				addPreferred(key)
 			}
 		}
 	}
@@ -159,10 +199,7 @@ func (m *Manager) List(target targets.Target) ([]string, error) {
 		servers, err := m.listJSONMCPServers(path)
 		if err == nil {
 			for key := range servers {
-				if _, ok := managed[key]; ok {
-					continue
-				}
-				names = append(names, key)
+				addPreferred(key)
 			}
 		}
 	}
@@ -172,10 +209,7 @@ func (m *Manager) List(target targets.Target) ([]string, error) {
 		servers, err := m.listJSONMCPServers(path)
 		if err == nil {
 			for key := range servers {
-				if _, ok := managed[key]; ok {
-					continue
-				}
-				names = append(names, key)
+				addPreferred(key)
 			}
 		}
 	}
@@ -185,10 +219,7 @@ func (m *Manager) List(target targets.Target) ([]string, error) {
 		servers, err := m.listJSONMCPServers(path)
 		if err == nil {
 			for key := range servers {
-				if _, ok := managed[key]; ok {
-					continue
-				}
-				names = append(names, key)
+				addPreferred(key)
 			}
 		}
 	}
@@ -198,14 +229,22 @@ func (m *Manager) List(target targets.Target) ([]string, error) {
 		servers, err := m.listJSONMCPServers(path)
 		if err == nil {
 			for key := range servers {
-				if _, ok := managed[key]; ok {
-					continue
-				}
-				names = append(names, key)
+				addPreferred(key)
 			}
 		}
 	}
 
+	for key := range managed {
+		addFallback(key)
+	}
+
+	names := make([]string, 0, len(preferred))
+	for _, value := range preferred {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		names = append(names, value)
+	}
 	sort.Strings(names)
 	return names, nil
 }
@@ -505,18 +544,53 @@ func writeManagedMCP(path string, servers map[string]any) error {
 }
 
 func (m *Manager) installIntoClaudeSettings(spec BuiltinSpec) error {
-	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
-	return m.installIntoJSONMCPServers(settingsPath, spec)
+	return m.installIntoJSONMCPServers(m.claudeSettingsWritePath(), spec)
 }
 
 func (m *Manager) removeFromClaudeSettings(name string) error {
-	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
-	return m.removeFromJSONMCPServers(settingsPath, name)
+	return m.removeFromJSONMCPServers(m.claudeSettingsWritePath(), name)
 }
 
 func (m *Manager) listClaudeSettings() (map[string]any, error) {
-	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
-	return m.listJSONMCPServers(settingsPath)
+	merged := map[string]any{}
+	seen := map[string]bool{}
+	for _, path := range m.claudeSettingsReadPaths() {
+		servers, err := m.listJSONMCPServers(path)
+		if err != nil {
+			continue
+		}
+		for key, value := range servers {
+			norm := normalizeServerKey(key)
+			if norm == "" {
+				continue
+			}
+			if seen[norm] {
+				continue
+			}
+			seen[norm] = true
+			merged[key] = value
+		}
+	}
+	return merged, nil
+}
+
+func (m *Manager) claudeSettingsReadPaths() []string {
+	claudeDir := filepath.Join(m.HomeDir, targets.All["claude"].Dir)
+	return []string{
+		filepath.Join(m.HomeDir, ".claude.json"),
+		filepath.Join(claudeDir, "mcp.json"),
+		filepath.Join(claudeDir, "settings.json"),
+	}
+}
+
+func (m *Manager) claudeSettingsWritePath() string {
+	for _, path := range m.claudeSettingsReadPaths() {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	claudeDir := filepath.Join(m.HomeDir, targets.All["claude"].Dir)
+	return filepath.Join(claudeDir, "settings.json")
 }
 
 func managedRecordPath(home string, target targets.Target) string {
@@ -544,6 +618,12 @@ func (m *Manager) installIntoJSONMCPServers(path string, spec BuiltinSpec) error
 		mcpServers = mapped
 	}
 
+	normalized := normalizeServerKey(spec.Name)
+	for key := range mcpServers {
+		if normalizeServerKey(key) == normalized && key != spec.Name {
+			delete(mcpServers, key)
+		}
+	}
 	mcpServers[spec.Name] = spec.Config
 	settings["mcpServers"] = mcpServers
 
@@ -552,7 +632,11 @@ func (m *Manager) installIntoJSONMCPServers(path string, spec BuiltinSpec) error
 		return err
 	}
 	payload = append(payload, '\n')
-	return config.SafeWrite(path, payload, 0o644)
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode()
+	}
+	return config.SafeWrite(path, payload, mode)
 }
 
 func (m *Manager) removeFromJSONMCPServers(path, name string) error {
@@ -569,7 +653,12 @@ func (m *Manager) removeFromJSONMCPServers(path, name string) error {
 	if !ok {
 		return fmt.Errorf("%s: mcpServers must be an object", filepath.Base(path))
 	}
-	delete(mcpServers, name)
+	normalized := normalizeServerKey(name)
+	for key := range mcpServers {
+		if normalizeServerKey(key) == normalized {
+			delete(mcpServers, key)
+		}
+	}
 	settings["mcpServers"] = mcpServers
 
 	payload, err := json.MarshalIndent(settings, "", "  ")
@@ -577,7 +666,11 @@ func (m *Manager) removeFromJSONMCPServers(path, name string) error {
 		return err
 	}
 	payload = append(payload, '\n')
-	return config.SafeWrite(path, payload, 0o644)
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode()
+	}
+	return config.SafeWrite(path, payload, mode)
 }
 
 func (m *Manager) listJSONMCPServers(path string) (map[string]any, error) {

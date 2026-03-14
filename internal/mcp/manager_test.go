@@ -19,25 +19,39 @@ func TestManagerInstallAndRemove(t *testing.T) {
 
 	manager := &Manager{HomeDir: tmp}
 
+	claudeConfigPath := filepath.Join(tmp, ".claude.json")
+	seed := []byte("{\"mcpServers\":{\"Playwright\":{\"command\":\"npx\",\"args\":[\"-y\",\"@playwright/mcp@latest\"],\"env\":{}}}}\n")
+	if err := os.WriteFile(claudeConfigPath, seed, 0o600); err != nil {
+		t.Fatalf("write claude config seed: %v", err)
+	}
+	initialPerm := os.FileMode(0o0)
+	if info, err := os.Stat(claudeConfigPath); err != nil {
+		t.Fatalf("stat claude config: %v", err)
+	} else {
+		initialPerm = info.Mode().Perm()
+	}
+
 	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
 		t.Fatalf("install context7: %v", err)
 	}
 
-	settingsPath := filepath.Join(tmp, target.Dir, "settings.json")
-	data, err := os.ReadFile(settingsPath)
+	data, err := os.ReadFile(claudeConfigPath)
 	if err != nil {
-		t.Fatalf("read settings: %v", err)
+		t.Fatalf("read claude config: %v", err)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(data, &payload); err != nil {
-		t.Fatalf("parse settings: %v", err)
+		t.Fatalf("parse claude config: %v", err)
 	}
 
 	mcpServers, ok := payload["mcpServers"].(map[string]any)
 	if !ok {
 		t.Fatalf("mcpServers missing or invalid")
 	}
-	context7, ok := mcpServers["context7"].(map[string]any)
+	if _, ok := mcpServers["Playwright"]; !ok {
+		t.Fatalf("expected Playwright preserved")
+	}
+	context7, ok := mcpServers["Context7"].(map[string]any)
 	if !ok {
 		t.Fatalf("context7 missing")
 	}
@@ -55,17 +69,22 @@ func TestManagerInstallAndRemove(t *testing.T) {
 	if err := manager.Remove(target, "context7"); err != nil {
 		t.Fatalf("remove context7: %v", err)
 	}
-	data, err = os.ReadFile(settingsPath)
+	data, err = os.ReadFile(claudeConfigPath)
 	if err != nil {
-		t.Fatalf("read settings: %v", err)
+		t.Fatalf("read claude config: %v", err)
 	}
 	payload = nil
 	if err := json.Unmarshal(data, &payload); err != nil {
-		t.Fatalf("parse settings: %v", err)
+		t.Fatalf("parse claude config: %v", err)
 	}
 	mcpServers, _ = payload["mcpServers"].(map[string]any)
-	if _, exists := mcpServers["context7"]; exists {
+	if _, exists := mcpServers["Context7"]; exists {
 		t.Fatalf("expected context7 removed")
+	}
+	if info, err := os.Stat(claudeConfigPath); err != nil {
+		t.Fatalf("stat claude config: %v", err)
+	} else if info.Mode().Perm() != initialPerm {
+		t.Fatalf("expected claude config perms to stay %v, got %v", initialPerm, info.Mode().Perm())
 	}
 }
 
@@ -255,6 +274,48 @@ func TestManagerInstallAndRemoveUpdatesCursorMCPConfig(t *testing.T) {
 	mcpServers, _ = payload["mcpServers"].(map[string]any)
 	if _, exists := mcpServers["context7"]; exists {
 		t.Fatalf("expected context7 removed")
+	}
+}
+
+func TestManagerListClaudeMergesClaudeJSONAndSettings(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.Lookup("claude")
+	if !ok {
+		t.Fatalf("expected claude target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+
+	claudeConfigPath := filepath.Join(tmp, ".claude.json")
+	if err := os.WriteFile(claudeConfigPath, []byte("{\"mcpServers\":{\"Context7\":{},\"Playwright\":{}}}\n"), 0o600); err != nil {
+		t.Fatalf("write .claude.json: %v", err)
+	}
+	settingsPath := filepath.Join(tmp, target.Dir, "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("mkdir settings dir: %v", err)
+	}
+	if err := os.WriteFile(settingsPath, []byte("{\"mcpServers\":{\"filesystem\":{}}}\n"), 0o644); err != nil {
+		t.Fatalf("write settings.json: %v", err)
+	}
+
+	managedPath := filepath.Join(tmp, target.Dir, "mcp.json")
+	if err := os.WriteFile(managedPath, []byte("{\"mcpServers\":{\"context7\":{}}}\n"), 0o644); err != nil {
+		t.Fatalf("write managed mcp: %v", err)
+	}
+
+	names, err := manager.List(target)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	joined := strings.Join(names, ",")
+	if !strings.Contains(joined, "Context7") {
+		t.Fatalf("expected Context7 present, got %v", names)
+	}
+	if strings.Contains(joined, "context7") {
+		t.Fatalf("expected no context7 duplicate, got %v", names)
+	}
+	if !strings.Contains(strings.ToLower(joined), "filesystem") {
+		t.Fatalf("expected filesystem present, got %v", names)
 	}
 }
 
