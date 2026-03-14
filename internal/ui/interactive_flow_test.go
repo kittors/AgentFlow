@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -257,6 +258,144 @@ func TestFlowCursorChangeResetsDetailScroll(t *testing.T) {
 	}
 	if model.detailScroll != 0 {
 		t.Fatalf("expected cursor change to reset detail scroll, got %d", model.detailScroll)
+	}
+}
+
+func TestFlowSelectingMCPTargetAutoLoadsList(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+		MCPList: func(target string) Panel {
+			return Panel{Title: "MCP list", Lines: []string{"target=" + target}}
+		},
+		MCPRemoveOptions: func(target string) []Option { return nil },
+	})
+	model.screen = flowScreenMCPTargets
+	model.mcpTargets = []Option{{Value: "codex", Label: "Codex CLI", Badge: "CODEX"}}
+	model.mcpTargetCursor = 0
+
+	next, cmd := model.handleEnter()
+	model = next.(interactiveFlowModel)
+	if !model.busy {
+		t.Fatal("expected selecting mcp target to enter busy state")
+	}
+	if cmd == nil {
+		t.Fatal("expected selecting mcp target to return a command")
+	}
+
+	next, _ = model.Update(flowResultMsg{
+		action: flowActionMCPList,
+		notice: panelRef(Panel{Title: "MCP list", Lines: []string{"target=codex"}}),
+		status: model.callbacks.Status(),
+	})
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenMCPActions {
+		t.Fatalf("expected to move to MCP actions screen, got %v", model.screen)
+	}
+	if model.notice == nil || model.notice.Title != "MCP list" {
+		t.Fatalf("expected list notice panel, got %#v", model.notice)
+	}
+}
+
+func TestFlowSelectingSkillTargetAutoLoadsList(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+		SkillList: func(target string) Panel {
+			return Panel{Title: "Skill list", Lines: []string{"target=" + target}}
+		},
+		SkillUninstallOptions: func(target string) []Option { return nil },
+	})
+	model.screen = flowScreenSkillTargets
+	model.skillTargets = []Option{{Value: "codex", Label: "Codex CLI", Badge: "CODEX"}}
+	model.skillTargetCursor = 0
+
+	next, cmd := model.handleEnter()
+	model = next.(interactiveFlowModel)
+	if !model.busy {
+		t.Fatal("expected selecting skill target to enter busy state")
+	}
+	if cmd == nil {
+		t.Fatal("expected selecting skill target to return a command")
+	}
+
+	next, _ = model.Update(flowResultMsg{
+		action: flowActionSkillList,
+		notice: panelRef(Panel{Title: "Skill list", Lines: []string{"target=codex"}}),
+		status: model.callbacks.Status(),
+	})
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenSkillActions {
+		t.Fatalf("expected to move to skill actions screen, got %v", model.screen)
+	}
+	if model.notice == nil || model.notice.Title != "Skill list" {
+		t.Fatalf("expected list notice panel, got %#v", model.notice)
+	}
+}
+
+func TestFlowMCPInstallOptionsAnnotateInstalledAndRecommended(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+		MCPInstallOptions: func() []Option {
+			return []Option{{Value: "context7", Label: "context7", Badge: "PIN", Description: "Docs."}}
+		},
+		MCPRemoveOptions: func(target string) []Option {
+			return []Option{{Value: "Context7", Label: "Context7", Badge: "DEL"}}
+		},
+	})
+	model.screen = flowScreenMCPActions
+	model.selectedMCPTarget = "codex"
+	model.mcpActions = []Option{{Value: "install"}}
+	model.mcpActionCursor = 0
+
+	next, _ := model.handleEnter()
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenMCPInstall {
+		t.Fatalf("expected to enter MCP install screen, got %v", model.screen)
+	}
+	if len(model.mcpInstallOptions) != 1 {
+		t.Fatalf("expected annotated install options, got %#v", model.mcpInstallOptions)
+	}
+	if model.mcpInstallOptions[0].Badge != "✓" {
+		t.Fatalf("expected installed badge ✓, got %q", model.mcpInstallOptions[0].Badge)
+	}
+	if !strings.HasPrefix(model.mcpInstallOptions[0].Label, "★ ") {
+		t.Fatalf("expected recommended prefix, got %q", model.mcpInstallOptions[0].Label)
+	}
+	if strings.Contains(model.mcpInstallOptions[0].Label, "PIN") || model.mcpInstallOptions[0].Badge == "PIN" {
+		t.Fatalf("expected PIN not to be visible, got %#v", model.mcpInstallOptions[0])
+	}
+}
+
+func TestFlowSkillInstallOptionsAnnotateInstalledAndRecommended(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+		SkillInstallOptions: func() []Option {
+			return []Option{{Value: "https://skills.sh/vercel/turborepo/turborepo", Label: "turborepo", Badge: "PIN", Description: "Turborepo."}}
+		},
+		SkillUninstallOptions: func(target string) []Option {
+			return []Option{{Value: "turborepo", Label: "turborepo", Badge: "DEL"}}
+		},
+	})
+	model.screen = flowScreenSkillActions
+	model.selectedSkillTarget = "codex"
+	model.skillActions = []Option{{Value: "install"}}
+	model.skillActionCursor = 0
+
+	next, _ := model.handleEnter()
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenSkillInstall {
+		t.Fatalf("expected to enter skill install screen, got %v", model.screen)
+	}
+	if len(model.skillInstallOptions) != 1 {
+		t.Fatalf("expected annotated install options, got %#v", model.skillInstallOptions)
+	}
+	if model.skillInstallOptions[0].Badge != "✓" {
+		t.Fatalf("expected installed badge ✓, got %q", model.skillInstallOptions[0].Badge)
+	}
+	if !strings.HasPrefix(model.skillInstallOptions[0].Label, "★ ") {
+		t.Fatalf("expected recommended prefix, got %q", model.skillInstallOptions[0].Label)
+	}
+	if strings.Contains(model.skillInstallOptions[0].Label, "PIN") || model.skillInstallOptions[0].Badge == "PIN" {
+		t.Fatalf("expected PIN not to be visible, got %#v", model.skillInstallOptions[0])
 	}
 }
 

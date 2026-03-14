@@ -151,6 +151,112 @@ func (m *interactiveFlowModel) resetDetailFocus() {
 	m.detailScroll = 0
 }
 
+func normalizeIdentifier(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func withRecommendedPrefix(label string) string {
+	if strings.TrimSpace(label) == "" {
+		return label
+	}
+	return "★ " + label
+}
+
+func (m interactiveFlowModel) installedMCPSet(target string) map[string]bool {
+	installed := map[string]bool{}
+	if m.callbacks.MCPRemoveOptions == nil {
+		return installed
+	}
+	for _, option := range m.callbacks.MCPRemoveOptions(target) {
+		key := normalizeIdentifier(option.Value)
+		if key == "" {
+			continue
+		}
+		installed[key] = true
+	}
+	return installed
+}
+
+func (m interactiveFlowModel) installedSkillSet(target string) map[string]bool {
+	installed := map[string]bool{}
+	if m.callbacks.SkillUninstallOptions == nil {
+		return installed
+	}
+	for _, option := range m.callbacks.SkillUninstallOptions(target) {
+		key := normalizeIdentifier(option.Value)
+		if key == "" {
+			continue
+		}
+		installed[key] = true
+	}
+	return installed
+}
+
+func (m interactiveFlowModel) annotateRecommendedMCPOptions(target string, options []Option) []Option {
+	installed := m.installedMCPSet(target)
+	updated := cloneOptions(options)
+	for index := range updated {
+		key := normalizeIdentifier(updated[index].Value)
+		if key == "" {
+			key = normalizeIdentifier(updated[index].Label)
+		}
+		isInstalled := installed[key]
+		isRecommended := strings.EqualFold(strings.TrimSpace(updated[index].Badge), "PIN")
+
+		if isRecommended {
+			updated[index].Label = withRecommendedPrefix(updated[index].Label)
+		}
+
+		if isInstalled {
+			updated[index].Badge = "✓"
+			if strings.TrimSpace(updated[index].Description) != "" {
+				updated[index].Description = updated[index].Description + " " + m.catalog.Msg("（已安装：Enter 将更新配置）", "(installed: Enter updates config)")
+			} else {
+				updated[index].Description = m.catalog.Msg("已安装：Enter 将更新配置。", "Installed: Enter updates config.")
+			}
+		} else {
+			updated[index].Badge = "+"
+			if strings.TrimSpace(updated[index].Description) != "" {
+				updated[index].Description = updated[index].Description + " " + m.catalog.Msg("（未安装：Enter 安装）", "(not installed: Enter installs)")
+			} else {
+				updated[index].Description = m.catalog.Msg("未安装：Enter 安装。", "Not installed: Enter installs.")
+			}
+		}
+	}
+	return updated
+}
+
+func (m interactiveFlowModel) annotateRecommendedSkillOptions(target string, options []Option) []Option {
+	installed := m.installedSkillSet(target)
+	updated := cloneOptions(options)
+	for index := range updated {
+		key := normalizeIdentifier(updated[index].Label)
+		isInstalled := installed[key]
+		isRecommended := strings.EqualFold(strings.TrimSpace(updated[index].Badge), "PIN")
+
+		if isRecommended {
+			updated[index].Label = withRecommendedPrefix(updated[index].Label)
+		}
+
+		if isInstalled {
+			updated[index].Badge = "✓"
+			if strings.TrimSpace(updated[index].Description) != "" {
+				updated[index].Description = updated[index].Description + " " + m.catalog.Msg("（已安装：Enter 将更新/重装）", "(installed: Enter reinstalls/updates)")
+			} else {
+				updated[index].Description = m.catalog.Msg("已安装：Enter 将更新/重装。", "Installed: Enter reinstalls/updates.")
+			}
+		} else {
+			updated[index].Badge = "+"
+			if strings.TrimSpace(updated[index].Description) != "" {
+				updated[index].Description = updated[index].Description + " " + m.catalog.Msg("（未安装：Enter 安装）", "(not installed: Enter installs)")
+			} else {
+				updated[index].Description = m.catalog.Msg("未安装：Enter 安装。", "Not installed: Enter installs.")
+			}
+		}
+	}
+	return updated
+}
+
 func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks InteractiveCallbacks, output io.Writer) error {
 	if output == nil {
 		output = io.Discard
@@ -595,7 +701,9 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.screen = flowScreenMCPActions
 		m.mcpActionCursor = 0
 		m.notice = nil
-		return m, nil
+		m.focusDetails = false
+		m.detailScroll = 0
+		return m.startBusy(flowActionMCPList, m.catalog.Msg("正在读取 MCP 配置…", "Reading MCP configuration..."))
 	case flowScreenMCPActions:
 		if len(m.mcpActions) == 0 {
 			return m, nil
@@ -606,7 +714,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m.startBusy(flowActionMCPList, m.catalog.Msg("正在读取 MCP 配置…", "Reading MCP configuration..."))
 		case "install":
 			if m.callbacks.MCPInstallOptions != nil {
-				m.mcpInstallOptions = cloneOptions(m.callbacks.MCPInstallOptions())
+				m.mcpInstallOptions = m.annotateRecommendedMCPOptions(m.selectedMCPTarget, m.callbacks.MCPInstallOptions())
 			} else {
 				m.mcpInstallOptions = nil
 			}
@@ -659,7 +767,9 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.screen = flowScreenSkillActions
 		m.skillActionCursor = 0
 		m.notice = nil
-		return m, nil
+		m.focusDetails = false
+		m.detailScroll = 0
+		return m.startBusy(flowActionSkillList, m.catalog.Msg("正在读取已安装 skills…", "Reading installed skills..."))
 	case flowScreenSkillActions:
 		if len(m.skillActions) == 0 {
 			return m, nil
@@ -670,7 +780,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m.startBusy(flowActionSkillList, m.catalog.Msg("正在读取已安装 skills…", "Reading installed skills..."))
 		case "install":
 			if m.callbacks.SkillInstallOptions != nil {
-				m.skillInstallOptions = cloneOptions(m.callbacks.SkillInstallOptions())
+				m.skillInstallOptions = m.annotateRecommendedSkillOptions(m.selectedSkillTarget, m.callbacks.SkillInstallOptions())
 			} else {
 				m.skillInstallOptions = nil
 			}
@@ -1392,6 +1502,7 @@ func (m interactiveFlowModel) mcpInstallPanels() []Panel {
 		Title: m.catalog.Msg("安装说明", "Install guide"),
 		Lines: []string{
 			m.catalog.Msg("选择一个推荐 MCP server 并按 Enter 写入配置。", "Select a recommended MCP server and press Enter to write the config."),
+			m.catalog.Msg("图例：★ 推荐 · ✓ 已安装（Enter 更新配置） · + 未安装（Enter 安装）。", "Legend: ★ recommended · ✓ installed (Enter updates config) · + not installed (Enter installs)."),
 			m.catalog.Msg("Filesystem 默认会把当前工作目录加入 allowlist。", "Filesystem will add the current working directory to its allowlist by default."),
 		},
 	})
@@ -1452,6 +1563,7 @@ func (m interactiveFlowModel) skillInstallPanels() []Panel {
 		Title: m.catalog.Msg("安装说明", "Install guide"),
 		Lines: []string{
 			m.catalog.Msg("选择一个推荐 skill 并按 Enter 安装。", "Select a recommended skill and press Enter to install."),
+			m.catalog.Msg("图例：★ 推荐 · ✓ 已安装（Enter 更新/重装） · + 未安装（Enter 安装）。", "Legend: ★ recommended · ✓ installed (Enter reinstalls/updates) · + not installed (Enter installs)."),
 			m.catalog.Msg("如需安装其他 skill，请在终端使用 `agentflow skill install`。", "To install other skills, use `agentflow skill install` in the terminal."),
 		},
 	})

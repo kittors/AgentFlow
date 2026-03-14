@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/kittors/AgentFlow/internal/mcp"
 	"github.com/kittors/AgentFlow/internal/skill"
 	"github.com/kittors/AgentFlow/internal/targets"
@@ -78,6 +80,10 @@ func (a *App) mcpListPanel(targetName string) ui.Panel {
 		}
 	}
 
+	dotReady := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("●")
+	nameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230"))
+	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+
 	manager := mcp.NewManager()
 	names, err := manager.List(target)
 	if err != nil {
@@ -86,13 +92,19 @@ func (a *App) mcpListPanel(targetName string) ui.Panel {
 	if len(names) == 0 {
 		return ui.Panel{
 			Title: a.Catalog.Msg("MCP 列表", "MCP list"),
-			Lines: []string{a.Catalog.Msg("未配置任何 MCP servers。", "No MCP servers configured.")},
+			Lines: []string{
+				fmt.Sprintf(a.Catalog.Msg("目标: %s", "Target: %s"), nameStyle.Render(target.DisplayName)),
+				muted.Render(a.Catalog.Msg("未配置任何 MCP servers。", "No MCP servers configured.")),
+				muted.Render(a.Catalog.Msg("提示：可进入“安装推荐 MCP”添加 Context7 / Playwright / Filesystem。", "Tip: use “Install recommended MCP” to add Context7 / Playwright / Filesystem.")),
+			},
 		}
 	}
-	lines := make([]string, 0, len(names)+2)
-	lines = append(lines, fmt.Sprintf(a.Catalog.Msg("目标: %s", "Target: %s"), target.DisplayName))
+	lines := make([]string, 0, len(names)+6)
+	lines = append(lines, fmt.Sprintf(a.Catalog.Msg("目标: %s", "Target: %s"), nameStyle.Render(target.DisplayName)))
+	lines = append(lines, muted.Render(a.Catalog.Msg("图例：● 已配置（MCP 会按需启动）。", "Legend: ● configured (MCP starts on-demand).")))
+	lines = append(lines, "")
 	for _, name := range names {
-		lines = append(lines, "- "+name)
+		lines = append(lines, fmt.Sprintf("%s %s", dotReady, nameStyle.Render(name)))
 	}
 	return ui.Panel{
 		Title: a.Catalog.Msg("MCP 列表", "MCP list"),
@@ -242,6 +254,10 @@ func (a *App) skillListPanel(targetName string) ui.Panel {
 			Lines: []string{a.Catalog.Msg("未知目标。", "Unknown target.")},
 		}
 	}
+	dotReady := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("●")
+	nameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230"))
+	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+
 	manager := skill.NewManager()
 	names, err := manager.List(target)
 	if err != nil {
@@ -250,13 +266,19 @@ func (a *App) skillListPanel(targetName string) ui.Panel {
 	if len(names) == 0 {
 		return ui.Panel{
 			Title: a.Catalog.Msg("Skill 列表", "Skill list"),
-			Lines: []string{a.Catalog.Msg("未检测到已安装的 skill。", "No installed skills detected.")},
+			Lines: []string{
+				fmt.Sprintf(a.Catalog.Msg("目标: %s", "Target: %s"), nameStyle.Render(target.DisplayName)),
+				muted.Render(a.Catalog.Msg("未检测到已安装的 skill。", "No installed skills detected.")),
+				muted.Render(a.Catalog.Msg("提示：可进入“安装推荐 Skill”或使用 `agentflow skill install <target> <skills.sh URL>`。", "Tip: use “Install recommended skills” or `agentflow skill install <target> <skills.sh URL>`.")),
+			},
 		}
 	}
-	lines := make([]string, 0, len(names)+2)
-	lines = append(lines, fmt.Sprintf(a.Catalog.Msg("目标: %s", "Target: %s"), target.DisplayName))
+	lines := make([]string, 0, len(names)+6)
+	lines = append(lines, fmt.Sprintf(a.Catalog.Msg("目标: %s", "Target: %s"), nameStyle.Render(target.DisplayName)))
+	lines = append(lines, muted.Render(a.Catalog.Msg("图例：● 已安装。", "Legend: ● installed.")))
+	lines = append(lines, "")
 	for _, name := range names {
-		lines = append(lines, "- "+name)
+		lines = append(lines, fmt.Sprintf("%s %s", dotReady, nameStyle.Render(name)))
 	}
 	return ui.Panel{
 		Title: a.Catalog.Msg("Skill 列表", "Skill list"),

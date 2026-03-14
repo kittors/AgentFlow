@@ -93,9 +93,9 @@ var (
 				BorderForeground(lipgloss.Color("63")).
 				Padding(0, 1)
 	focusedDetailPanelStyle = lipgloss.NewStyle().
-					Border(lipgloss.RoundedBorder()).
-					BorderForeground(lipgloss.Color("81")).
-					Padding(0, 1)
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("81")).
+				Padding(0, 1)
 	rowStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("252"))
 	selectedRowStyle = lipgloss.NewStyle().
@@ -584,7 +584,12 @@ func (m selectionModel) detailLines(width int) []string {
 				lines = append(lines, "")
 				continue
 			}
-			lines = append(lines, primaryTextStyle.Render(ansi.Truncate(line, width, "…")))
+			truncated := ansi.Truncate(line, width, "…")
+			if ansi.Strip(truncated) != truncated {
+				lines = append(lines, truncated)
+				continue
+			}
+			lines = append(lines, primaryTextStyle.Render(truncated))
 		}
 	}
 
