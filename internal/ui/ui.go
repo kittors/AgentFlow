@@ -140,7 +140,7 @@ func RunMainMenu(catalog i18n.Catalog, version string, panels []Panel, output io
 			Value:       string(ActionMCP),
 			Label:       catalog.Msg("管理 MCP Servers", "Manage MCP servers"),
 			Badge:       "MCP",
-			Description: catalog.Msg("为目标 CLI 写入、查看与移除 MCP servers 配置（置顶推荐 Context7 / Playwright / Filesystem）。", "Write, inspect, and remove MCP server configs for a target CLI (pinned Context7 / Playwright / Filesystem)."),
+			Description: catalog.Msg("为目标 CLI/IDE 写入、查看与移除 MCP servers 配置（置顶推荐 Context7 / Playwright / Filesystem / Tavily）。", "Write, inspect, and remove MCP server configs for a target CLI/IDE (pinned Context7 / Playwright / Filesystem / Tavily)."),
 		},
 		{
 			Value:       string(ActionSkill),

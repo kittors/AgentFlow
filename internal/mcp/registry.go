@@ -43,6 +43,15 @@ func BuiltinServers() []BuiltinSpec {
 				"args":    []any{"-y", "@modelcontextprotocol/server-filesystem"},
 			},
 		},
+		{
+			Name:        "tavily",
+			Description: "AI-powered web search via Tavily MCP (requires TAVILY_API_KEY).",
+			Pinned:      true,
+			Config: map[string]any{
+				"command": "npx",
+				"args":    []any{"-y", "tavily-mcp@latest"},
+			},
+		},
 	}
 }
 
@@ -63,6 +72,16 @@ func ResolveBuiltin(name string, options InstallOptions) (BuiltinSpec, error) {
 			if len(env) > 0 {
 				spec.Config["env"] = env
 			}
+		case "tavily":
+			env := parseEnv(options.Env)
+			if _, ok := env["TAVILY_API_KEY"]; !ok {
+				// If no API key provided via --set-env, still allow install
+				// but inject a placeholder so the user knows to set it.
+				if len(env) == 0 {
+					env = map[string]string{"TAVILY_API_KEY": "${TAVILY_API_KEY}"}
+				}
+			}
+			spec.Config["env"] = env
 		case "filesystem":
 			allow := make([]any, 0, len(options.Allow))
 			for _, entry := range options.Allow {

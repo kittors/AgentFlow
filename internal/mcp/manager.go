@@ -96,7 +96,7 @@ func (m *Manager) Install(target targets.Target, server string, options InstallO
 	switch target.Name {
 	case "claude":
 		return m.installIntoClaudeSettings(spec)
-	case "gemini":
+	case "gemini", "antigravity":
 		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings.json"), spec)
 	case "qwen":
 		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings.json"), spec)
@@ -106,6 +106,14 @@ func (m *Manager) Install(target targets.Target, server string, options InstallO
 		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp.json"), spec)
 	case "windsurf":
 		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp_config.json"), spec)
+	case "vscode-copilot":
+		return m.installIntoVSCodeMCP(filepath.Join(m.HomeDir, target.Dir, "mcp.json"), spec)
+	case "trae":
+		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "agentflow.mcp.json"), spec)
+	case "cline":
+		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp_settings.json"), spec)
+	case "jetbrains":
+		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "agentflow.mcp.json"), spec)
 	default:
 		// Keep managed record only for unknown targets.
 		return nil
@@ -135,7 +143,7 @@ func (m *Manager) Remove(target targets.Target, server string) error {
 	switch target.Name {
 	case "claude":
 		return m.removeFromClaudeSettings(server)
-	case "gemini":
+	case "gemini", "antigravity":
 		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings.json"), server)
 	case "qwen":
 		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings.json"), server)
@@ -145,6 +153,14 @@ func (m *Manager) Remove(target targets.Target, server string) error {
 		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp.json"), server)
 	case "windsurf":
 		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp_config.json"), server)
+	case "vscode-copilot":
+		return m.removeFromVSCodeMCP(filepath.Join(m.HomeDir, target.Dir, "mcp.json"), server)
+	case "trae":
+		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "agentflow.mcp.json"), server)
+	case "cline":
+		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp_settings.json"), server)
+	case "jetbrains":
+		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "agentflow.mcp.json"), server)
 	default:
 		return nil
 	}
@@ -194,7 +210,7 @@ func (m *Manager) List(target targets.Target) ([]string, error) {
 		}
 	}
 
-	if target.Name == "gemini" || target.Name == "qwen" {
+	if target.Name == "gemini" || target.Name == "qwen" || target.Name == "antigravity" {
 		path := filepath.Join(m.HomeDir, target.Dir, "settings.json")
 		servers, err := m.listJSONMCPServers(path)
 		if err == nil {
@@ -226,6 +242,46 @@ func (m *Manager) List(target targets.Target) ([]string, error) {
 
 	if target.Name == "windsurf" {
 		path := filepath.Join(m.HomeDir, target.Dir, "mcp_config.json")
+		servers, err := m.listJSONMCPServers(path)
+		if err == nil {
+			for key := range servers {
+				addPreferred(key)
+			}
+		}
+	}
+
+	if target.Name == "vscode-copilot" {
+		path := filepath.Join(m.HomeDir, target.Dir, "mcp.json")
+		servers, err := m.listVSCodeMCP(path)
+		if err == nil {
+			for key := range servers {
+				addPreferred(key)
+			}
+		}
+	}
+
+	if target.Name == "trae" {
+		path := filepath.Join(m.HomeDir, target.Dir, "agentflow.mcp.json")
+		servers, err := m.listJSONMCPServers(path)
+		if err == nil {
+			for key := range servers {
+				addPreferred(key)
+			}
+		}
+	}
+
+	if target.Name == "cline" {
+		path := filepath.Join(m.HomeDir, target.Dir, "mcp_settings.json")
+		servers, err := m.listJSONMCPServers(path)
+		if err == nil {
+			for key := range servers {
+				addPreferred(key)
+			}
+		}
+	}
+
+	if target.Name == "jetbrains" {
+		path := filepath.Join(m.HomeDir, target.Dir, "agentflow.mcp.json")
 		servers, err := m.listJSONMCPServers(path)
 		if err == nil {
 			for key := range servers {
@@ -596,7 +652,7 @@ func (m *Manager) claudeSettingsWritePath() string {
 func managedRecordPath(home string, target targets.Target) string {
 	base := filepath.Join(home, target.Dir)
 	switch target.Name {
-	case "cursor", "windsurf":
+	case "cursor", "windsurf", "trae", "cline", "jetbrains", "vscode-copilot":
 		return filepath.Join(base, "agentflow.mcp.json")
 	default:
 		return filepath.Join(base, "mcp.json")
@@ -687,4 +743,92 @@ func (m *Manager) listJSONMCPServers(path string) (map[string]any, error) {
 		return nil, fmt.Errorf("%s: mcpServers must be an object", filepath.Base(path))
 	}
 	return mcpServers, nil
+}
+
+// VS Code Copilot uses "servers" key instead of "mcpServers".
+
+func (m *Manager) installIntoVSCodeMCP(path string, spec BuiltinSpec) error {
+	settings, err := readJSONMap(path)
+	if err != nil {
+		return err
+	}
+
+	servers := map[string]any{}
+	if existing, ok := settings["servers"]; ok {
+		mapped, ok := existing.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s: servers must be an object", filepath.Base(path))
+		}
+		servers = mapped
+	}
+
+	normalized := normalizeServerKey(spec.Name)
+	for key := range servers {
+		if normalizeServerKey(key) == normalized && key != spec.Name {
+			delete(servers, key)
+		}
+	}
+	servers[spec.Name] = spec.Config
+	settings["servers"] = servers
+
+	payload, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	payload = append(payload, '\n')
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode()
+	}
+	return config.SafeWrite(path, payload, mode)
+}
+
+func (m *Manager) removeFromVSCodeMCP(path, name string) error {
+	settings, err := readJSONMap(path)
+	if err != nil {
+		return err
+	}
+
+	existing, ok := settings["servers"]
+	if !ok {
+		return nil
+	}
+	servers, ok := existing.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s: servers must be an object", filepath.Base(path))
+	}
+	normalized := normalizeServerKey(name)
+	for key := range servers {
+		if normalizeServerKey(key) == normalized {
+			delete(servers, key)
+		}
+	}
+	settings["servers"] = servers
+
+	payload, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	payload = append(payload, '\n')
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode()
+	}
+	return config.SafeWrite(path, payload, mode)
+}
+
+func (m *Manager) listVSCodeMCP(path string) (map[string]any, error) {
+	settings, err := readJSONMap(path)
+	if err != nil {
+		return nil, err
+	}
+	existing, ok := settings["servers"]
+	if !ok {
+		return map[string]any{}, nil
+	}
+	servers, ok := existing.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s: servers must be an object", filepath.Base(path))
+	}
+	return servers, nil
 }

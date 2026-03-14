@@ -82,7 +82,7 @@
   - 全局：管理全局 Skills（右侧展示当前目录的规则文件状态 + 全局 Skills；每个 Skill 选项会显示简介）
 - `MCP`：先选目标（CLI/IDE），再管理全局 MCP（右侧展示全局 MCP 列表；每个 MCP 选项会显示简介）
 
-> 说明：AgentFlow 当前只支持 **全局 MCP**（写入工具的用户级配置目录）；项目级仅支持规则文件（Skill/指令文件）。
+> 说明：AgentFlow 当前支持 **全局 MCP**（写入工具的用户级配置目录），支持 CLI 和 IDE 两类目标；项目级仅支持规则文件（Skill/指令文件）。
 
 ### 1) 写入「项目级 Skill/规则文件」（CLI + IDE）
 
@@ -110,8 +110,12 @@ agentflow mcp list gemini
 # 安装内置 MCP（示例：Context7）
 agentflow mcp install gemini context7 --set-env=CONTEXT7_API_KEY=...
 
-# Cursor / Windsurf 也支持（写入各自的用户级 JSON 配置）
-agentflow mcp install cursor filesystem --allow=/path/to/dir
+# 安装 Tavily Web 搜索 MCP
+agentflow mcp install gemini tavily --set-env=TAVILY_API_KEY=...
+
+# Cursor / Windsurf / VS Code Copilot / Cline / Trae / JetBrains / Antigravity 也支持
+agentflow mcp install cursor context7
+agentflow mcp install vscode-copilot tavily --set-env=TAVILY_API_KEY=...
 agentflow mcp list windsurf
 ```
 
@@ -833,6 +837,14 @@ npx -y @modelcontextprotocol/server-brave-search
 
 ```bash
 npx -y @upstash/context7-mcp
+```
+
+### Tavily（AI 网络搜索）
+
+```bash
+npx -y tavily-mcp@latest
+# 需要设置 TAVILY_API_KEY 环境变量
+# 获取免费 API Key: https://tavily.com
 ```
 
 ### Playwright（浏览器自动化）

@@ -456,3 +456,266 @@ func TestManagerInstallAndRemoveUpdatesCodexConfigToml(t *testing.T) {
 		t.Fatalf("expected Context7 block removed, got:\n%s", string(data))
 	}
 }
+
+func TestManagerInstallAndRemoveUpdatesTraeMCPConfig(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.LookupMCP("trae")
+	if !ok {
+		t.Fatalf("expected trae target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	configPath := filepath.Join(tmp, target.Dir, "agentflow.mcp.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read agentflow.mcp.json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse agentflow.mcp.json: %v", err)
+	}
+	mcpServers, ok := payload["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers missing or invalid")
+	}
+	if _, ok := mcpServers["context7"]; !ok {
+		t.Fatalf("expected context7 present")
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read agentflow.mcp.json after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse agentflow.mcp.json after remove: %v", err)
+	}
+	mcpServers, _ = payload["mcpServers"].(map[string]any)
+	if _, exists := mcpServers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}
+
+func TestManagerInstallAndRemoveUpdatesVSCodeCopilotMCPConfig(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.LookupMCP("vscode-copilot")
+	if !ok {
+		t.Fatalf("expected vscode-copilot target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	configPath := filepath.Join(tmp, target.Dir, "mcp.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp.json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp.json: %v", err)
+	}
+	// VS Code Copilot uses "servers" key
+	servers, ok := payload["servers"].(map[string]any)
+	if !ok {
+		t.Fatalf("servers key missing or invalid (VS Code Copilot uses 'servers' not 'mcpServers')")
+	}
+	if _, ok := servers["context7"]; !ok {
+		t.Fatalf("expected context7 present")
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp.json after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp.json after remove: %v", err)
+	}
+	servers, _ = payload["servers"].(map[string]any)
+	if _, exists := servers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}
+
+func TestManagerInstallAndRemoveUpdatesClineMCPConfig(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.LookupMCP("cline")
+	if !ok {
+		t.Fatalf("expected cline target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	configPath := filepath.Join(tmp, target.Dir, "mcp_settings.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp_settings.json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp_settings.json: %v", err)
+	}
+	mcpServers, ok := payload["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers missing or invalid")
+	}
+	if _, ok := mcpServers["context7"]; !ok {
+		t.Fatalf("expected context7 present")
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp_settings.json after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp_settings.json after remove: %v", err)
+	}
+	mcpServers, _ = payload["mcpServers"].(map[string]any)
+	if _, exists := mcpServers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}
+
+func TestManagerInstallAndRemoveUpdatesAntigravityMCPConfig(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.LookupMCP("antigravity")
+	if !ok {
+		t.Fatalf("expected antigravity target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	// antigravity shares .gemini/ with gemini
+	settingsPath := filepath.Join(tmp, target.Dir, "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings.json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse settings.json: %v", err)
+	}
+	mcpServers, ok := payload["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers missing or invalid")
+	}
+	if _, ok := mcpServers["context7"]; !ok {
+		t.Fatalf("expected context7 present")
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings.json after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse settings.json after remove: %v", err)
+	}
+	mcpServers, _ = payload["mcpServers"].(map[string]any)
+	if _, exists := mcpServers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}
+
+func TestResolveBuiltinTavily(t *testing.T) {
+	spec, err := ResolveBuiltin("tavily", InstallOptions{Env: []string{"TAVILY_API_KEY=tvly-test123"}})
+	if err != nil {
+		t.Fatalf("resolve tavily: %v", err)
+	}
+	if spec.Name != "tavily" {
+		t.Fatalf("unexpected name: %s", spec.Name)
+	}
+	env, ok := spec.Config["env"].(map[string]string)
+	if !ok {
+		t.Fatalf("env missing")
+	}
+	if env["TAVILY_API_KEY"] != "tvly-test123" {
+		t.Fatalf("unexpected api key: %v", env["TAVILY_API_KEY"])
+	}
+}
+
+func TestResolveBuiltinTavilyDefaultEnv(t *testing.T) {
+	spec, err := ResolveBuiltin("tavily", InstallOptions{})
+	if err != nil {
+		t.Fatalf("resolve tavily: %v", err)
+	}
+	env, ok := spec.Config["env"].(map[string]string)
+	if !ok {
+		t.Fatalf("env missing")
+	}
+	if env["TAVILY_API_KEY"] != "${TAVILY_API_KEY}" {
+		t.Fatalf("expected placeholder, got: %v", env["TAVILY_API_KEY"])
+	}
+}
+
+func TestManagerInstallAndRemoveUpdatesJetBrainsMCPConfig(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.LookupMCP("jetbrains")
+	if !ok {
+		t.Fatalf("expected jetbrains target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	configPath := filepath.Join(tmp, target.Dir, "agentflow.mcp.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read agentflow.mcp.json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse agentflow.mcp.json: %v", err)
+	}
+	mcpServers, ok := payload["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers missing or invalid")
+	}
+	if _, ok := mcpServers["context7"]; !ok {
+		t.Fatalf("expected context7 present")
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read agentflow.mcp.json after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse agentflow.mcp.json after remove: %v", err)
+	}
+	mcpServers, _ = payload["mcpServers"].(map[string]any)
+	if _, exists := mcpServers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}

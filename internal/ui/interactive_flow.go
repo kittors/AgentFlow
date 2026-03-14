@@ -323,7 +323,7 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Value:       string(ActionMCP),
 				Label:       catalog.Msg("管理 MCP Servers", "Manage MCP servers"),
 				Badge:       catalog.Msg("MCP", "MCP"),
-				Description: catalog.Msg("为任意 CLI 写入、查看与移除 MCP servers 配置，并置顶推荐 Context7 / Playwright / Filesystem。", "Write, inspect, and remove MCP server configs for any CLI, with pinned recommendations like Context7 / Playwright / Filesystem."),
+				Description: catalog.Msg("为任意 CLI/IDE 写入、查看与移除 MCP servers 配置，并置顶推荐 Context7 / Playwright / Filesystem / Tavily。", "Write, inspect, and remove MCP server configs for any CLI/IDE, with pinned recommendations like Context7 / Playwright / Filesystem / Tavily."),
 			},
 			{
 				Value:       string(ActionSkill),
@@ -384,7 +384,7 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 		},
 		mcpActions: []Option{
 			{Value: "list", Label: catalog.Msg("查看已配置 MCP", "List configured MCP"), Badge: catalog.Msg("列表", "LIST"), Description: catalog.Msg("列出该 CLI 已配置的 MCP servers。", "List MCP servers configured for this CLI.")},
-			{Value: "install", Label: catalog.Msg("安装推荐 MCP", "Install recommended MCP"), Badge: catalog.Msg("安装", "ADD"), Description: catalog.Msg("安装置顶推荐：Context7 / Playwright / Filesystem。", "Install pinned recommendations: Context7 / Playwright / Filesystem.")},
+			{Value: "install", Label: catalog.Msg("安装推荐 MCP", "Install recommended MCP"), Badge: catalog.Msg("安装", "ADD"), Description: catalog.Msg("安装置顶推荐：Context7 / Playwright / Filesystem / Tavily。", "Install pinned recommendations: Context7 / Playwright / Filesystem / Tavily.")},
 			{Value: "remove", Label: catalog.Msg("移除 MCP", "Remove MCP"), Badge: catalog.Msg("移除", "DEL"), Description: catalog.Msg("从该 CLI 中移除已配置的 MCP server。", "Remove an MCP server from this CLI.")},
 		},
 		skillActions: []Option{
