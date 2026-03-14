@@ -476,7 +476,12 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if value.notice != nil {
 				m.notice = value.notice
 			}
-			m.screen = flowScreenSkillProjectActions
+			if m.projectInstallMode {
+				m.projectInstallMode = false
+				m.screen = flowScreenInstallHub
+			} else {
+				m.screen = flowScreenSkillProjectActions
+			}
 			m.resetDetailFocus()
 		case flowActionMCPRefreshSummary:
 			if value.notice != nil {
