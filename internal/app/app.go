@@ -129,6 +129,8 @@ func (a *App) runInteractiveMainMenu() int {
 		UninstallCLI:           a.uninstallCLITargetsPanel,
 		Update:                 a.updatePanel,
 		Clean:                  a.cleanPanel,
+		CLIConfigFields:        a.cliConfigFields,
+		WriteEnvConfig:         a.writeEnvConfigPanel,
 	}, a.Stdout); err != nil {
 		fmt.Fprintln(a.Stderr, err.Error())
 		return 1
@@ -695,6 +697,29 @@ func (a *App) uninstallCLITargetOptions() []ui.Option {
 		})
 	}
 	return options
+}
+
+func (a *App) cliConfigFields(target string) []ui.ConfigField {
+	fields := a.Installer.CLIConfigFields(target)
+	if len(fields) == 0 {
+		return nil
+	}
+	result := make([]ui.ConfigField, len(fields))
+	for i, f := range fields {
+		result[i] = ui.ConfigField{Label: f.Label, EnvVar: f.EnvVar}
+	}
+	return result
+}
+
+func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
+	lines, err := a.Installer.WriteEnvConfig(envVars)
+	if err != nil {
+		return errorPanel(a.Catalog.Msg("配置写入失败", "Config write failed"), err)
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("配置写入成功", "Configuration saved"),
+		Lines: lines,
+	}
 }
 
 func (a *App) installTargetsPanel(profile string, targets []string) ui.Panel {

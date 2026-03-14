@@ -14,6 +14,8 @@ type Target struct {
 	DocsURL               string
 	BootstrapSupported    bool
 	RecommendWSLOnWindows bool
+	APIKeyEnv             string // Environment variable for API key (empty = no config needed)
+	BaseURLEnv            string // Environment variable for custom base URL (empty = not configurable)
 }
 
 var All = map[string]Target{
@@ -28,6 +30,8 @@ var All = map[string]Target{
 		DocsURL:               "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
+		APIKeyEnv:             "OPENAI_API_KEY",
+		BaseURLEnv:            "OPENAI_BASE_URL",
 	},
 	"claude": {
 		Name:                  "claude",
@@ -41,6 +45,8 @@ var All = map[string]Target{
 		DocsURL:               "https://docs.anthropic.com/en/docs/claude-code/getting-started",
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
+		APIKeyEnv:             "ANTHROPIC_API_KEY",
+		BaseURLEnv:            "ANTHROPIC_BASE_URL",
 	},
 	"gemini": {
 		Name:                  "gemini",
@@ -54,6 +60,7 @@ var All = map[string]Target{
 		DocsURL:               "https://google-gemini.github.io/gemini-cli/docs/get-started/",
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
+		APIKeyEnv:             "GOOGLE_API_KEY",
 	},
 	"qwen": {
 		Name:                  "qwen",
@@ -67,6 +74,8 @@ var All = map[string]Target{
 		DocsURL:               "https://qwen-code.github.io/qwen-code-docs/",
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
+		APIKeyEnv:             "DASHSCOPE_API_KEY",
+		BaseURLEnv:            "DASHSCOPE_BASE_URL",
 	},
 	"kiro": {
 		Name:                  "kiro",

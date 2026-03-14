@@ -44,6 +44,14 @@ type InteractiveCallbacks struct {
 	UninstallCLI           func(targets []string) Panel
 	Update                 func() (Panel, string)
 	Clean                  func() Panel
+	CLIConfigFields        func(target string) []ConfigField
+	WriteEnvConfig         func(envVars map[string]string) Panel
+}
+
+// ConfigField describes a single configurable environment variable.
+type ConfigField struct {
+	Label  string // e.g. "API Key"
+	EnvVar string // e.g. "OPENAI_API_KEY"
 }
 
 type flowScreen int
@@ -68,6 +76,7 @@ const (
 	flowScreenInstallTargets
 	flowScreenUninstallTargets
 	flowScreenUpdateConfirm
+	flowScreenBootstrapConfig
 )
 
 type flowAction int
@@ -91,6 +100,7 @@ const (
 	flowActionInstall
 	flowActionUninstall
 	flowActionUninstallCLI
+	flowActionWriteEnvConfig
 )
 
 type flowResultMsg struct {
@@ -145,6 +155,12 @@ type interactiveFlowModel struct {
 	updateConfirmCursor    int
 	installHubStatusPanel  *Panel
 
+	// Bootstrap config screen state.
+	configFields      []configFieldState
+	configFieldCursor int
+	configEditing     bool
+	configTarget      string
+
 	mainCursor               int
 	installHubCursor         int
 	mcpTargetCursor          int
@@ -182,6 +198,13 @@ type interactiveFlowModel struct {
 func (m *interactiveFlowModel) resetDetailFocus() {
 	m.focusDetails = false
 	m.detailScroll = 0
+}
+
+// configFieldState holds the editing state for a single text input field.
+type configFieldState struct {
+	Label  string // e.g. "API Key"
+	EnvVar string // e.g. "OPENAI_API_KEY"
+	Value  string // current typed value
 }
 
 func normalizeIdentifier(value string) string {
@@ -540,6 +563,26 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = value.notice
 			}
 			m.refreshBootstrapDetail()
+			// If CLI has configurable env vars, transition to config screen.
+			if m.callbacks.CLIConfigFields != nil {
+				fields := m.callbacks.CLIConfigFields(m.selectedBootstrapTarget)
+				if len(fields) > 0 {
+					m.configTarget = m.selectedBootstrapTarget
+					m.configFields = make([]configFieldState, len(fields))
+					for idx, f := range fields {
+						m.configFields[idx] = configFieldState{Label: f.Label, EnvVar: f.EnvVar}
+					}
+					m.configFieldCursor = 0
+					m.configEditing = true
+					m.screen = flowScreenBootstrapConfig
+				}
+			}
+		case flowActionWriteEnvConfig:
+			if value.notice != nil {
+				m.notice = value.notice
+			}
+			m.screen = flowScreenBootstrapActions
+			m.configEditing = false
 		case flowActionInstall, flowActionUninstall, flowActionUninstallCLI, flowActionClean:
 			m.screen = flowScreenMain
 			m.resetDetailFocus()
@@ -627,6 +670,10 @@ func (m interactiveFlowModel) View() string {
 }
 
 func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Config screen intercepts all keys for text input.
+	if m.screen == flowScreenBootstrapConfig && m.configEditing {
+		return m.handleConfigKey(key)
+	}
 	switch key.Type {
 	case tea.KeyLeft:
 		m.focusDetails = false
@@ -808,8 +855,52 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 		m.uninstallCLIMode = false
 	case flowScreenUpdateConfirm:
 		m.screen = flowScreenMain
+	case flowScreenBootstrapConfig:
+		// Skip config by pressing Esc.
+		m.screen = flowScreenBootstrapActions
+		m.configEditing = false
 	}
 	m.notice = nil
+	return m, nil
+}
+
+// handleConfigKey processes key events during the config text-input screen.
+func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch key.Type {
+	case tea.KeyEsc:
+		// Skip config.
+		m.screen = flowScreenBootstrapActions
+		m.configEditing = false
+		return m, nil
+	case tea.KeyEnter:
+		// Save config.
+		m.focusDetails = false
+		m.detailScroll = 0
+		return m.handleEnter()
+	case tea.KeyUp:
+		if m.configFieldCursor > 0 {
+			m.configFieldCursor--
+		}
+		return m, nil
+	case tea.KeyDown, tea.KeyTab:
+		if m.configFieldCursor < len(m.configFields)-1 {
+			m.configFieldCursor++
+		}
+		return m, nil
+	case tea.KeyBackspace:
+		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
+			v := m.configFields[m.configFieldCursor].Value
+			if len(v) > 0 {
+				m.configFields[m.configFieldCursor].Value = v[:len(v)-1]
+			}
+		}
+		return m, nil
+	case tea.KeyRunes:
+		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
+			m.configFields[m.configFieldCursor].Value += key.String()
+		}
+		return m, nil
+	}
 	return m, nil
 }
 
@@ -1268,6 +1359,26 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.screen = flowScreenMain
 			return m, nil
 		}
+	case flowScreenBootstrapConfig:
+		// Collect filled values.
+		envVars := make(map[string]string)
+		for _, f := range m.configFields {
+			if strings.TrimSpace(f.Value) != "" {
+				envVars[f.EnvVar] = f.Value
+			}
+		}
+		if len(envVars) == 0 {
+			// All empty — skip config.
+			m.screen = flowScreenBootstrapActions
+			m.configEditing = false
+			m.notice = panelRef(Panel{
+				Title: m.catalog.Msg("配置跳过", "Configuration skipped"),
+				Lines: []string{m.catalog.Msg("未输入任何配置，将使用官方默认值。", "No configuration entered; using official defaults.")},
+			})
+			return m, nil
+		}
+		m.configEditing = false
+		return m.startBusy(flowActionWriteEnvConfig, m.catalog.Msg("正在写入配置…", "Writing configuration..."))
 	}
 	return m, nil
 }
@@ -1531,6 +1642,15 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 			cursor = len(m.updateConfirmOptions) - 1
 		}
 		m.updateConfirmCursor = cursor
+	case flowScreenBootstrapConfig:
+		if len(m.configFields) == 0 {
+			m.configFieldCursor = 0
+			break
+		}
+		if cursor > len(m.configFields)-1 {
+			cursor = len(m.configFields) - 1
+		}
+		m.configFieldCursor = cursor
 	}
 
 	if m.currentCursor() != previousCursor {
@@ -1576,6 +1696,8 @@ func (m interactiveFlowModel) currentCursor() int {
 		return m.uninstallCursor
 	case flowScreenUpdateConfirm:
 		return m.updateConfirmCursor
+	case flowScreenBootstrapConfig:
+		return m.configFieldCursor
 	default:
 		return m.mainCursor
 	}
@@ -1619,6 +1741,8 @@ func (m interactiveFlowModel) currentOptionsLen() int {
 		return len(m.uninstallOptions)
 	case flowScreenUpdateConfirm:
 		return len(m.updateConfirmOptions)
+	case flowScreenBootstrapConfig:
+		return len(m.configFields)
 	default:
 		return len(m.mainOptions)
 	}
@@ -1652,6 +1776,13 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 	selectedSkillTarget := m.selectedSkillTarget
 	selectedSkillValue := m.selectedSkillValue
 	selectedProjectProfile := m.selectedProjectProfile
+	// Capture config fields for writeEnvConfig.
+	configEnvVars := make(map[string]string)
+	for _, f := range m.configFields {
+		if strings.TrimSpace(f.Value) != "" {
+			configEnvVars[f.EnvVar] = f.Value
+		}
+	}
 
 	return func() tea.Msg {
 		switch action {
@@ -1887,6 +2018,16 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 				notice: panelRef(notice),
 				status: m.callbacks.Status(),
 			}
+		case flowActionWriteEnvConfig:
+			notice := Panel{}
+			if m.callbacks.WriteEnvConfig != nil {
+				notice = m.callbacks.WriteEnvConfig(configEnvVars)
+			}
+			return flowResultMsg{
+				action: action,
+				notice: panelRef(notice),
+				status: m.callbacks.Status(),
+			}
 		default:
 			return flowResultMsg{
 				action: action,
@@ -2021,6 +2162,35 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.hint = m.catalog.Msg("↑/↓ 选择，Enter 确认，Esc 返回主菜单。", "Use ↑/↓ to choose, Enter to confirm, Esc to go back.")
 		model.options = cloneOptions(m.updateConfirmOptions)
 		model.cursor = m.updateConfirmCursor
+		panels := make([]Panel, 0, 2)
+		if m.notice != nil {
+			panels = append(panels, *m.notice)
+		}
+		panels = append(panels, m.status)
+		model.panels = panels
+	case flowScreenBootstrapConfig:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("配置 %s（可选，留空跳过）", "Configure %s (optional, leave empty to skip)"), m.configTarget)
+		model.hint = m.catalog.Msg("↑/↓ 切换字段，直接输入值，Enter 保存，Esc 跳过配置。", "↑/↓ to switch fields, type to enter values, Enter to save, Esc to skip.")
+		// Build virtual options from config fields to display as a form.
+		options := make([]Option, len(m.configFields))
+		for idx, f := range m.configFields {
+			displayValue := f.Value
+			if displayValue == "" {
+				displayValue = m.catalog.Msg("(留空则使用官方默认)", "(leave empty to use official default)")
+			}
+			// Show cursor indicator for editing field.
+			if idx == m.configFieldCursor && m.configEditing {
+				displayValue = f.Value + "█"
+			}
+			options[idx] = Option{
+				Value:       f.EnvVar,
+				Label:       fmt.Sprintf("%s (%s)", f.Label, f.EnvVar),
+				Badge:       f.Label,
+				Description: displayValue,
+			}
+		}
+		model.options = options
+		model.cursor = m.configFieldCursor
 		panels := make([]Panel, 0, 2)
 		if m.notice != nil {
 			panels = append(panels, *m.notice)

@@ -598,3 +598,114 @@ func nodeMajor(version string) int {
 	major, _ := strconv.Atoi(part)
 	return major
 }
+
+// EnvVarConfig describes a single environment variable to configure for a CLI.
+type EnvVarConfig struct {
+	Label  string // Human-readable label (e.g. "API Key")
+	EnvVar string // Environment variable name (e.g. "OPENAI_API_KEY")
+}
+
+// CLIConfigFields returns the environment variables that should be configured
+// after installing the given CLI target. Returns nil if no configuration is needed.
+func (i *Installer) CLIConfigFields(targetName string) []EnvVarConfig {
+	target, ok := targets.Lookup(targetName)
+	if !ok {
+		return nil
+	}
+	if target.APIKeyEnv == "" {
+		return nil
+	}
+	fields := []EnvVarConfig{
+		{Label: "API Key", EnvVar: target.APIKeyEnv},
+	}
+	if target.BaseURLEnv != "" {
+		fields = append(fields, EnvVarConfig{Label: "Base URL", EnvVar: target.BaseURLEnv})
+	}
+	return fields
+}
+
+// WriteEnvConfig writes environment variable exports to the user's shell config
+// file (~/.zshrc, ~/.bashrc, or ~/.profile). It returns descriptive lines about
+// what was written and any errors encountered.
+func (i *Installer) WriteEnvConfig(envVars map[string]string) ([]string, error) {
+	if len(envVars) == 0 {
+		return []string{i.Catalog.Msg("没有需要写入的配置。", "No configuration to write.")}, nil
+	}
+
+	rcFile := i.detectShellRC()
+	if rcFile == "" {
+		return nil, errors.New(i.Catalog.Msg("未找到 shell 配置文件（~/.zshrc 或 ~/.bashrc）。", "Could not find a shell config file (~/.zshrc or ~/.bashrc)."))
+	}
+
+	// Read existing content to check for duplicates.
+	existing, _ := os.ReadFile(rcFile)
+	content := string(existing)
+
+	var newLines []string
+	for envVar, value := range envVars {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		exportLine := fmt.Sprintf("export %s=%s", envVar, shellQuote(value))
+
+		// Comment out any existing export for this variable.
+		marker := fmt.Sprintf("export %s=", envVar)
+		if strings.Contains(content, marker) {
+			updatedContent := strings.Builder{}
+			for _, line := range strings.Split(content, "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, marker) && !strings.HasPrefix(trimmed, "#") {
+					updatedContent.WriteString("# " + line + "  # replaced by AgentFlow\n")
+				} else {
+					updatedContent.WriteString(line + "\n")
+				}
+			}
+			content = updatedContent.String()
+		}
+		newLines = append(newLines, exportLine)
+	}
+
+	if len(newLines) == 0 {
+		return []string{i.Catalog.Msg("所有配置项均为空，未写入。", "All config values were empty; nothing written.")}, nil
+	}
+
+	// Append the new exports.
+	block := "\n# AgentFlow CLI configuration\n" + strings.Join(newLines, "\n") + "\n"
+	content = strings.TrimRight(content, "\n") + "\n" + block
+
+	if err := os.WriteFile(rcFile, []byte(content), 0644); err != nil {
+		return nil, fmt.Errorf(i.Catalog.Msg("写入 %s 失败: %v", "failed to write %s: %v"), rcFile, err)
+	}
+
+	lines := []string{
+		fmt.Sprintf(i.Catalog.Msg("已写入 %s:", "Written to %s:"), rcFile),
+	}
+	for _, line := range newLines {
+		lines = append(lines, "  "+line)
+	}
+	lines = append(lines, "")
+	lines = append(lines, fmt.Sprintf(i.Catalog.Msg("运行 source %s 或重启终端以生效。", "Run source %s or restart your terminal to apply."), rcFile))
+	return lines, nil
+}
+
+// detectShellRC finds the best shell config file to write to.
+func (i *Installer) detectShellRC() string {
+	candidates := []string{".zshrc", ".bashrc", ".profile"}
+	for _, name := range candidates {
+		path := filepath.Join(i.HomeDir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	// Default to .zshrc on macOS, .bashrc elsewhere.
+	if currentPlatform() == platformDarwin {
+		return filepath.Join(i.HomeDir, ".zshrc")
+	}
+	return filepath.Join(i.HomeDir, ".bashrc")
+}
+
+// shellQuote wraps a value in double quotes, escaping existing double quotes.
+func shellQuote(value string) string {
+	escaped := strings.ReplaceAll(value, `"`, `\"`)
+	return `"` + escaped + `"`
+}
