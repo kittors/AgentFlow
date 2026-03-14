@@ -24,7 +24,7 @@ func (a *App) runMCP(args []string) int {
 			fmt.Fprintln(a.Stderr, a.Catalog.Msg("用法: agentflow mcp list <target>", "Usage: agentflow mcp list <target>"))
 			return 1
 		}
-		target, ok := targets.Lookup(args[1])
+		target, ok := targets.LookupMCP(args[1])
 		if !ok {
 			fmt.Fprintln(a.Stderr, a.Catalog.Msg("未知目标。", "Unknown target."))
 			return 1
@@ -48,7 +48,7 @@ func (a *App) runMCP(args []string) int {
 			fmt.Fprintln(a.Stderr, a.Catalog.Msg("用法: agentflow mcp remove <target> <server>", "Usage: agentflow mcp remove <target> <server>"))
 			return 1
 		}
-		target, ok := targets.Lookup(args[1])
+		target, ok := targets.LookupMCP(args[1])
 		if !ok {
 			fmt.Fprintln(a.Stderr, a.Catalog.Msg("未知目标。", "Unknown target."))
 			return 1
@@ -65,7 +65,7 @@ func (a *App) runMCP(args []string) int {
 			fmt.Fprintln(a.Stderr, a.Catalog.Msg("用法: agentflow mcp install <target> <server> [--set-env=K=V] [--allow=<path>]", "Usage: agentflow mcp install <target> <server> [--set-env=K=V] [--allow=<path>]"))
 			return 1
 		}
-		target, ok := targets.Lookup(args[1])
+		target, ok := targets.LookupMCP(args[1])
 		if !ok {
 			fmt.Fprintln(a.Stderr, a.Catalog.Msg("未知目标。", "Unknown target."))
 			return 1

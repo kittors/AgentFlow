@@ -109,12 +109,16 @@ agentflow clean                 # 清理 AgentFlow 缓存
 agentflow update                # 自更新到最新 release 二进制
 agentflow version               # 输出当前版本与更新提示
 
+# 项目级规则（CLI + IDE）
+agentflow rules detect
+agentflow rules install codex claude gemini qwen kiro cursor windsurf trae vscode-copilot cline antigravity
+
 # Skills（Codex）
 agentflow skill list codex
 agentflow skill install codex https://skills.sh/vercel/turborepo/turborepo
 agentflow skill uninstall codex turborepo
 
-# MCP servers（Claude）
+# MCP servers（全局）
 agentflow mcp install claude context7 --set-env=CONTEXT7_API_KEY=YOUR_API_KEY
 agentflow mcp install claude playwright
 agentflow mcp list claude
@@ -127,7 +131,7 @@ agentflow mcp search playwright
 
 - Skills 索引（Vercel）：https://vercel.com/docs/agent-resources/skills
 - MCP 置顶推荐（最实用）：`context7`、`playwright`、`filesystem`
-- MCP 配置路径：`~/<target 配置目录>/mcp.json`（Claude 会尽量同步写入 `~/.claude/settings.json`）
+- MCP 配置路径：AgentFlow 会在各目标配置目录中记录 managed MCP，并写入到工具真实读取的配置文件（例如 Codex `config.toml`、Claude/Gemini/Qwen `settings.json`、Cursor `mcp.json`、Windsurf `mcp_config.json`）。
 
 ## 支持的目标 CLI
 

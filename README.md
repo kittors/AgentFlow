@@ -108,12 +108,16 @@ agentflow clean                 # Remove AgentFlow caches
 agentflow update                # Self-update to the latest release binary
 agentflow version               # Print current version + update hint
 
+# Project rules (CLI + IDE)
+agentflow rules detect
+agentflow rules install codex claude gemini qwen kiro cursor windsurf trae vscode-copilot cline antigravity
+
 # Skills (Codex)
 agentflow skill list codex
 agentflow skill install codex https://skills.sh/vercel/turborepo/turborepo
 agentflow skill uninstall codex turborepo
 
-# MCP servers (Claude)
+# MCP servers (global)
 agentflow mcp install claude context7 --set-env=CONTEXT7_API_KEY=YOUR_API_KEY
 agentflow mcp install claude playwright
 agentflow mcp list claude
@@ -126,7 +130,7 @@ When no command is provided and stdin is a TTY, AgentFlow opens the Bubble Tea b
 
 - Skills directory: https://vercel.com/docs/agent-resources/skills
 - Recommended MCP servers (pinned): `context7`, `playwright`, `filesystem`
-- MCP config path: `~/<target-config-dir>/mcp.json` (for Claude, AgentFlow also syncs `~/.claude/settings.json` when possible)
+- MCP config paths: AgentFlow records managed MCP entries under each target config dir and writes into the tool’s real config file (e.g. Codex `config.toml`, Claude/Gemini/Qwen `settings.json`, Cursor `mcp.json`, Windsurf `mcp_config.json`).
 
 ## Supported Targets
 

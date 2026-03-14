@@ -17,6 +17,7 @@ type Action string
 
 const (
 	ActionInstall      Action = "install"
+	ActionWorkspace    Action = "workspace"
 	ActionMCP          Action = "mcp"
 	ActionSkill        Action = "skill"
 	ActionUninstall    Action = "uninstall"
@@ -135,6 +136,12 @@ func RunMainMenu(catalog i18n.Catalog, version string, panels []Panel, output io
 			Label:       catalog.Msg("安装到 CLI", "Install to CLI targets"),
 			Badge:       catalog.Msg("安装", "SETUP"),
 			Description: catalog.Msg("把 AgentFlow 规则、模块、技能和 hooks 部署到 Codex、Claude、Gemini 等 CLI。", "Deploy AgentFlow rules, modules, skills, and hooks into Codex, Claude, Gemini, and other CLIs."),
+		},
+		{
+			Value:       string(ActionWorkspace),
+			Label:       catalog.Msg("项目目录（Workspace）", "Workspace (project directory)"),
+			Badge:       catalog.Msg("项目", "WS"),
+			Description: catalog.Msg("基于当前目录查看并写入项目级规则文件，同时汇总目标工具的全局 MCP/Skills 状态。", "Inspect and write project-level rule files for the current directory, and summarize global MCP/Skills for the selected target."),
 		},
 		{
 			Value:       string(ActionMCP),
