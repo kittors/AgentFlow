@@ -13,6 +13,18 @@ import (
 
 type InteractiveCallbacks struct {
 	Status                 func() Panel
+	MCPTargetOptions       func() []Option
+	MCPInstallOptions      func() []Option
+	MCPRemoveOptions       func(target string) []Option
+	MCPList                func(target string) Panel
+	MCPInstall             func(target, server string) Panel
+	MCPRemove              func(target, server string) Panel
+	SkillTargetOptions     func() []Option
+	SkillInstallOptions    func() []Option
+	SkillUninstallOptions  func(target string) []Option
+	SkillList              func(target string) Panel
+	SkillInstall           func(target, source string) Panel
+	SkillUninstall         func(target, name string) Panel
 	BootstrapOptions       func() []Option
 	BootstrapAutoSupported func(target string) bool
 	BootstrapDetails       func(target string) Panel
@@ -33,6 +45,14 @@ type flowScreen int
 const (
 	flowScreenMain flowScreen = iota
 	flowScreenInstallHub
+	flowScreenMCPTargets
+	flowScreenMCPActions
+	flowScreenMCPInstall
+	flowScreenMCPRemove
+	flowScreenSkillTargets
+	flowScreenSkillActions
+	flowScreenSkillInstall
+	flowScreenSkillUninstall
 	flowScreenBootstrapTargets
 	flowScreenBootstrapActions
 	flowScreenProfile
@@ -44,6 +64,12 @@ type flowAction int
 
 const (
 	flowActionRefreshStatus flowAction = iota
+	flowActionMCPList
+	flowActionMCPInstall
+	flowActionMCPRemove
+	flowActionSkillList
+	flowActionSkillInstall
+	flowActionSkillUninstall
 	flowActionUpdate
 	flowActionClean
 	flowActionBootstrapAuto
@@ -76,6 +102,14 @@ type interactiveFlowModel struct {
 
 	mainOptions            []Option
 	installHubOptions      []Option
+	mcpTargets             []Option
+	mcpActions             []Option
+	mcpInstallOptions      []Option
+	mcpRemoveOptions       []Option
+	skillTargets           []Option
+	skillActions           []Option
+	skillInstallOptions    []Option
+	skillUninstallOptions  []Option
 	bootstrapOptions       []Option
 	bootstrapActionOptions []Option
 	profileOptions         []Option
@@ -85,6 +119,14 @@ type interactiveFlowModel struct {
 
 	mainCursor            int
 	installHubCursor      int
+	mcpTargetCursor       int
+	mcpActionCursor       int
+	mcpInstallCursor      int
+	mcpRemoveCursor       int
+	skillTargetCursor     int
+	skillActionCursor     int
+	skillInstallCursor    int
+	skillUninstallCursor  int
 	bootstrapCursor       int
 	bootstrapActionCursor int
 	profileCursor         int
@@ -92,6 +134,10 @@ type interactiveFlowModel struct {
 	uninstallCursor       int
 
 	selectedProfile         string
+	selectedMCPTarget       string
+	selectedMCPServer       string
+	selectedSkillTarget     string
+	selectedSkillValue      string
 	selectedBootstrapTarget string
 	notice                  *Panel
 	status                  Panel
@@ -118,6 +164,18 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Label:       catalog.Msg("安装", "Install"),
 				Badge:       catalog.Msg("安装", "SETUP"),
 				Description: catalog.Msg("先安装 Codex / Claude / Gemini 等 CLI，或继续把 AgentFlow 部署到已存在的 CLI。", "Install Codex / Claude / Gemini first, or deploy AgentFlow into CLIs that already exist."),
+			},
+			{
+				Value:       string(ActionMCP),
+				Label:       catalog.Msg("管理 MCP Servers", "Manage MCP servers"),
+				Badge:       catalog.Msg("MCP", "MCP"),
+				Description: catalog.Msg("为任意 CLI 写入、查看与移除 MCP servers 配置，并置顶推荐 Context7 / Playwright / Filesystem。", "Write, inspect, and remove MCP server configs for any CLI, with pinned recommendations like Context7 / Playwright / Filesystem."),
+			},
+			{
+				Value:       string(ActionSkill),
+				Label:       catalog.Msg("管理 Skills", "Manage skills"),
+				Badge:       catalog.Msg("SKILL", "SKILL"),
+				Description: catalog.Msg("为任意 CLI 安装、查看与卸载 skills（支持从 skills.sh/GitHub 安装）。", "Install, inspect, and uninstall skills for any CLI (supports skills.sh/GitHub sources)."),
 			},
 			{
 				Value:       string(ActionUninstall),
@@ -169,6 +227,16 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Badge:       catalog.Msg("接入", "APPLY"),
 				Description: catalog.Msg("对已经存在的 CLI 写入 AgentFlow 规则、模块、技能和 hooks。", "Write AgentFlow rules, modules, skills, and hooks into CLIs that already exist."),
 			},
+		},
+		mcpActions: []Option{
+			{Value: "list", Label: catalog.Msg("查看已配置 MCP", "List configured MCP"), Badge: catalog.Msg("列表", "LIST"), Description: catalog.Msg("列出该 CLI 已配置的 MCP servers。", "List MCP servers configured for this CLI.")},
+			{Value: "install", Label: catalog.Msg("安装推荐 MCP", "Install recommended MCP"), Badge: catalog.Msg("安装", "ADD"), Description: catalog.Msg("安装置顶推荐：Context7 / Playwright / Filesystem。", "Install pinned recommendations: Context7 / Playwright / Filesystem.")},
+			{Value: "remove", Label: catalog.Msg("移除 MCP", "Remove MCP"), Badge: catalog.Msg("移除", "DEL"), Description: catalog.Msg("从该 CLI 中移除已配置的 MCP server。", "Remove an MCP server from this CLI.")},
+		},
+		skillActions: []Option{
+			{Value: "list", Label: catalog.Msg("查看已安装 Skill", "List installed skills"), Badge: catalog.Msg("列表", "LIST"), Description: catalog.Msg("列出该 CLI 已安装的 skills。", "List skills installed for this CLI.")},
+			{Value: "install", Label: catalog.Msg("安装推荐 Skill", "Install recommended skills"), Badge: catalog.Msg("安装", "ADD"), Description: catalog.Msg("安装一些常用示例 skill（也可用 CLI 安装任意 skills.sh/GitHub skill）。", "Install a few common example skills (use the CLI to install any skills.sh/GitHub skill).")},
+			{Value: "uninstall", Label: catalog.Msg("卸载 Skill", "Uninstall a skill"), Badge: catalog.Msg("移除", "DEL"), Description: catalog.Msg("从该 CLI 中卸载已安装的 skill。", "Uninstall a skill from this CLI.")},
 		},
 		bootstrapActionOptions: []Option{
 			{
@@ -234,6 +302,20 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = value.notice
 			}
 			m.refreshBootstrapDetail()
+		case flowActionMCPList, flowActionMCPInstall, flowActionMCPRemove:
+			if value.notice != nil {
+				m.notice = value.notice
+			}
+			m.screen = flowScreenMCPActions
+			m.mcpInstallOptions = nil
+			m.mcpRemoveOptions = nil
+		case flowActionSkillList, flowActionSkillInstall, flowActionSkillUninstall:
+			if value.notice != nil {
+				m.notice = value.notice
+			}
+			m.screen = flowScreenSkillActions
+			m.skillInstallOptions = nil
+			m.skillUninstallOptions = nil
 		case flowActionBootstrapAuto:
 			m.bootstrapOptions = m.bootstrapOptionsList()
 			m.installOptions = m.installOptionsList()
@@ -333,6 +415,18 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case flowScreenInstallHub:
 		m.screen = flowScreenMain
+	case flowScreenMCPTargets:
+		m.screen = flowScreenMain
+	case flowScreenMCPActions:
+		m.screen = flowScreenMCPTargets
+	case flowScreenMCPInstall, flowScreenMCPRemove:
+		m.screen = flowScreenMCPActions
+	case flowScreenSkillTargets:
+		m.screen = flowScreenMain
+	case flowScreenSkillActions:
+		m.screen = flowScreenSkillTargets
+	case flowScreenSkillInstall, flowScreenSkillUninstall:
+		m.screen = flowScreenSkillActions
 	case flowScreenBootstrapTargets:
 		m.screen = flowScreenInstallHub
 	case flowScreenBootstrapActions:
@@ -355,6 +449,48 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		switch Action(m.mainOptions[m.mainCursor].Value) {
 		case ActionInstall:
 			m.screen = flowScreenInstallHub
+			m.notice = nil
+			return m, nil
+		case ActionMCP:
+			if m.callbacks.MCPTargetOptions == nil {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("MCP", "MCP"),
+					Lines: []string{m.catalog.Msg("当前构建未启用 MCP 管理回调。", "MCP management callbacks are not enabled in this build.")},
+				})
+				return m, nil
+			}
+			m.mcpTargets = cloneOptions(m.callbacks.MCPTargetOptions())
+			if len(m.mcpTargets) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("MCP", "MCP"),
+					Lines: []string{m.catalog.Msg("未检测到可管理的目标。", "No manageable targets detected.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenMCPTargets
+			m.mcpTargetCursor = 0
+			m.selectedMCPTarget = m.mcpTargets[0].Value
+			m.notice = nil
+			return m, nil
+		case ActionSkill:
+			if m.callbacks.SkillTargetOptions == nil {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("Skills", "Skills"),
+					Lines: []string{m.catalog.Msg("当前构建未启用 Skill 管理回调。", "Skill management callbacks are not enabled in this build.")},
+				})
+				return m, nil
+			}
+			m.skillTargets = cloneOptions(m.callbacks.SkillTargetOptions())
+			if len(m.skillTargets) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("Skills", "Skills"),
+					Lines: []string{m.catalog.Msg("未检测到可管理的目标。", "No manageable targets detected.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenSkillTargets
+			m.skillTargetCursor = 0
+			m.selectedSkillTarget = m.skillTargets[0].Value
 			m.notice = nil
 			return m, nil
 		case ActionUninstall:
@@ -396,6 +532,134 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		case ActionExit:
 			return m, tea.Quit
 		}
+	case flowScreenMCPTargets:
+		if len(m.mcpTargets) == 0 {
+			return m, nil
+		}
+		m.selectedMCPTarget = m.mcpTargets[m.mcpTargetCursor].Value
+		m.screen = flowScreenMCPActions
+		m.mcpActionCursor = 0
+		m.notice = nil
+		return m, nil
+	case flowScreenMCPActions:
+		if len(m.mcpActions) == 0 {
+			return m, nil
+		}
+		switch m.mcpActions[m.mcpActionCursor].Value {
+		case "list":
+			m.selectedMCPServer = ""
+			return m.startBusy(flowActionMCPList, m.catalog.Msg("正在读取 MCP 配置…", "Reading MCP configuration..."))
+		case "install":
+			if m.callbacks.MCPInstallOptions != nil {
+				m.mcpInstallOptions = cloneOptions(m.callbacks.MCPInstallOptions())
+			} else {
+				m.mcpInstallOptions = nil
+			}
+			if len(m.mcpInstallOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("MCP", "MCP"),
+					Lines: []string{m.catalog.Msg("没有可用的推荐 MCP。", "No recommended MCP servers are available.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenMCPInstall
+			m.mcpInstallCursor = 0
+			m.notice = nil
+			return m, nil
+		case "remove":
+			if m.callbacks.MCPRemoveOptions != nil {
+				m.mcpRemoveOptions = cloneOptions(m.callbacks.MCPRemoveOptions(m.selectedMCPTarget))
+			} else {
+				m.mcpRemoveOptions = nil
+			}
+			if len(m.mcpRemoveOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("MCP", "MCP"),
+					Lines: []string{m.catalog.Msg("未配置任何 MCP servers。", "No MCP servers configured.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenMCPRemove
+			m.mcpRemoveCursor = 0
+			m.notice = nil
+			return m, nil
+		}
+	case flowScreenMCPInstall:
+		if len(m.mcpInstallOptions) == 0 {
+			return m, nil
+		}
+		m.selectedMCPServer = m.mcpInstallOptions[m.mcpInstallCursor].Value
+		return m.startBusy(flowActionMCPInstall, m.catalog.Msg("正在写入 MCP 配置…", "Writing MCP configuration..."))
+	case flowScreenMCPRemove:
+		if len(m.mcpRemoveOptions) == 0 {
+			return m, nil
+		}
+		m.selectedMCPServer = m.mcpRemoveOptions[m.mcpRemoveCursor].Value
+		return m.startBusy(flowActionMCPRemove, m.catalog.Msg("正在移除 MCP 配置…", "Removing MCP configuration..."))
+	case flowScreenSkillTargets:
+		if len(m.skillTargets) == 0 {
+			return m, nil
+		}
+		m.selectedSkillTarget = m.skillTargets[m.skillTargetCursor].Value
+		m.screen = flowScreenSkillActions
+		m.skillActionCursor = 0
+		m.notice = nil
+		return m, nil
+	case flowScreenSkillActions:
+		if len(m.skillActions) == 0 {
+			return m, nil
+		}
+		switch m.skillActions[m.skillActionCursor].Value {
+		case "list":
+			m.selectedSkillValue = ""
+			return m.startBusy(flowActionSkillList, m.catalog.Msg("正在读取已安装 skills…", "Reading installed skills..."))
+		case "install":
+			if m.callbacks.SkillInstallOptions != nil {
+				m.skillInstallOptions = cloneOptions(m.callbacks.SkillInstallOptions())
+			} else {
+				m.skillInstallOptions = nil
+			}
+			if len(m.skillInstallOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("Skills", "Skills"),
+					Lines: []string{m.catalog.Msg("没有可用的推荐 skills。", "No recommended skills are available.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenSkillInstall
+			m.skillInstallCursor = 0
+			m.notice = nil
+			return m, nil
+		case "uninstall":
+			if m.callbacks.SkillUninstallOptions != nil {
+				m.skillUninstallOptions = cloneOptions(m.callbacks.SkillUninstallOptions(m.selectedSkillTarget))
+			} else {
+				m.skillUninstallOptions = nil
+			}
+			if len(m.skillUninstallOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("Skills", "Skills"),
+					Lines: []string{m.catalog.Msg("未检测到已安装的 skill。", "No installed skills detected.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenSkillUninstall
+			m.skillUninstallCursor = 0
+			m.notice = nil
+			return m, nil
+		}
+	case flowScreenSkillInstall:
+		if len(m.skillInstallOptions) == 0 {
+			return m, nil
+		}
+		m.selectedSkillValue = m.skillInstallOptions[m.skillInstallCursor].Value
+		return m.startBusy(flowActionSkillInstall, m.catalog.Msg("正在安装 skill…", "Installing skill..."))
+	case flowScreenSkillUninstall:
+		if len(m.skillUninstallOptions) == 0 {
+			return m, nil
+		}
+		m.selectedSkillValue = m.skillUninstallOptions[m.skillUninstallCursor].Value
+		return m.startBusy(flowActionSkillUninstall, m.catalog.Msg("正在卸载 skill…", "Uninstalling skill..."))
 	case flowScreenInstallHub:
 		switch m.installHubOptions[m.installHubCursor].Value {
 		case "bootstrap-cli":
@@ -534,6 +798,80 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 			cursor = len(m.installHubOptions) - 1
 		}
 		m.installHubCursor = cursor
+	case flowScreenMCPTargets:
+		if len(m.mcpTargets) == 0 {
+			m.mcpTargetCursor = 0
+			return
+		}
+		if cursor > len(m.mcpTargets)-1 {
+			cursor = len(m.mcpTargets) - 1
+		}
+		m.mcpTargetCursor = cursor
+		m.selectedMCPTarget = m.mcpTargets[cursor].Value
+	case flowScreenMCPActions:
+		if len(m.mcpActions) == 0 {
+			m.mcpActionCursor = 0
+			return
+		}
+		if cursor > len(m.mcpActions)-1 {
+			cursor = len(m.mcpActions) - 1
+		}
+		m.mcpActionCursor = cursor
+	case flowScreenMCPInstall:
+		if len(m.mcpInstallOptions) == 0 {
+			m.mcpInstallCursor = 0
+			return
+		}
+		if cursor > len(m.mcpInstallOptions)-1 {
+			cursor = len(m.mcpInstallOptions) - 1
+		}
+		m.mcpInstallCursor = cursor
+	case flowScreenMCPRemove:
+		if len(m.mcpRemoveOptions) == 0 {
+			m.mcpRemoveCursor = 0
+			return
+		}
+		if cursor > len(m.mcpRemoveOptions)-1 {
+			cursor = len(m.mcpRemoveOptions) - 1
+		}
+		m.mcpRemoveCursor = cursor
+	case flowScreenSkillTargets:
+		if len(m.skillTargets) == 0 {
+			m.skillTargetCursor = 0
+			return
+		}
+		if cursor > len(m.skillTargets)-1 {
+			cursor = len(m.skillTargets) - 1
+		}
+		m.skillTargetCursor = cursor
+		m.selectedSkillTarget = m.skillTargets[cursor].Value
+	case flowScreenSkillActions:
+		if len(m.skillActions) == 0 {
+			m.skillActionCursor = 0
+			return
+		}
+		if cursor > len(m.skillActions)-1 {
+			cursor = len(m.skillActions) - 1
+		}
+		m.skillActionCursor = cursor
+	case flowScreenSkillInstall:
+		if len(m.skillInstallOptions) == 0 {
+			m.skillInstallCursor = 0
+			return
+		}
+		if cursor > len(m.skillInstallOptions)-1 {
+			cursor = len(m.skillInstallOptions) - 1
+		}
+		m.skillInstallCursor = cursor
+	case flowScreenSkillUninstall:
+		if len(m.skillUninstallOptions) == 0 {
+			m.skillUninstallCursor = 0
+			return
+		}
+		if cursor > len(m.skillUninstallOptions)-1 {
+			cursor = len(m.skillUninstallOptions) - 1
+		}
+		m.skillUninstallCursor = cursor
 	case flowScreenBootstrapTargets:
 		if len(m.bootstrapOptions) == 0 {
 			m.bootstrapCursor = 0
@@ -588,6 +926,22 @@ func (m interactiveFlowModel) currentCursor() int {
 	switch m.screen {
 	case flowScreenInstallHub:
 		return m.installHubCursor
+	case flowScreenMCPTargets:
+		return m.mcpTargetCursor
+	case flowScreenMCPActions:
+		return m.mcpActionCursor
+	case flowScreenMCPInstall:
+		return m.mcpInstallCursor
+	case flowScreenMCPRemove:
+		return m.mcpRemoveCursor
+	case flowScreenSkillTargets:
+		return m.skillTargetCursor
+	case flowScreenSkillActions:
+		return m.skillActionCursor
+	case flowScreenSkillInstall:
+		return m.skillInstallCursor
+	case flowScreenSkillUninstall:
+		return m.skillUninstallCursor
 	case flowScreenBootstrapTargets:
 		return m.bootstrapCursor
 	case flowScreenBootstrapActions:
@@ -607,6 +961,22 @@ func (m interactiveFlowModel) currentOptionsLen() int {
 	switch m.screen {
 	case flowScreenInstallHub:
 		return len(m.installHubOptions)
+	case flowScreenMCPTargets:
+		return len(m.mcpTargets)
+	case flowScreenMCPActions:
+		return len(m.mcpActions)
+	case flowScreenMCPInstall:
+		return len(m.mcpInstallOptions)
+	case flowScreenMCPRemove:
+		return len(m.mcpRemoveOptions)
+	case flowScreenSkillTargets:
+		return len(m.skillTargets)
+	case flowScreenSkillActions:
+		return len(m.skillActions)
+	case flowScreenSkillInstall:
+		return len(m.skillInstallOptions)
+	case flowScreenSkillUninstall:
+		return len(m.skillUninstallOptions)
 	case flowScreenBootstrapTargets:
 		return len(m.bootstrapOptions)
 	case flowScreenBootstrapActions:
@@ -644,12 +1014,76 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 	selectedInstallTargets := selectedValues(m.installOptions)
 	selectedUninstallTargets := selectedValues(m.uninstallOptions)
 	selectedBootstrapTarget := m.selectedBootstrapTarget
+	selectedMCPTarget := m.selectedMCPTarget
+	selectedMCPServer := m.selectedMCPServer
+	selectedSkillTarget := m.selectedSkillTarget
+	selectedSkillValue := m.selectedSkillValue
 
 	return func() tea.Msg {
 		switch action {
 		case flowActionRefreshStatus:
 			return flowResultMsg{
 				action: action,
+				status: m.callbacks.Status(),
+			}
+		case flowActionMCPList:
+			notice := Panel{}
+			if m.callbacks.MCPList != nil {
+				notice = m.callbacks.MCPList(selectedMCPTarget)
+			}
+			return flowResultMsg{
+				action: action,
+				notice: panelRef(notice),
+				status: m.callbacks.Status(),
+			}
+		case flowActionMCPInstall:
+			notice := Panel{}
+			if m.callbacks.MCPInstall != nil {
+				notice = m.callbacks.MCPInstall(selectedMCPTarget, selectedMCPServer)
+			}
+			return flowResultMsg{
+				action: action,
+				notice: panelRef(notice),
+				status: m.callbacks.Status(),
+			}
+		case flowActionMCPRemove:
+			notice := Panel{}
+			if m.callbacks.MCPRemove != nil {
+				notice = m.callbacks.MCPRemove(selectedMCPTarget, selectedMCPServer)
+			}
+			return flowResultMsg{
+				action: action,
+				notice: panelRef(notice),
+				status: m.callbacks.Status(),
+			}
+		case flowActionSkillList:
+			notice := Panel{}
+			if m.callbacks.SkillList != nil {
+				notice = m.callbacks.SkillList(selectedSkillTarget)
+			}
+			return flowResultMsg{
+				action: action,
+				notice: panelRef(notice),
+				status: m.callbacks.Status(),
+			}
+		case flowActionSkillInstall:
+			notice := Panel{}
+			if m.callbacks.SkillInstall != nil {
+				notice = m.callbacks.SkillInstall(selectedSkillTarget, selectedSkillValue)
+			}
+			return flowResultMsg{
+				action: action,
+				notice: panelRef(notice),
+				status: m.callbacks.Status(),
+			}
+		case flowActionSkillUninstall:
+			notice := Panel{}
+			if m.callbacks.SkillUninstall != nil {
+				notice = m.callbacks.SkillUninstall(selectedSkillTarget, selectedSkillValue)
+			}
+			return flowResultMsg{
+				action: action,
+				notice: panelRef(notice),
 				status: m.callbacks.Status(),
 			}
 		case flowActionUpdate:
@@ -730,6 +1164,54 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.options = cloneOptions(m.installHubOptions)
 		model.cursor = m.installHubCursor
 		model.panels = m.installHubPanels()
+	case flowScreenMCPTargets:
+		model.subtitle = m.catalog.Msg("选择要管理 MCP 的目标 CLI。Esc 返回主菜单。", "Choose which CLI target to manage MCP for. Press Esc to return.")
+		model.hint = m.catalog.Msg("↑/↓ 切换目标，Enter 继续，Esc 返回。", "Use ↑/↓ to switch targets, Enter to continue, Esc to go back.")
+		model.options = cloneOptions(m.mcpTargets)
+		model.cursor = m.mcpTargetCursor
+		model.panels = m.mcpTargetPanels()
+	case flowScreenMCPActions:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("MCP 管理目标: %s。Esc 返回目标列表。", "MCP target: %s. Press Esc to go back."), m.selectedMCPTarget)
+		model.hint = m.catalog.Msg("↑/↓ 选择操作，Enter 执行，Esc 返回。", "Use ↑/↓ to choose an action, Enter to run, Esc to go back.")
+		model.options = cloneOptions(m.mcpActions)
+		model.cursor = m.mcpActionCursor
+		model.panels = m.mcpActionPanels()
+	case flowScreenMCPInstall:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("为 %s 安装推荐 MCP。Esc 返回操作列表。", "Install recommended MCP for %s. Press Esc to go back."), m.selectedMCPTarget)
+		model.hint = m.catalog.Msg("↑/↓ 选择 MCP，Enter 安装，Esc 返回。", "Use ↑/↓ to choose an MCP server, Enter to install, Esc to go back.")
+		model.options = cloneOptions(m.mcpInstallOptions)
+		model.cursor = m.mcpInstallCursor
+		model.panels = m.mcpInstallPanels()
+	case flowScreenMCPRemove:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("从 %s 移除 MCP。Esc 返回操作列表。", "Remove MCP from %s. Press Esc to go back."), m.selectedMCPTarget)
+		model.hint = m.catalog.Msg("↑/↓ 选择 MCP，Enter 移除，Esc 返回。", "Use ↑/↓ to choose an MCP server, Enter to remove, Esc to go back.")
+		model.options = cloneOptions(m.mcpRemoveOptions)
+		model.cursor = m.mcpRemoveCursor
+		model.panels = m.mcpRemovePanels()
+	case flowScreenSkillTargets:
+		model.subtitle = m.catalog.Msg("选择要管理 Skill 的目标 CLI。Esc 返回主菜单。", "Choose which CLI target to manage skills for. Press Esc to return.")
+		model.hint = m.catalog.Msg("↑/↓ 切换目标，Enter 继续，Esc 返回。", "Use ↑/↓ to switch targets, Enter to continue, Esc to go back.")
+		model.options = cloneOptions(m.skillTargets)
+		model.cursor = m.skillTargetCursor
+		model.panels = m.skillTargetPanels()
+	case flowScreenSkillActions:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("Skill 管理目标: %s。Esc 返回目标列表。", "Skill target: %s. Press Esc to go back."), m.selectedSkillTarget)
+		model.hint = m.catalog.Msg("↑/↓ 选择操作，Enter 执行，Esc 返回。", "Use ↑/↓ to choose an action, Enter to run, Esc to go back.")
+		model.options = cloneOptions(m.skillActions)
+		model.cursor = m.skillActionCursor
+		model.panels = m.skillActionPanels()
+	case flowScreenSkillInstall:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("为 %s 安装推荐 Skill。Esc 返回操作列表。", "Install recommended skills for %s. Press Esc to go back."), m.selectedSkillTarget)
+		model.hint = m.catalog.Msg("↑/↓ 选择 skill，Enter 安装，Esc 返回。", "Use ↑/↓ to choose a skill, Enter to install, Esc to go back.")
+		model.options = cloneOptions(m.skillInstallOptions)
+		model.cursor = m.skillInstallCursor
+		model.panels = m.skillInstallPanels()
+	case flowScreenSkillUninstall:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("从 %s 卸载 Skill。Esc 返回操作列表。", "Uninstall a skill from %s. Press Esc to go back."), m.selectedSkillTarget)
+		model.hint = m.catalog.Msg("↑/↓ 选择 skill，Enter 卸载，Esc 返回。", "Use ↑/↓ to choose a skill, Enter to uninstall, Esc to go back.")
+		model.options = cloneOptions(m.skillUninstallOptions)
+		model.cursor = m.skillUninstallCursor
+		model.panels = m.skillUninstallPanels()
 	case flowScreenBootstrapTargets:
 		model.subtitle = m.catalog.Msg("选择要安装的 CLI 工具。Esc 返回安装中心。", "Choose which CLI tool to install. Press Esc to return to the install hub.")
 		model.hint = m.catalog.Msg("↑/↓ 切换 CLI，Enter 选择安装方式，Esc 返回。", "Use ↑/↓ to switch CLIs, Enter to choose the install mode, Esc to go back.")
@@ -805,6 +1287,126 @@ func (m interactiveFlowModel) installHubPanels() []Panel {
 		},
 	})
 	panels = append(panels, m.status)
+	return panels
+}
+
+func (m interactiveFlowModel) mcpTargetPanels() []Panel {
+	panels := make([]Panel, 0, 3)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("MCP 提示", "MCP note"),
+		Lines: []string{
+			m.catalog.Msg("AgentFlow 会把 MCP servers 配置写入目标 CLI 的配置目录。", "AgentFlow writes MCP server configs into the target CLI config directory."),
+			m.catalog.Msg("置顶推荐：Context7（依赖/API 文档）、Playwright（浏览器自动化）、Filesystem（文件操作）。", "Pinned: Context7 (docs), Playwright (browser), Filesystem (files)."),
+		},
+	})
+	panels = append(panels, m.status)
+	return panels
+}
+
+func (m interactiveFlowModel) mcpActionPanels() []Panel {
+	panels := make([]Panel, 0, 2)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("MCP 管理", "MCP management"),
+		Lines: []string{
+			fmt.Sprintf(m.catalog.Msg("目标: %s", "Target: %s"), m.selectedMCPTarget),
+			m.catalog.Msg("提示：Context7 如需更高额度可设置 CONTEXT7_API_KEY（可用 CLI 命令添加 env）。", "Tip: For higher Context7 rate limits, set CONTEXT7_API_KEY (use the CLI command to add env)."),
+		},
+	})
+	return panels
+}
+
+func (m interactiveFlowModel) mcpInstallPanels() []Panel {
+	panels := make([]Panel, 0, 2)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("安装说明", "Install guide"),
+		Lines: []string{
+			m.catalog.Msg("选择一个推荐 MCP server 并按 Enter 写入配置。", "Select a recommended MCP server and press Enter to write the config."),
+			m.catalog.Msg("Filesystem 默认会把当前工作目录加入 allowlist。", "Filesystem will add the current working directory to its allowlist by default."),
+		},
+	})
+	return panels
+}
+
+func (m interactiveFlowModel) mcpRemovePanels() []Panel {
+	panels := make([]Panel, 0, 2)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("移除说明", "Remove guide"),
+		Lines: []string{
+			m.catalog.Msg("选择要移除的 MCP server 并按 Enter。", "Select the MCP server to remove and press Enter."),
+		},
+	})
+	return panels
+}
+
+func (m interactiveFlowModel) skillTargetPanels() []Panel {
+	panels := make([]Panel, 0, 3)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("Skill 提示", "Skill note"),
+		Lines: []string{
+			m.catalog.Msg("AgentFlow 会把 skill 安装到目标 CLI 的 skills 目录下。", "AgentFlow installs skills into the target CLI skills directory."),
+			m.catalog.Msg("推荐从 skills.sh/GitHub 安装；复杂场景可用 CLI 命令指定 --skill / --ref。", "Use skills.sh/GitHub sources; advanced installs can specify --skill / --ref via CLI."),
+		},
+	})
+	panels = append(panels, m.status)
+	return panels
+}
+
+func (m interactiveFlowModel) skillActionPanels() []Panel {
+	panels := make([]Panel, 0, 2)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("Skill 管理", "Skill management"),
+		Lines: []string{
+			fmt.Sprintf(m.catalog.Msg("目标: %s", "Target: %s"), m.selectedSkillTarget),
+			m.catalog.Msg("提示：要安装任意 skill，可用 `agentflow skill install <target> <skills.sh URL>`。", "Tip: To install any skill, use `agentflow skill install <target> <skills.sh URL>`."),
+		},
+	})
+	return panels
+}
+
+func (m interactiveFlowModel) skillInstallPanels() []Panel {
+	panels := make([]Panel, 0, 2)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("安装说明", "Install guide"),
+		Lines: []string{
+			m.catalog.Msg("选择一个推荐 skill 并按 Enter 安装。", "Select a recommended skill and press Enter to install."),
+			m.catalog.Msg("如需安装其他 skill，请在终端使用 `agentflow skill install`。", "To install other skills, use `agentflow skill install` in the terminal."),
+		},
+	})
+	return panels
+}
+
+func (m interactiveFlowModel) skillUninstallPanels() []Panel {
+	panels := make([]Panel, 0, 2)
+	if m.notice != nil {
+		panels = append(panels, *m.notice)
+	}
+	panels = append(panels, Panel{
+		Title: m.catalog.Msg("卸载说明", "Uninstall guide"),
+		Lines: []string{
+			m.catalog.Msg("选择要卸载的 skill 并按 Enter。", "Select the skill to uninstall and press Enter."),
+		},
+	})
 	return panels
 }
 
@@ -904,6 +1506,10 @@ func (m interactiveFlowModel) busyPanel() Panel {
 
 func (m interactiveFlowModel) busyMessage() string {
 	switch {
+	case m.screen == flowScreenMCPActions || m.screen == flowScreenMCPInstall || m.screen == flowScreenMCPRemove:
+		return m.catalog.Msg("正在更新 MCP 配置…", "Updating MCP configuration...")
+	case m.screen == flowScreenSkillActions || m.screen == flowScreenSkillInstall || m.screen == flowScreenSkillUninstall:
+		return m.catalog.Msg("正在更新 skills…", "Updating skills...")
 	case m.screen == flowScreenBootstrapActions:
 		return m.catalog.Msg("正在安装所选 CLI…", "Installing the selected CLI...")
 	case m.screen == flowScreenInstallTargets:

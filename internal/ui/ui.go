@@ -17,6 +17,8 @@ type Action string
 
 const (
 	ActionInstall      Action = "install"
+	ActionMCP          Action = "mcp"
+	ActionSkill        Action = "skill"
 	ActionUninstall    Action = "uninstall"
 	ActionUninstallCLI Action = "uninstall-cli"
 	ActionUpdate       Action = "update"
@@ -122,6 +124,18 @@ func RunMainMenu(catalog i18n.Catalog, version string, panels []Panel, output io
 			Label:       catalog.Msg("安装到 CLI", "Install to CLI targets"),
 			Badge:       catalog.Msg("安装", "SETUP"),
 			Description: catalog.Msg("把 AgentFlow 规则、模块、技能和 hooks 部署到 Codex、Claude、Gemini 等 CLI。", "Deploy AgentFlow rules, modules, skills, and hooks into Codex, Claude, Gemini, and other CLIs."),
+		},
+		{
+			Value:       string(ActionMCP),
+			Label:       catalog.Msg("管理 MCP Servers", "Manage MCP servers"),
+			Badge:       "MCP",
+			Description: catalog.Msg("为目标 CLI 写入、查看与移除 MCP servers 配置（置顶推荐 Context7 / Playwright / Filesystem）。", "Write, inspect, and remove MCP server configs for a target CLI (pinned Context7 / Playwright / Filesystem)."),
+		},
+		{
+			Value:       string(ActionSkill),
+			Label:       catalog.Msg("管理 Skills", "Manage skills"),
+			Badge:       "SKILL",
+			Description: catalog.Msg("为目标 CLI 安装、查看与卸载 skills（支持 skills.sh/GitHub）。", "Install, inspect, and uninstall skills for a target CLI (skills.sh/GitHub)."),
 		},
 		{
 			Value:       string(ActionUninstall),

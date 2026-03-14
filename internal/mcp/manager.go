@@ -38,91 +38,77 @@ func NewManager() *Manager {
 }
 
 func (m *Manager) Install(target targets.Target, server string, options InstallOptions) error {
-	if target.Name != "claude" {
-		return fmt.Errorf("target does not support MCP config yet: %s", target.Name)
-	}
-
 	spec, err := ResolveBuiltin(server, options)
 	if err != nil {
 		return err
 	}
 
-	settingsPath := filepath.Join(m.HomeDir, target.Dir, "settings.json")
-	settings, err := readJSONMap(settingsPath)
+	managedPath := filepath.Join(m.HomeDir, target.Dir, "mcp.json")
+	managed, err := readManagedMCP(managedPath)
 	if err != nil {
 		return err
 	}
+	managed[spec.Name] = spec.Config
+	if err := writeManagedMCP(managedPath, managed); err != nil {
+		return err
+	}
 
-	mcpServers := map[string]any{}
-	if existing, ok := settings["mcpServers"]; ok {
-		mapped, ok := existing.(map[string]any)
-		if !ok {
-			return errors.New("settings.json: mcpServers must be an object")
+	if target.Name == "claude" {
+		if err := m.installIntoClaudeSettings(spec); err != nil {
+			return err
 		}
-		mcpServers = mapped
 	}
-
-	mcpServers[spec.Name] = spec.Config
-	settings["mcpServers"] = mcpServers
-
-	payload, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return err
-	}
-	return config.SafeWrite(settingsPath, payload, 0o644)
+	return nil
 }
 
 func (m *Manager) Remove(target targets.Target, server string) error {
-	if target.Name != "claude" {
-		return fmt.Errorf("target does not support MCP config yet: %s", target.Name)
+	server = strings.TrimSpace(server)
+	if server == "" {
+		return errors.New("missing server name")
 	}
-	settingsPath := filepath.Join(m.HomeDir, target.Dir, "settings.json")
-	settings, err := readJSONMap(settingsPath)
+
+	managedPath := filepath.Join(m.HomeDir, target.Dir, "mcp.json")
+	managed, err := readManagedMCP(managedPath)
 	if err != nil {
 		return err
 	}
-
-	existing, ok := settings["mcpServers"]
-	if !ok {
-		return nil
-	}
-	mcpServers, ok := existing.(map[string]any)
-	if !ok {
-		return errors.New("settings.json: mcpServers must be an object")
-	}
-	delete(mcpServers, server)
-	settings["mcpServers"] = mcpServers
-
-	payload, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
+	delete(managed, server)
+	if err := writeManagedMCP(managedPath, managed); err != nil {
 		return err
 	}
-	return config.SafeWrite(settingsPath, payload, 0o644)
+
+	if target.Name == "claude" {
+		if err := m.removeFromClaudeSettings(server); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *Manager) List(target targets.Target) ([]string, error) {
-	if target.Name != "claude" {
-		return nil, fmt.Errorf("target does not support MCP config yet: %s", target.Name)
-	}
-	settingsPath := filepath.Join(m.HomeDir, target.Dir, "settings.json")
-	settings, err := readJSONMap(settingsPath)
+	managedPath := filepath.Join(m.HomeDir, target.Dir, "mcp.json")
+	managed, err := readManagedMCP(managedPath)
 	if err != nil {
 		return nil, err
 	}
 
-	existing, ok := settings["mcpServers"]
-	if !ok {
-		return []string{}, nil
-	}
-	mcpServers, ok := existing.(map[string]any)
-	if !ok {
-		return nil, errors.New("settings.json: mcpServers must be an object")
-	}
-
-	names := make([]string, 0, len(mcpServers))
-	for key := range mcpServers {
+	names := make([]string, 0, len(managed))
+	for key := range managed {
 		names = append(names, key)
 	}
+
+	if target.Name == "claude" {
+		claudeServers, err := m.listClaudeSettings()
+		if err == nil {
+			for key := range claudeServers {
+				if _, ok := managed[key]; ok {
+					continue
+				}
+				names = append(names, key)
+			}
+		}
+	}
+
 	sort.Strings(names)
 	return names, nil
 }
@@ -174,4 +160,102 @@ func readJSONMap(path string) (map[string]any, error) {
 		payload = map[string]any{}
 	}
 	return payload, nil
+}
+
+func readManagedMCP(path string) (map[string]any, error) {
+	payload, err := readJSONMap(path)
+	if err != nil {
+		return nil, err
+	}
+	mcpServers := map[string]any{}
+	if raw, ok := payload["mcpServers"]; ok {
+		mapped, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%s: mcpServers must be an object", filepath.Base(path))
+		}
+		mcpServers = mapped
+	}
+	return mcpServers, nil
+}
+
+func writeManagedMCP(path string, servers map[string]any) error {
+	payload := map[string]any{
+		"mcpServers": servers,
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return config.SafeWrite(path, data, 0o644)
+}
+
+func (m *Manager) installIntoClaudeSettings(spec BuiltinSpec) error {
+	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
+	settings, err := readJSONMap(settingsPath)
+	if err != nil {
+		return err
+	}
+
+	mcpServers := map[string]any{}
+	if existing, ok := settings["mcpServers"]; ok {
+		mapped, ok := existing.(map[string]any)
+		if !ok {
+			return errors.New("settings.json: mcpServers must be an object")
+		}
+		mcpServers = mapped
+	}
+
+	mcpServers[spec.Name] = spec.Config
+	settings["mcpServers"] = mcpServers
+
+	payload, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	payload = append(payload, '\n')
+	return config.SafeWrite(settingsPath, payload, 0o644)
+}
+
+func (m *Manager) removeFromClaudeSettings(name string) error {
+	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
+	settings, err := readJSONMap(settingsPath)
+	if err != nil {
+		return err
+	}
+
+	existing, ok := settings["mcpServers"]
+	if !ok {
+		return nil
+	}
+	mcpServers, ok := existing.(map[string]any)
+	if !ok {
+		return errors.New("settings.json: mcpServers must be an object")
+	}
+	delete(mcpServers, name)
+	settings["mcpServers"] = mcpServers
+
+	payload, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	payload = append(payload, '\n')
+	return config.SafeWrite(settingsPath, payload, 0o644)
+}
+
+func (m *Manager) listClaudeSettings() (map[string]any, error) {
+	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
+	settings, err := readJSONMap(settingsPath)
+	if err != nil {
+		return nil, err
+	}
+	existing, ok := settings["mcpServers"]
+	if !ok {
+		return map[string]any{}, nil
+	}
+	mcpServers, ok := existing.(map[string]any)
+	if !ok {
+		return nil, errors.New("settings.json: mcpServers must be an object")
+	}
+	return mcpServers, nil
 }

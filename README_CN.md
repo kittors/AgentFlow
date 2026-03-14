@@ -127,6 +127,7 @@ agentflow mcp search playwright
 
 - Skills 索引（Vercel）：https://vercel.com/docs/agent-resources/skills
 - MCP 置顶推荐（最实用）：`context7`、`playwright`、`filesystem`
+- MCP 配置路径：`~/<target 配置目录>/mcp.json`（Claude 会尽量同步写入 `~/.claude/settings.json`）
 
 ## 支持的目标 CLI
 

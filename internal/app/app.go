@@ -99,6 +99,18 @@ func (a *App) runInteractiveMainMenu() int {
 
 	if err := ui.RunInteractiveFlow(a.Catalog, a.Version, ui.InteractiveCallbacks{
 		Status:                 a.statusPanel,
+		MCPTargetOptions:       a.mcpTargetOptions,
+		MCPInstallOptions:      a.mcpInstallOptions,
+		MCPRemoveOptions:       a.mcpRemoveOptions,
+		MCPList:                a.mcpListPanel,
+		MCPInstall:             a.mcpInstallPanel,
+		MCPRemove:              a.mcpRemovePanel,
+		SkillTargetOptions:     a.skillTargetOptions,
+		SkillInstallOptions:    a.skillInstallOptions,
+		SkillUninstallOptions:  a.skillUninstallOptions,
+		SkillList:              a.skillListPanel,
+		SkillInstall:           a.skillInstallPanel,
+		SkillUninstall:         a.skillUninstallPanel,
 		BootstrapOptions:       a.bootstrapTargetOptions,
 		BootstrapAutoSupported: a.bootstrapAutoSupported,
 		BootstrapDetails:       a.bootstrapTargetPanel,

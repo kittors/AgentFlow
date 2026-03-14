@@ -126,6 +126,7 @@ When no command is provided and stdin is a TTY, AgentFlow opens the Bubble Tea b
 
 - Skills directory: https://vercel.com/docs/agent-resources/skills
 - Recommended MCP servers (pinned): `context7`, `playwright`, `filesystem`
+- MCP config path: `~/<target-config-dir>/mcp.json` (for Claude, AgentFlow also syncs `~/.claude/settings.json` when possible)
 
 ## Supported Targets
 

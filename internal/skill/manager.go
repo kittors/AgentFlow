@@ -181,8 +181,5 @@ func (m *Manager) Install(target targets.Target, source string, options InstallO
 }
 
 func (m *Manager) skillsDir(target targets.Target) (string, error) {
-	if target.Name != "codex" {
-		return "", fmt.Errorf("target does not support skills yet: %s", target.Name)
-	}
 	return filepath.Join(m.HomeDir, target.Dir, "skills"), nil
 }
