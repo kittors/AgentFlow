@@ -161,7 +161,11 @@ claude mcp list
 claude mcp remove <server-name>
 ```
 
-**配置文件位置：** `~/.claude/` 目录下
+**配置文件位置（常见）：**
+
+- `~/.claude/settings.json`
+- `~/.claude/mcp.json`
+- `~/.claude.json`（部分版本会把 `mcpServers` 放在该文件顶层）
 
 也可以编辑 JSON 配置文件手动配置：
 
