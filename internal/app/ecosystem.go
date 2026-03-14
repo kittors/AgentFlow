@@ -2,18 +2,24 @@ package app
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/kittors/AgentFlow/internal/mcp"
+	"github.com/kittors/AgentFlow/internal/projectrules"
 	"github.com/kittors/AgentFlow/internal/skill"
 	"github.com/kittors/AgentFlow/internal/targets"
 	"github.com/kittors/AgentFlow/internal/ui"
 )
+
+var skillSourceDescriptionCache sync.Map
 
 func (a *App) mcpTargetOptions() []ui.Option {
 	homeDir, _ := os.UserHomeDir()
@@ -54,6 +60,10 @@ func (a *App) mcpRemoveOptions(targetName string) []ui.Option {
 	if !ok {
 		return nil
 	}
+	descByName := map[string]string{}
+	for _, spec := range mcp.BuiltinServers() {
+		descByName[strings.ToLower(spec.Name)] = strings.TrimSpace(spec.Description)
+	}
 	manager := mcp.NewManager()
 	names, err := manager.List(target)
 	if err != nil {
@@ -61,11 +71,17 @@ func (a *App) mcpRemoveOptions(targetName string) []ui.Option {
 	}
 	options := make([]ui.Option, 0, len(names))
 	for _, name := range names {
+		desc := descByName[strings.ToLower(strings.TrimSpace(name))]
+		if desc == "" {
+			desc = a.Catalog.Msg("移除该 MCP server 配置。", "Remove this MCP server configuration.")
+		} else {
+			desc = desc + " " + a.Catalog.Msg("（Enter 移除）", "(Enter removes)")
+		}
 		options = append(options, ui.Option{
 			Value:       name,
 			Label:       name,
 			Badge:       "DEL",
-			Description: a.Catalog.Msg("移除该 MCP server 配置。", "Remove this MCP server configuration."),
+			Description: desc,
 		})
 	}
 	return options
@@ -170,54 +186,75 @@ func (a *App) mcpRemovePanel(targetName, server string) ui.Panel {
 
 func (a *App) skillTargetOptions() []ui.Option {
 	homeDir, _ := os.UserHomeDir()
-	names := targets.SortedTargetNames()
+	names := projectrules.SortedNames()
 	options := make([]ui.Option, 0, len(names))
 	for _, name := range names {
-		target, _ := targets.Lookup(name)
+		target, _ := projectrules.Lookup(name)
+		badge := strings.ToUpper(target.Kind)
+		desc := []string{a.Catalog.Msg("项目级：可写入规则文件。", "Project: rule files supported.")}
+		if target.Kind == projectrules.KindCLI {
+			if cliTarget, ok := targets.Lookup(target.Name); ok {
+				desc = append(desc, fmt.Sprintf(a.Catalog.Msg("全局 skills 目录: %s", "Global skills dir: %s"), filepath.ToSlash(filepath.Join(homeDir, cliTarget.Dir, "skills"))))
+			} else {
+				desc = append(desc, a.Catalog.Msg("全局：该目标不支持 Skills。", "Global: skills not supported for this target."))
+			}
+		} else {
+			desc = append(desc, a.Catalog.Msg("全局：通常不支持 Skills。", "Global: skills are usually not supported."))
+		}
 		options = append(options, ui.Option{
 			Value:       target.Name,
 			Label:       target.DisplayName,
-			Badge:       strings.ToUpper(target.Name),
-			Description: fmt.Sprintf(a.Catalog.Msg("skills 目录: %s", "skills dir: %s"), filepath.ToSlash(filepath.Join(homeDir, target.Dir, "skills"))),
+			Badge:       badge,
+			Description: strings.Join(desc, " · "),
 		})
 	}
 	return options
 }
 
-func (a *App) skillInstallOptions() []ui.Option {
+func (a *App) skillGlobalSupported(targetName string) bool {
+	_, ok := targets.Lookup(targetName)
+	return ok
+}
+
+func (a *App) skillInstallOptions(targetName string) []ui.Option {
+	if !a.skillGlobalSupported(targetName) {
+		return nil
+	}
+
 	recommended := []struct {
 		Name  string
 		URL   string
-		Desc  string
 		Badge string
 	}{
 		{
 			Name:  "turborepo",
 			URL:   "https://skills.sh/vercel/turborepo/turborepo",
-			Desc:  a.Catalog.Msg("Turborepo 使用与最佳实践。", "Turborepo usage and best practices."),
 			Badge: "PIN",
 		},
 		{
 			Name:  "next-upgrade",
 			URL:   "https://skills.sh/vercel-labs/next-skills/next-upgrade",
-			Desc:  a.Catalog.Msg("升级 Next.js 的迁移指南与 codemods。", "Upgrade Next.js with migration guides and codemods."),
 			Badge: "PIN",
 		},
 		{
 			Name:  "cra-to-next-migration",
 			URL:   "https://skills.sh/vercel-labs/migration-skills/cra-to-next-migration",
-			Desc:  a.Catalog.Msg("Create React App 迁移到 Next.js 的完整指南。", "Comprehensive CRA → Next.js migration guide."),
 			Badge: "PIN",
 		},
 	}
 
 	options := make([]ui.Option, 0, len(recommended))
+	client := &http.Client{Timeout: 25 * time.Second}
 	for _, item := range recommended {
+		desc := a.skillDescriptionFromSource(client, item.URL)
+		if strings.TrimSpace(desc) == "" {
+			desc = a.Catalog.Msg("（未找到 SKILL.md description）", "(SKILL.md description not found)")
+		}
 		options = append(options, ui.Option{
 			Value:       item.URL,
 			Label:       item.Name,
 			Badge:       item.Badge,
-			Description: item.Desc,
+			Description: desc,
 		})
 	}
 	return options
@@ -236,11 +273,15 @@ func (a *App) skillUninstallOptions(targetName string) []ui.Option {
 	sort.Strings(names)
 	options := make([]ui.Option, 0, len(names))
 	for _, name := range names {
+		desc := a.skillDescriptionFromInstalled(target, name)
+		if strings.TrimSpace(desc) == "" {
+			desc = a.Catalog.Msg("卸载该 skill。", "Uninstall this skill.")
+		}
 		options = append(options, ui.Option{
 			Value:       name,
 			Label:       name,
 			Badge:       "DEL",
-			Description: a.Catalog.Msg("卸载该 skill。", "Uninstall this skill."),
+			Description: desc,
 		})
 	}
 	return options
@@ -251,7 +292,7 @@ func (a *App) skillListPanel(targetName string) ui.Panel {
 	if !ok {
 		return ui.Panel{
 			Title: a.Catalog.Msg("Skills", "Skills"),
-			Lines: []string{a.Catalog.Msg("未知目标。", "Unknown target.")},
+			Lines: []string{a.Catalog.Msg("该目标不支持全局 Skill。", "This target does not support global skills.")},
 		}
 	}
 	dotReady := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("●")
@@ -291,7 +332,7 @@ func (a *App) skillInstallPanel(targetName, source string) ui.Panel {
 	if !ok {
 		return ui.Panel{
 			Title: a.Catalog.Msg("Skill 安装", "Skill install"),
-			Lines: []string{a.Catalog.Msg("未知目标。", "Unknown target.")},
+			Lines: []string{a.Catalog.Msg("该目标不支持全局 Skill。", "This target does not support global skills.")},
 		}
 	}
 	manager := skill.NewManager()
@@ -313,7 +354,7 @@ func (a *App) skillUninstallPanel(targetName, name string) ui.Panel {
 	if !ok {
 		return ui.Panel{
 			Title: a.Catalog.Msg("Skill 卸载", "Skill uninstall"),
-			Lines: []string{a.Catalog.Msg("未知目标。", "Unknown target.")},
+			Lines: []string{a.Catalog.Msg("该目标不支持全局 Skill。", "This target does not support global skills.")},
 		}
 	}
 	manager := skill.NewManager()
@@ -327,4 +368,77 @@ func (a *App) skillUninstallPanel(targetName, name string) ui.Panel {
 			fmt.Sprintf(a.Catalog.Msg("已卸载: %s", "Uninstalled: %s"), name),
 		},
 	}
+}
+
+func (a *App) skillDescriptionFromInstalled(target targets.Target, name string) string {
+	homeDir, _ := os.UserHomeDir()
+	path := filepath.Join(homeDir, target.Dir, "skills", name, "SKILL.md")
+	desc, _ := skill.ParseSkillDescription(path)
+	return strings.TrimSpace(desc)
+}
+
+func (a *App) skillDescriptionFromSource(client *http.Client, source string) string {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return ""
+	}
+	if cached, ok := skillSourceDescriptionCache.Load(source); ok {
+		if value, ok := cached.(string); ok {
+			return value
+		}
+	}
+
+	repo := source
+	skillHint := ""
+	if strings.HasPrefix(repo, "https://skills.sh/") || repo == "https://skills.sh" {
+		resolvedRepo, resolvedSkill, err := skill.ResolveSkillsDotSh(client, repo, "agentflow-go")
+		if err != nil {
+			return ""
+		}
+		repo = resolvedRepo
+		skillHint = resolvedSkill
+	}
+
+	owner, name, err := skill.ParseGitHubRepo(repo)
+	if err != nil {
+		return ""
+	}
+	ref, err := skill.ResolveDefaultBranch(client, owner, name, "agentflow-go")
+	if err != nil {
+		return ""
+	}
+
+	cacheDir, err := os.MkdirTemp("", "agentflow-skill-meta-cache-*")
+	if err != nil {
+		return ""
+	}
+	defer os.RemoveAll(cacheDir)
+
+	zipPath, err := skill.DownloadGitHubZip(client, cacheDir, owner, name, ref, "agentflow-go")
+	if err != nil {
+		return ""
+	}
+	defer os.Remove(zipPath)
+
+	extractDir, err := os.MkdirTemp("", "agentflow-skill-meta-unzip-*")
+	if err != nil {
+		return ""
+	}
+	defer os.RemoveAll(extractDir)
+
+	rootDir, err := skill.UnzipRoot(zipPath, extractDir)
+	if err != nil {
+		return ""
+	}
+	sourceDir, _, err := skill.ResolveSkillDir(rootDir, skillHint)
+	if err != nil {
+		return ""
+	}
+
+	desc, _ := skill.ParseSkillDescription(filepath.Join(sourceDir, "SKILL.md"))
+	desc = strings.TrimSpace(desc)
+	if desc != "" {
+		skillSourceDescriptionCache.Store(source, desc)
+	}
+	return desc
 }
