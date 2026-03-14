@@ -296,13 +296,9 @@ func TestFlowSelectingMCPTargetAutoLoadsList(t *testing.T) {
 	}
 }
 
-func TestFlowSelectingSkillTargetAutoLoadsList(t *testing.T) {
+func TestFlowSelectingSkillTargetMovesToScope(t *testing.T) {
 	model := newTestInteractiveFlowModel(InteractiveCallbacks{
 		Status: func() Panel { return Panel{Title: "Environment"} },
-		SkillList: func(target string) Panel {
-			return Panel{Title: "Skill list", Lines: []string{"target=" + target}}
-		},
-		SkillUninstallOptions: func(target string) []Option { return nil },
 	})
 	model.screen = flowScreenSkillTargets
 	model.skillTargets = []Option{{Value: "codex", Label: "Codex CLI", Badge: "CODEX"}}
@@ -310,24 +306,14 @@ func TestFlowSelectingSkillTargetAutoLoadsList(t *testing.T) {
 
 	next, cmd := model.handleEnter()
 	model = next.(interactiveFlowModel)
-	if !model.busy {
-		t.Fatal("expected selecting skill target to enter busy state")
+	if cmd != nil {
+		t.Fatalf("expected selecting skill target not to return a command, got %#v", cmd)
 	}
-	if cmd == nil {
-		t.Fatal("expected selecting skill target to return a command")
+	if model.screen != flowScreenSkillScope {
+		t.Fatalf("expected to move to skill scope screen, got %v", model.screen)
 	}
-
-	next, _ = model.Update(flowResultMsg{
-		action: flowActionSkillList,
-		notice: panelRef(Panel{Title: "Skill list", Lines: []string{"target=codex"}}),
-		status: model.callbacks.Status(),
-	})
-	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenSkillActions {
-		t.Fatalf("expected to move to skill actions screen, got %v", model.screen)
-	}
-	if model.notice == nil || model.notice.Title != "Skill list" {
-		t.Fatalf("expected list notice panel, got %#v", model.notice)
+	if len(model.skillScopeOptions) != 2 {
+		t.Fatalf("expected 2 scope options, got %#v", model.skillScopeOptions)
 	}
 }
 
@@ -368,7 +354,7 @@ func TestFlowMCPInstallOptionsAnnotateInstalledAndRecommended(t *testing.T) {
 func TestFlowSkillInstallOptionsAnnotateInstalledAndRecommended(t *testing.T) {
 	model := newTestInteractiveFlowModel(InteractiveCallbacks{
 		Status: func() Panel { return Panel{Title: "Environment"} },
-		SkillInstallOptions: func() []Option {
+		SkillInstallOptions: func(target string) []Option {
 			return []Option{{Value: "https://skills.sh/vercel/turborepo/turborepo", Label: "turborepo", Badge: "PIN", Description: "Turborepo."}}
 		},
 		SkillUninstallOptions: func(target string) []Option {
@@ -380,8 +366,24 @@ func TestFlowSkillInstallOptionsAnnotateInstalledAndRecommended(t *testing.T) {
 	model.skillActions = []Option{{Value: "install"}}
 	model.skillActionCursor = 0
 
-	next, _ := model.handleEnter()
+	next, cmd := model.handleEnter()
 	model = next.(interactiveFlowModel)
+	if !model.busy {
+		t.Fatal("expected install action to enter busy state")
+	}
+	if cmd == nil {
+		t.Fatal("expected install action to return a command")
+	}
+
+	raw := model.callbacks.SkillInstallOptions(model.selectedSkillTarget)
+	annotated := model.annotateRecommendedSkillOptions(model.selectedSkillTarget, raw)
+	next, _ = model.Update(flowResultMsg{
+		action:       flowActionSkillLoadInstallOptions,
+		status:       model.callbacks.Status(),
+		skillOptions: annotated,
+	})
+	model = next.(interactiveFlowModel)
+
 	if model.screen != flowScreenSkillInstall {
 		t.Fatalf("expected to enter skill install screen, got %v", model.screen)
 	}

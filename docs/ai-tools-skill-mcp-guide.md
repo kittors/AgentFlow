@@ -73,6 +73,17 @@
 
 如果你在项目里使用了 **AgentFlow**（本仓库），可以用 CLI 一键完成：
 
+### 0) TUI 一键配置（推荐）
+
+在项目根目录执行 `agentflow` 进入交互式 TUI：
+
+- `SKILL`：先选目标（CLI/IDE），再选范围（项目/全局）
+  - 项目：写入项目级规则文件（右侧展示当前目录的规则文件状态 + 全局 Skills）
+  - 全局：管理全局 Skills（右侧展示当前目录的规则文件状态 + 全局 Skills；每个 Skill 选项会显示简介）
+- `MCP`：先选目标（CLI/IDE），再管理全局 MCP（右侧展示全局 MCP 列表；每个 MCP 选项会显示简介）
+
+> 说明：AgentFlow 当前只支持 **全局 MCP**（写入工具的用户级配置目录）；项目级仅支持规则文件（Skill/指令文件）。
+
 ### 1) 写入「项目级 Skill/规则文件」（CLI + IDE）
 
 在项目根目录执行：
@@ -168,7 +179,7 @@ claude mcp remove <server-name>
 }
 ```
 
-**项目级 MCP：** 在项目根目录创建 `.mcp.json` 文件即可配置项目级 MCP Server。
+> 说明：AgentFlow 当前仅支持写入 **用户级全局 MCP** 配置（不写入项目级 MCP）。
 
 ---
 
