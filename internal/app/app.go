@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/kittors/AgentFlow/internal/buildinfo"
 	"github.com/kittors/AgentFlow/internal/i18n"
 	"github.com/kittors/AgentFlow/internal/install"
@@ -652,11 +654,20 @@ func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
 func (a *App) bootstrapAutoPanel(targetName string) ui.Panel {
 	lines, err := a.Installer.BootstrapCLI(targetName)
 	if err != nil {
-		return errorPanel(a.Catalog.Msg("CLI 安装失败", "CLI install failed"), err)
+		return ui.Panel{
+			Title: "❌ " + a.Catalog.Msg("CLI 安装失败", "CLI install failed"),
+			Lines: []string{err.Error()},
+		}
+	}
+	// Highlight all output lines in green for success.
+	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	highlighted := make([]string, len(lines))
+	for i, line := range lines {
+		highlighted[i] = greenStyle.Render(line)
 	}
 	return ui.Panel{
-		Title: a.Catalog.Msg("CLI 安装结果", "CLI install result"),
-		Lines: lines,
+		Title: "✅ " + a.Catalog.Msg("CLI 安装成功", "CLI installed successfully"),
+		Lines: highlighted,
 	}
 }
 

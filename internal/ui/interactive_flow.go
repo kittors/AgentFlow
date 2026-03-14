@@ -9,7 +9,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/kittors/AgentFlow/internal/i18n"
 )
@@ -1792,45 +1791,12 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 				status: m.callbacks.Status(),
 			}
 		case flowActionInstallHubRefresh:
-			var notice *Panel
-			if m.callbacks.InstallOptions != nil {
-				globalTargets := m.callbacks.InstallOptions()
-				lines := []string{}
-				if len(globalTargets) > 0 {
-					lines = append(lines, m.catalog.Msg("全局安装状态:", "Global install status:"))
-					for _, opt := range globalTargets {
-						line := fmt.Sprintf("  - %s: %s", opt.Label, opt.Description)
-						// Apply green color if it's already installed or ready
-						if strings.Contains(opt.Description, "就绪") || strings.Contains(opt.Description, "ready") || strings.Contains(opt.Description, "直接部署") || strings.Contains(opt.Description, "ready for AgentFlow") || strings.Contains(opt.Description, "已存在") || strings.Contains(opt.Description, "exist") || strings.Contains(opt.Description, "提前写入") {
-							line = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render(line)
-						}
-						lines = append(lines, line)
-					}
-				} else {
-					lines = append(lines, m.catalog.Msg("全局: 未检测到可安装的 CLI。", "Global: No installable CLIs detected."))
-				}
-
-				lines = append(lines, "")
-				if projectRoot != "" {
-					lines = append(lines, fmt.Sprintf(m.catalog.Msg("项目目录: %s", "Project directory: %s"), projectRoot))
-				}
-				if m.projectRulesDetail != nil && len(m.projectRulesDetail.Lines) > 0 {
-					lines = append(lines, m.catalog.Msg("项目级安装状态:", "Project install status:"))
-					for _, ruleLine := range m.projectRulesDetail.Lines {
-						lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render(ruleLine))
-					}
-				} else {
-					lines = append(lines, m.catalog.Msg("项目级: 选择「安装到当前项目」查看详情。", "Project-level: Select 'Install into current project' to see details."))
-				}
-
-				notice = panelRef(Panel{
-					Title: m.catalog.Msg("安装状态总览", "Install status overview"),
-					Lines: lines,
-				})
-			}
+			// Only call Status() — it's lightweight.
+			// Do NOT call InstallOptions() here: it triggers DetectTargetStatuses()
+			// which runs shell commands for every CLI target and causes multi-second
+			// blocking that makes the TUI appear frozen.
 			return flowResultMsg{
 				action: action,
-				notice: notice,
 				status: m.callbacks.Status(),
 			}
 		case flowActionMCPRefreshSummary, flowActionMCPList:
