@@ -17,10 +17,10 @@ import (
 
 func (a *App) mcpTargetOptions() []ui.Option {
 	homeDir, _ := os.UserHomeDir()
-	names := targets.SortedTargetNames()
+	names := targets.SortedMCPTargetNames()
 	options := make([]ui.Option, 0, len(names))
 	for _, name := range names {
-		target, _ := targets.Lookup(name)
+		target, _ := targets.LookupMCP(name)
 		options = append(options, ui.Option{
 			Value:       target.Name,
 			Label:       target.DisplayName,
@@ -50,7 +50,7 @@ func (a *App) mcpInstallOptions() []ui.Option {
 }
 
 func (a *App) mcpRemoveOptions(targetName string) []ui.Option {
-	target, ok := targets.Lookup(targetName)
+	target, ok := targets.LookupMCP(targetName)
 	if !ok {
 		return nil
 	}
@@ -72,7 +72,7 @@ func (a *App) mcpRemoveOptions(targetName string) []ui.Option {
 }
 
 func (a *App) mcpListPanel(targetName string) ui.Panel {
-	target, ok := targets.Lookup(targetName)
+	target, ok := targets.LookupMCP(targetName)
 	if !ok {
 		return ui.Panel{
 			Title: a.Catalog.Msg("MCP", "MCP"),
@@ -113,7 +113,7 @@ func (a *App) mcpListPanel(targetName string) ui.Panel {
 }
 
 func (a *App) mcpInstallPanel(targetName, server string) ui.Panel {
-	target, ok := targets.Lookup(targetName)
+	target, ok := targets.LookupMCP(targetName)
 	if !ok {
 		return ui.Panel{
 			Title: a.Catalog.Msg("MCP 安装", "MCP install"),
@@ -147,7 +147,7 @@ func (a *App) mcpInstallPanel(targetName, server string) ui.Panel {
 }
 
 func (a *App) mcpRemovePanel(targetName, server string) ui.Panel {
-	target, ok := targets.Lookup(targetName)
+	target, ok := targets.LookupMCP(targetName)
 	if !ok {
 		return ui.Panel{
 			Title: a.Catalog.Msg("MCP 移除", "MCP remove"),

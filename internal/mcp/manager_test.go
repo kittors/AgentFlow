@@ -69,6 +69,241 @@ func TestManagerInstallAndRemove(t *testing.T) {
 	}
 }
 
+func TestManagerInstallAndRemoveUpdatesGeminiSettingsJSON(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.Lookup("gemini")
+	if !ok {
+		t.Fatalf("expected gemini target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	settingsPath := filepath.Join(tmp, target.Dir, "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse settings: %v", err)
+	}
+	mcpServers, ok := payload["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers missing or invalid")
+	}
+	context7, ok := mcpServers["context7"].(map[string]any)
+	if !ok {
+		t.Fatalf("context7 missing")
+	}
+	env, _ := context7["env"].(map[string]any)
+	if env["CONTEXT7_API_KEY"] != "demo" {
+		t.Fatalf("unexpected api key: %v", env["CONTEXT7_API_KEY"])
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse settings after remove: %v", err)
+	}
+	mcpServers, _ = payload["mcpServers"].(map[string]any)
+	if _, exists := mcpServers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}
+
+func TestManagerInstallAndRemoveUpdatesQwenSettingsJSON(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.Lookup("qwen")
+	if !ok {
+		t.Fatalf("expected qwen target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	settingsPath := filepath.Join(tmp, target.Dir, "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse settings: %v", err)
+	}
+	mcpServers, ok := payload["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers missing or invalid")
+	}
+	if _, ok := mcpServers["context7"]; !ok {
+		t.Fatalf("expected context7 present")
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse settings after remove: %v", err)
+	}
+	mcpServers, _ = payload["mcpServers"].(map[string]any)
+	if _, exists := mcpServers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}
+
+func TestManagerInstallAndRemoveUpdatesKiroMCPConfig(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.Lookup("kiro")
+	if !ok {
+		t.Fatalf("expected kiro target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	configPath := filepath.Join(tmp, target.Dir, "settings", "mcp.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp.json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp.json: %v", err)
+	}
+	mcpServers, ok := payload["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers missing or invalid")
+	}
+	if _, ok := mcpServers["context7"]; !ok {
+		t.Fatalf("expected context7 present")
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp.json after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp.json after remove: %v", err)
+	}
+	mcpServers, _ = payload["mcpServers"].(map[string]any)
+	if _, exists := mcpServers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}
+
+func TestManagerInstallAndRemoveUpdatesCursorMCPConfig(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.LookupMCP("cursor")
+	if !ok {
+		t.Fatalf("expected cursor target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	configPath := filepath.Join(tmp, target.Dir, "mcp.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp.json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp.json: %v", err)
+	}
+	mcpServers, ok := payload["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers missing or invalid")
+	}
+	if _, ok := mcpServers["context7"]; !ok {
+		t.Fatalf("expected context7 present")
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp.json after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp.json after remove: %v", err)
+	}
+	mcpServers, _ = payload["mcpServers"].(map[string]any)
+	if _, exists := mcpServers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}
+
+func TestManagerInstallAndRemoveUpdatesWindsurfMCPConfig(t *testing.T) {
+	tmp := t.TempDir()
+	target, ok := targets.LookupMCP("windsurf")
+	if !ok {
+		t.Fatalf("expected windsurf target")
+	}
+
+	manager := &Manager{HomeDir: tmp}
+	if err := manager.Install(target, "context7", InstallOptions{Env: []string{"CONTEXT7_API_KEY=demo"}}); err != nil {
+		t.Fatalf("install context7: %v", err)
+	}
+
+	configPath := filepath.Join(tmp, target.Dir, "mcp_config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp_config.json: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp_config.json: %v", err)
+	}
+	mcpServers, ok := payload["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers missing or invalid")
+	}
+	if _, ok := mcpServers["context7"]; !ok {
+		t.Fatalf("expected context7 present")
+	}
+
+	if err := manager.Remove(target, "context7"); err != nil {
+		t.Fatalf("remove context7: %v", err)
+	}
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read mcp_config.json after remove: %v", err)
+	}
+	payload = nil
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("parse mcp_config.json after remove: %v", err)
+	}
+	mcpServers, _ = payload["mcpServers"].(map[string]any)
+	if _, exists := mcpServers["context7"]; exists {
+		t.Fatalf("expected context7 removed")
+	}
+}
+
 func TestResolveBuiltinFilesystemRequiresAllow(t *testing.T) {
 	if _, err := ResolveBuiltin("filesystem", InstallOptions{}); err == nil {
 		t.Fatalf("expected error")

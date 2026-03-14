@@ -51,7 +51,7 @@ func (m *Manager) Install(target targets.Target, server string, options InstallO
 		return m.installIntoCodexConfig(spec)
 	}
 
-	managedPath := filepath.Join(m.HomeDir, target.Dir, "mcp.json")
+	managedPath := managedRecordPath(m.HomeDir, target)
 	managed, err := readManagedMCP(managedPath)
 	if err != nil {
 		return err
@@ -61,12 +61,23 @@ func (m *Manager) Install(target targets.Target, server string, options InstallO
 		return err
 	}
 
-	if target.Name == "claude" {
-		if err := m.installIntoClaudeSettings(spec); err != nil {
-			return err
-		}
+	switch target.Name {
+	case "claude":
+		return m.installIntoClaudeSettings(spec)
+	case "gemini":
+		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings.json"), spec)
+	case "qwen":
+		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings.json"), spec)
+	case "kiro":
+		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings", "mcp.json"), spec)
+	case "cursor":
+		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp.json"), spec)
+	case "windsurf":
+		return m.installIntoJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp_config.json"), spec)
+	default:
+		// Keep managed record only for unknown targets.
+		return nil
 	}
-	return nil
 }
 
 func (m *Manager) Remove(target targets.Target, server string) error {
@@ -79,7 +90,7 @@ func (m *Manager) Remove(target targets.Target, server string) error {
 		return m.removeFromCodexConfig(server)
 	}
 
-	managedPath := filepath.Join(m.HomeDir, target.Dir, "mcp.json")
+	managedPath := managedRecordPath(m.HomeDir, target)
 	managed, err := readManagedMCP(managedPath)
 	if err != nil {
 		return err
@@ -89,16 +100,26 @@ func (m *Manager) Remove(target targets.Target, server string) error {
 		return err
 	}
 
-	if target.Name == "claude" {
-		if err := m.removeFromClaudeSettings(server); err != nil {
-			return err
-		}
+	switch target.Name {
+	case "claude":
+		return m.removeFromClaudeSettings(server)
+	case "gemini":
+		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings.json"), server)
+	case "qwen":
+		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings.json"), server)
+	case "kiro":
+		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "settings", "mcp.json"), server)
+	case "cursor":
+		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp.json"), server)
+	case "windsurf":
+		return m.removeFromJSONMCPServers(filepath.Join(m.HomeDir, target.Dir, "mcp_config.json"), server)
+	default:
+		return nil
 	}
-	return nil
 }
 
 func (m *Manager) List(target targets.Target) ([]string, error) {
-	managedPath := filepath.Join(m.HomeDir, target.Dir, "mcp.json")
+	managedPath := managedRecordPath(m.HomeDir, target)
 	managed, err := readManagedMCP(managedPath)
 	if err != nil {
 		return nil, err
@@ -125,6 +146,58 @@ func (m *Manager) List(target targets.Target) ([]string, error) {
 		claudeServers, err := m.listClaudeSettings()
 		if err == nil {
 			for key := range claudeServers {
+				if _, ok := managed[key]; ok {
+					continue
+				}
+				names = append(names, key)
+			}
+		}
+	}
+
+	if target.Name == "gemini" || target.Name == "qwen" {
+		path := filepath.Join(m.HomeDir, target.Dir, "settings.json")
+		servers, err := m.listJSONMCPServers(path)
+		if err == nil {
+			for key := range servers {
+				if _, ok := managed[key]; ok {
+					continue
+				}
+				names = append(names, key)
+			}
+		}
+	}
+
+	if target.Name == "kiro" {
+		path := filepath.Join(m.HomeDir, target.Dir, "settings", "mcp.json")
+		servers, err := m.listJSONMCPServers(path)
+		if err == nil {
+			for key := range servers {
+				if _, ok := managed[key]; ok {
+					continue
+				}
+				names = append(names, key)
+			}
+		}
+	}
+
+	if target.Name == "cursor" {
+		path := filepath.Join(m.HomeDir, target.Dir, "mcp.json")
+		servers, err := m.listJSONMCPServers(path)
+		if err == nil {
+			for key := range servers {
+				if _, ok := managed[key]; ok {
+					continue
+				}
+				names = append(names, key)
+			}
+		}
+	}
+
+	if target.Name == "windsurf" {
+		path := filepath.Join(m.HomeDir, target.Dir, "mcp_config.json")
+		servers, err := m.listJSONMCPServers(path)
+		if err == nil {
+			for key := range servers {
 				if _, ok := managed[key]; ok {
 					continue
 				}
@@ -433,7 +506,31 @@ func writeManagedMCP(path string, servers map[string]any) error {
 
 func (m *Manager) installIntoClaudeSettings(spec BuiltinSpec) error {
 	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
-	settings, err := readJSONMap(settingsPath)
+	return m.installIntoJSONMCPServers(settingsPath, spec)
+}
+
+func (m *Manager) removeFromClaudeSettings(name string) error {
+	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
+	return m.removeFromJSONMCPServers(settingsPath, name)
+}
+
+func (m *Manager) listClaudeSettings() (map[string]any, error) {
+	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
+	return m.listJSONMCPServers(settingsPath)
+}
+
+func managedRecordPath(home string, target targets.Target) string {
+	base := filepath.Join(home, target.Dir)
+	switch target.Name {
+	case "cursor", "windsurf":
+		return filepath.Join(base, "agentflow.mcp.json")
+	default:
+		return filepath.Join(base, "mcp.json")
+	}
+}
+
+func (m *Manager) installIntoJSONMCPServers(path string, spec BuiltinSpec) error {
+	settings, err := readJSONMap(path)
 	if err != nil {
 		return err
 	}
@@ -442,7 +539,7 @@ func (m *Manager) installIntoClaudeSettings(spec BuiltinSpec) error {
 	if existing, ok := settings["mcpServers"]; ok {
 		mapped, ok := existing.(map[string]any)
 		if !ok {
-			return errors.New("settings.json: mcpServers must be an object")
+			return fmt.Errorf("%s: mcpServers must be an object", filepath.Base(path))
 		}
 		mcpServers = mapped
 	}
@@ -455,12 +552,11 @@ func (m *Manager) installIntoClaudeSettings(spec BuiltinSpec) error {
 		return err
 	}
 	payload = append(payload, '\n')
-	return config.SafeWrite(settingsPath, payload, 0o644)
+	return config.SafeWrite(path, payload, 0o644)
 }
 
-func (m *Manager) removeFromClaudeSettings(name string) error {
-	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
-	settings, err := readJSONMap(settingsPath)
+func (m *Manager) removeFromJSONMCPServers(path, name string) error {
+	settings, err := readJSONMap(path)
 	if err != nil {
 		return err
 	}
@@ -471,7 +567,7 @@ func (m *Manager) removeFromClaudeSettings(name string) error {
 	}
 	mcpServers, ok := existing.(map[string]any)
 	if !ok {
-		return errors.New("settings.json: mcpServers must be an object")
+		return fmt.Errorf("%s: mcpServers must be an object", filepath.Base(path))
 	}
 	delete(mcpServers, name)
 	settings["mcpServers"] = mcpServers
@@ -481,12 +577,11 @@ func (m *Manager) removeFromClaudeSettings(name string) error {
 		return err
 	}
 	payload = append(payload, '\n')
-	return config.SafeWrite(settingsPath, payload, 0o644)
+	return config.SafeWrite(path, payload, 0o644)
 }
 
-func (m *Manager) listClaudeSettings() (map[string]any, error) {
-	settingsPath := filepath.Join(m.HomeDir, targets.All["claude"].Dir, "settings.json")
-	settings, err := readJSONMap(settingsPath)
+func (m *Manager) listJSONMCPServers(path string) (map[string]any, error) {
+	settings, err := readJSONMap(path)
 	if err != nil {
 		return nil, err
 	}
@@ -496,7 +591,7 @@ func (m *Manager) listClaudeSettings() (map[string]any, error) {
 	}
 	mcpServers, ok := existing.(map[string]any)
 	if !ok {
-		return nil, errors.New("settings.json: mcpServers must be an object")
+		return nil, fmt.Errorf("%s: mcpServers must be an object", filepath.Base(path))
 	}
 	return mcpServers, nil
 }

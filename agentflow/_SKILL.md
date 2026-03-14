@@ -26,6 +26,8 @@ commands:
   - "~validatekb"
 ---
 
+<!-- AGENTFLOW_ROUTER: v1.0.0 -->
+
 # AgentFlow Skill
 
 AgentFlow is a multi-CLI agent workflow system that keeps going until tasks are implemented and verified.

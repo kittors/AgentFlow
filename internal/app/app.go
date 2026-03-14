@@ -77,6 +77,8 @@ func (a *App) Run(args []string) int {
 		return a.runGraph(args[1:])
 	case "dashboard":
 		return a.runDashboard(args[1:])
+	case "rules":
+		return a.runRules(args[1:])
 	case "skill":
 		return a.runSkill(args[1:])
 	case "mcp":
@@ -99,6 +101,9 @@ func (a *App) runInteractiveMainMenu() int {
 
 	if err := ui.RunInteractiveFlow(a.Catalog, a.Version, ui.InteractiveCallbacks{
 		Status:                 a.statusPanel,
+		WorkspaceTargets:       a.workspaceTargetOptions,
+		WorkspacePanel:         a.workspacePanel,
+		WorkspaceInstallRules:  a.workspaceInstallRulesPanel,
 		MCPTargetOptions:       a.mcpTargetOptions,
 		MCPInstallOptions:      a.mcpInstallOptions,
 		MCPRemoveOptions:       a.mcpRemoveOptions,
@@ -467,6 +472,7 @@ func (a *App) printUsage() {
 	fmt.Fprintln(a.Stdout, "  conventions [--root=<path>] [--quiet]")
 	fmt.Fprintln(a.Stdout, "  graph [--root=<path>] [--quiet]")
 	fmt.Fprintln(a.Stdout, "  dashboard [--root=<path>] [--quiet]")
+	fmt.Fprintln(a.Stdout, "  rules <detect|install> ...")
 	fmt.Fprintln(a.Stdout, "  skill <install|uninstall|list> ...")
 	fmt.Fprintln(a.Stdout, "  mcp <install|remove|list|search> ...")
 	fmt.Fprintln(a.Stdout, "  --check-update [--silent]")
