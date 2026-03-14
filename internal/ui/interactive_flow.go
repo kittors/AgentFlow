@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/kittors/AgentFlow/internal/i18n"
 )
@@ -78,6 +79,7 @@ const (
 	flowActionMCPInstall
 	flowActionMCPRemove
 	flowActionSkillRefreshSummary
+	flowActionInstallHubRefresh
 	flowActionSkillList
 	flowActionSkillLoadInstallOptions
 	flowActionSkillInstall
@@ -141,6 +143,7 @@ type interactiveFlowModel struct {
 	projectInstallMode     bool
 	updateConfirmOptions   []Option
 	updateConfirmCursor    int
+	installHubStatusPanel  *Panel
 
 	mainCursor               int
 	installHubCursor         int
@@ -320,9 +323,9 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 		mainOptions: []Option{
 			{
 				Value:       string(ActionInstall),
-				Label:       catalog.Msg("安装", "Install"),
+				Label:       catalog.Msg("安装 / 卸载", "Install / Uninstall"),
 				Badge:       catalog.Msg("安装", "SETUP"),
-				Description: catalog.Msg("先安装 Codex / Claude / Gemini 等 CLI，或继续把 AgentFlow 部署到已存在的 CLI（全局），也可安装到当前项目。", "Install Codex / Claude / Gemini first, or deploy AgentFlow into CLIs that already exist (global), or install into the current project."),
+				Description: catalog.Msg("安装或卸载 CLI 工具、AgentFlow 全局/项目级配置。", "Install or uninstall CLI tools and AgentFlow global/project configurations."),
 			},
 			{
 				Value:       string(ActionMCP),
@@ -335,12 +338,6 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Label:       catalog.Msg("管理 Skills", "Manage skills"),
 				Badge:       catalog.Msg("SKILL", "SKILL"),
 				Description: catalog.Msg("为任意 CLI 安装、查看与卸载 skills（支持从 skills.sh/GitHub 安装）。", "Install, inspect, and uninstall skills for any CLI (supports skills.sh/GitHub sources)."),
-			},
-			{
-				Value:       string(ActionUninstall),
-				Label:       catalog.Msg("卸载已安装目标", "Uninstall from installed targets"),
-				Badge:       catalog.Msg("移除", "REMOVE"),
-				Description: catalog.Msg("从已接入 CLI 中清理 AgentFlow 产物，同时保留你的原有配置。", "Remove AgentFlow assets from integrated CLIs while preserving your own config where possible."),
 			},
 			{
 				Value:       string(ActionUninstallCLI),
@@ -391,6 +388,18 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Label:       catalog.Msg("安装 AgentFlow 到当前项目（项目级）", "Install AgentFlow into current project (project-level)"),
 				Badge:       catalog.Msg("项目", "PROJECT"),
 				Description: catalog.Msg("将 AgentFlow 规则文件写入当前工作目录，适合团队协作和项目级配置。", "Write AgentFlow rule files into the current working directory, ideal for team collaboration and project-level configuration."),
+			},
+			{
+				Value:       "uninstall-agentflow",
+				Label:       catalog.Msg("卸载 AgentFlow（保留 CLI）", "Uninstall AgentFlow (keep CLIs)"),
+				Badge:       catalog.Msg("卸载", "REMOVE"),
+				Description: catalog.Msg("从已接入 CLI 中清理 AgentFlow 产物，同时保留你的原有配置。", "Remove AgentFlow assets from integrated CLIs while preserving your own config where possible."),
+			},
+			{
+				Value:       "uninstall-cli",
+				Label:       catalog.Msg("卸载 CLI 工具（完整卸载）", "Uninstall CLI tools (full removal)"),
+				Badge:       catalog.Msg("CLI", "CLI"),
+				Description: catalog.Msg("卸载 Codex / Claude / Gemini 等 CLI 本体，并默认删除配置目录。", "Uninstall CLI tools like Codex / Claude / Gemini and purge their config directories by default."),
 			},
 		},
 		mcpActions: []Option{
@@ -487,9 +496,9 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.screen = flowScreenSkillProjectActions
 			}
 			m.resetDetailFocus()
-		case flowActionMCPRefreshSummary:
+		case flowActionInstallHubRefresh:
 			if value.notice != nil {
-				m.notice = value.notice
+				m.installHubStatusPanel = value.notice
 			}
 		case flowActionMCPList, flowActionMCPInstall, flowActionMCPRemove:
 			if value.notice != nil {
@@ -810,8 +819,10 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		switch Action(m.mainOptions[m.mainCursor].Value) {
 		case ActionInstall:
 			m.screen = flowScreenInstallHub
+			m.installHubCursor = 0
 			m.notice = nil
-			return m, nil
+			// Async-load the install status panel (so arrow keys stay instant).
+			return m.startBusy(flowActionInstallHubRefresh, m.catalog.Msg("正在读取安装状态…", "Loading install status..."))
 		case ActionMCP:
 			if m.callbacks.MCPTargetOptions == nil {
 				m.notice = panelRef(Panel{
@@ -1138,6 +1149,36 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.focusDetails = false
 			m.detailScroll = 0
 			return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
+		case "uninstall-agentflow":
+			m.uninstallCLIMode = false
+			m.uninstallOptions = cloneOptions(m.callbacks.UninstallOptions())
+			if len(m.uninstallOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("卸载结果", "Uninstall result"),
+					Lines: []string{m.catalog.Msg("未检测到已安装的 AgentFlow。", "No AgentFlow installations found.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenUninstallTargets
+			m.notice = nil
+			return m, nil
+		case "uninstall-cli":
+			m.uninstallCLIMode = true
+			if m.callbacks.UninstallCLIOptions != nil {
+				m.uninstallOptions = cloneOptions(m.callbacks.UninstallCLIOptions())
+			} else {
+				m.uninstallOptions = nil
+			}
+			if len(m.uninstallOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("卸载结果", "Uninstall result"),
+					Lines: []string{m.catalog.Msg("未检测到可卸载的 CLI。", "No CLI installations found.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenUninstallTargets
+			m.notice = nil
+			return m, nil
 		}
 	case flowScreenBootstrapTargets:
 		if len(m.bootstrapOptions) == 0 {
@@ -1619,6 +1660,48 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 				action: action,
 				status: m.callbacks.Status(),
 			}
+		case flowActionInstallHubRefresh:
+			var notice *Panel
+			if m.callbacks.InstallOptions != nil {
+				globalTargets := m.callbacks.InstallOptions()
+				lines := []string{}
+				if len(globalTargets) > 0 {
+					lines = append(lines, m.catalog.Msg("全局安装状态:", "Global install status:"))
+					for _, opt := range globalTargets {
+						line := fmt.Sprintf("  - %s: %s", opt.Label, opt.Description)
+						// Apply green color if it's already installed or ready
+						if strings.Contains(opt.Description, "就绪") || strings.Contains(opt.Description, "ready") || strings.Contains(opt.Description, "直接部署") || strings.Contains(opt.Description, "ready for AgentFlow") || strings.Contains(opt.Description, "已存在") || strings.Contains(opt.Description, "exist") || strings.Contains(opt.Description, "提前写入") {
+							line = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render(line)
+						}
+						lines = append(lines, line)
+					}
+				} else {
+					lines = append(lines, m.catalog.Msg("全局: 未检测到可安装的 CLI。", "Global: No installable CLIs detected."))
+				}
+
+				lines = append(lines, "")
+				if projectRoot != "" {
+					lines = append(lines, fmt.Sprintf(m.catalog.Msg("项目目录: %s", "Project directory: %s"), projectRoot))
+				}
+				if m.projectRulesDetail != nil && len(m.projectRulesDetail.Lines) > 0 {
+					lines = append(lines, m.catalog.Msg("项目级安装状态:", "Project install status:"))
+					for _, ruleLine := range m.projectRulesDetail.Lines {
+						lines = append(lines, lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render(ruleLine))
+					}
+				} else {
+					lines = append(lines, m.catalog.Msg("项目级: 选择「安装到当前项目」查看详情。", "Project-level: Select 'Install into current project' to see details."))
+				}
+
+				notice = panelRef(Panel{
+					Title: m.catalog.Msg("安装状态总览", "Install status overview"),
+					Lines: lines,
+				})
+			}
+			return flowResultMsg{
+				action: action,
+				notice: notice,
+				status: m.callbacks.Status(),
+			}
 		case flowActionMCPRefreshSummary, flowActionMCPList:
 			summary := Panel{}
 			if m.callbacks.MCPList != nil {
@@ -1974,9 +2057,9 @@ func (m interactiveFlowModel) installHubPanels() []Panel {
 	if m.notice != nil {
 		panels = append(panels, *m.notice)
 	}
-	// Use the already-cached status panel; never call detection callbacks
-	// during rendering — those are expensive filesystem operations that
-	// block the UI on every keystroke.
+	if m.installHubStatusPanel != nil {
+		panels = append(panels, *m.installHubStatusPanel)
+	}
 	panels = append(panels, m.status)
 	return panels
 }
