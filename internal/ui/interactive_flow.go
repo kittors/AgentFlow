@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -65,6 +66,7 @@ const (
 	flowScreenProfile
 	flowScreenInstallTargets
 	flowScreenUninstallTargets
+	flowScreenUpdateConfirm
 )
 
 type flowAction int
@@ -137,6 +139,8 @@ type interactiveFlowModel struct {
 	uninstallOptions       []Option
 	uninstallCLIMode       bool
 	projectInstallMode     bool
+	updateConfirmOptions   []Option
+	updateConfirmCursor    int
 
 	mainCursor               int
 	installHubCursor         int
@@ -527,7 +531,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = value.notice
 			}
 			m.refreshBootstrapDetail()
-		case flowActionInstall, flowActionUninstall, flowActionUninstallCLI, flowActionUpdate, flowActionClean:
+		case flowActionInstall, flowActionUninstall, flowActionUninstallCLI, flowActionClean:
 			m.screen = flowScreenMain
 			m.resetDetailFocus()
 			m.installOptions = nil
@@ -536,6 +540,34 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clearSelections()
 			if value.notice != nil {
 				m.notice = value.notice
+			}
+		case flowActionUpdate:
+			if value.notice != nil {
+				m.notice = value.notice
+			}
+			if strings.TrimSpace(value.version) != "" {
+				// Update succeeded with new version: show restart confirmation.
+				m.updateConfirmOptions = []Option{
+					{
+						Value:       "restart",
+						Label:       m.catalog.Msg("立即重启", "Restart now"),
+						Badge:       m.catalog.Msg("推荐", "REC"),
+						Description: m.catalog.Msg("立即重启 AgentFlow 以使用新版本。", "Restart AgentFlow immediately to use the new version."),
+					},
+					{
+						Value:       "cancel",
+						Label:       m.catalog.Msg("稍后手动重启", "Restart later"),
+						Badge:       "",
+						Description: m.catalog.Msg("返回主菜单，稍后手动重启 agentflow。", "Go back to the main menu; restart agentflow manually later."),
+					},
+				}
+				m.updateConfirmCursor = 0
+				m.screen = flowScreenUpdateConfirm
+				m.resetDetailFocus()
+			} else {
+				// Already on latest or update failed: just go back to main.
+				m.screen = flowScreenMain
+				m.resetDetailFocus()
 			}
 		}
 		return m, nil
@@ -765,6 +797,8 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 	case flowScreenUninstallTargets:
 		m.screen = flowScreenMain
 		m.uninstallCLIMode = false
+	case flowScreenUpdateConfirm:
+		m.screen = flowScreenMain
 	}
 	m.notice = nil
 	return m, nil
@@ -1162,6 +1196,37 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m.startBusy(flowActionUninstallCLI, m.catalog.Msg("正在卸载所选 CLI…", "Uninstalling selected CLIs..."))
 		}
 		return m.startBusy(flowActionUninstall, m.catalog.Msg("正在卸载所选目标…", "Uninstalling selected targets..."))
+	case flowScreenUpdateConfirm:
+		if len(m.updateConfirmOptions) == 0 {
+			return m, nil
+		}
+		switch m.updateConfirmOptions[m.updateConfirmCursor].Value {
+		case "restart":
+			exePath, err := os.Executable()
+			if err != nil {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("重启失败", "Restart failed"),
+					Lines: []string{fmt.Sprintf(m.catalog.Msg("无法获取当前可执行文件路径: %v", "Cannot determine executable path: %v"), err)},
+				})
+				m.screen = flowScreenMain
+				return m, nil
+			}
+			// Use syscall.Exec to replace the current process with the updated binary.
+			err = syscall.Exec(exePath, os.Args, os.Environ())
+			if err != nil {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("重启失败", "Restart failed"),
+					Lines: []string{fmt.Sprintf(m.catalog.Msg("重启失败: %v。请手动运行 agentflow。", "Restart failed: %v. Please run agentflow manually."), err)},
+				})
+				m.screen = flowScreenMain
+				return m, nil
+			}
+			// Should not reach here; syscall.Exec replaces the process.
+			return m, tea.Quit
+		case "cancel":
+			m.screen = flowScreenMain
+			return m, nil
+		}
 	}
 	return m, nil
 }
@@ -1416,6 +1481,15 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 			cursor = len(m.uninstallOptions) - 1
 		}
 		m.uninstallCursor = cursor
+	case flowScreenUpdateConfirm:
+		if len(m.updateConfirmOptions) == 0 {
+			m.updateConfirmCursor = 0
+			break
+		}
+		if cursor > len(m.updateConfirmOptions)-1 {
+			cursor = len(m.updateConfirmOptions) - 1
+		}
+		m.updateConfirmCursor = cursor
 	}
 
 	if m.currentCursor() != previousCursor {
@@ -1459,6 +1533,8 @@ func (m interactiveFlowModel) currentCursor() int {
 		return m.installCursor
 	case flowScreenUninstallTargets:
 		return m.uninstallCursor
+	case flowScreenUpdateConfirm:
+		return m.updateConfirmCursor
 	default:
 		return m.mainCursor
 	}
@@ -1500,6 +1576,8 @@ func (m interactiveFlowModel) currentOptionsLen() int {
 		return len(m.installOptions)
 	case flowScreenUninstallTargets:
 		return len(m.uninstallOptions)
+	case flowScreenUpdateConfirm:
+		return len(m.updateConfirmOptions)
 	default:
 		return len(m.mainOptions)
 	}
@@ -1855,6 +1933,17 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.cursor = m.uninstallCursor
 		model.multi = true
 		model.panels = m.uninstallPanels()
+	case flowScreenUpdateConfirm:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("AgentFlow 已更新到 v%s。是否立即重启？", "AgentFlow has been updated to v%s. Restart now?"), m.version)
+		model.hint = m.catalog.Msg("↑/↓ 选择，Enter 确认，Esc 返回主菜单。", "Use ↑/↓ to choose, Enter to confirm, Esc to go back.")
+		model.options = cloneOptions(m.updateConfirmOptions)
+		model.cursor = m.updateConfirmCursor
+		panels := make([]Panel, 0, 2)
+		if m.notice != nil {
+			panels = append(panels, *m.notice)
+		}
+		panels = append(panels, m.status)
+		model.panels = panels
 	default:
 		model.subtitle = m.catalog.Msg("跨平台 Go CLI。所有动作都在同一个 TUI 会话内完成。", "Cross-platform Go CLI. All actions now stay inside one TUI session.")
 		model.hint = m.catalog.Msg("↑/↓ 或滚轮切换动作，Enter 执行，Esc 退出。", "Use ↑/↓ or the mouse wheel to change actions, Enter to run, Esc to exit.")

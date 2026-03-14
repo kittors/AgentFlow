@@ -435,8 +435,19 @@ func TestFlowUpdateActionRefreshesVersionAndNotice(t *testing.T) {
 	if model.notice == nil || model.notice.Title != "Update result" {
 		t.Fatalf("expected update notice panel, got %#v", model.notice)
 	}
+	if model.screen != flowScreenUpdateConfirm {
+		t.Fatalf("expected update confirm screen after successful update, got %v", model.screen)
+	}
+	if len(model.updateConfirmOptions) != 2 {
+		t.Fatalf("expected 2 confirm options (restart/cancel), got %d", len(model.updateConfirmOptions))
+	}
+
+	// Selecting "cancel" should return to main.
+	model.updateConfirmCursor = 1
+	next, _ = model.handleEnter()
+	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenMain {
-		t.Fatalf("expected to return to main after update, got %v", model.screen)
+		t.Fatalf("expected cancel to return to main, got %v", model.screen)
 	}
 }
 
