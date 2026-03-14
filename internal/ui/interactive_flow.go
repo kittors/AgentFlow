@@ -1881,16 +1881,42 @@ func (m interactiveFlowModel) mainPanels() []Panel {
 }
 
 func (m interactiveFlowModel) installHubPanels() []Panel {
-	panels := make([]Panel, 0, 3)
+	panels := make([]Panel, 0, 4)
 	if m.notice != nil {
 		panels = append(panels, *m.notice)
 	}
+
+	// Show current install status for both global and project-level.
+	statusLines := []string{}
+
+	// Global install status.
+	if m.callbacks.InstallOptions != nil {
+		globalTargets := m.callbacks.InstallOptions()
+		if len(globalTargets) > 0 {
+			statusLines = append(statusLines, m.catalog.Msg("全局安装状态:", "Global install status:"))
+			for _, opt := range globalTargets {
+				statusLines = append(statusLines, fmt.Sprintf("  - %s: %s", opt.Label, opt.Description))
+			}
+		} else {
+			statusLines = append(statusLines, m.catalog.Msg("全局: 未检测到可安装的 CLI。", "Global: No installable CLIs detected."))
+		}
+	}
+
+	// Project-level status.
+	statusLines = append(statusLines, "")
+	if m.projectRoot != "" {
+		statusLines = append(statusLines, fmt.Sprintf(m.catalog.Msg("项目目录: %s", "Project directory: %s"), m.projectRoot))
+	}
+	if m.projectRulesDetail != nil && len(m.projectRulesDetail.Lines) > 0 {
+		statusLines = append(statusLines, m.catalog.Msg("项目级安装状态:", "Project install status:"))
+		statusLines = append(statusLines, m.projectRulesDetail.Lines...)
+	} else {
+		statusLines = append(statusLines, m.catalog.Msg("项目级: 选择「安装到当前项目」查看详情。", "Project-level: Select 'Install into current project' to see details."))
+	}
+
 	panels = append(panels, Panel{
-		Title: m.catalog.Msg("安装中心", "Install hub"),
-		Lines: []string{
-			m.catalog.Msg("先安装 CLI 工具时，AgentFlow 会帮你检查 Node / npm / nvm，并在 Windows 上提示 WSL2。", "When installing CLI tools first, AgentFlow checks Node / npm / nvm and warns about WSL2 on Windows."),
-			m.catalog.Msg("如果 CLI 已经存在，再进入 AgentFlow 安装分支写入规则、技能和 hooks。", "If the CLI already exists, continue into the AgentFlow install branch to write rules, skills, and hooks."),
-		},
+		Title: m.catalog.Msg("安装状态总览", "Install status overview"),
+		Lines: statusLines,
 	})
 	panels = append(panels, m.status)
 	return panels
