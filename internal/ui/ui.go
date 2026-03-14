@@ -56,6 +56,9 @@ type selectionModel struct {
 	values   []string
 	width    int
 	height   int
+
+	focusDetails bool
+	detailScroll int
 }
 
 var (
@@ -81,10 +84,18 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("238")).
 			Padding(0, 1)
+	focusedListPanelStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("81")).
+				Padding(0, 1)
 	detailPanelStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("63")).
 				Padding(0, 1)
+	focusedDetailPanelStyle = lipgloss.NewStyle().
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(lipgloss.Color("81")).
+					Padding(0, 1)
 	rowStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("252"))
 	selectedRowStyle = lipgloss.NewStyle().
@@ -297,12 +308,18 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		switch {
 		case value.Button == tea.MouseButtonWheelUp || value.Type == tea.MouseWheelUp:
-			if m.cursor > 0 {
+			if m.focusDetails {
+				m.detailScroll--
+			} else if m.cursor > 0 {
 				m.cursor--
+				m.detailScroll = 0
 			}
 		case value.Button == tea.MouseButtonWheelDown || value.Type == tea.MouseWheelDown:
-			if m.cursor < len(m.options)-1 {
+			if m.focusDetails {
+				m.detailScroll++
+			} else if m.cursor < len(m.options)-1 {
 				m.cursor++
+				m.detailScroll = 0
 			}
 		}
 	case tea.KeyMsg:
@@ -313,29 +330,59 @@ func (m selectionModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEsc:
 			m.canceled = true
 			return m, tea.Quit
+		case tea.KeyLeft:
+			m.focusDetails = false
+		case tea.KeyRight:
+			m.focusDetails = true
+		case tea.KeyTab:
+			m.focusDetails = !m.focusDetails
 		case tea.KeyUp:
-			if m.cursor > 0 {
+			if m.focusDetails {
+				m.detailScroll--
+			} else if m.cursor > 0 {
 				m.cursor--
+				m.detailScroll = 0
 			}
 		case tea.KeyDown:
-			if m.cursor < len(m.options)-1 {
+			if m.focusDetails {
+				m.detailScroll++
+			} else if m.cursor < len(m.options)-1 {
 				m.cursor++
+				m.detailScroll = 0
 			}
 		case tea.KeyPgUp:
-			m.cursor -= 5
-			if m.cursor < 0 {
-				m.cursor = 0
+			if m.focusDetails {
+				m.detailScroll -= 5
+			} else {
+				m.cursor -= 5
+				if m.cursor < 0 {
+					m.cursor = 0
+				}
+				m.detailScroll = 0
 			}
 		case tea.KeyPgDown:
-			m.cursor += 5
-			if m.cursor > len(m.options)-1 {
-				m.cursor = len(m.options) - 1
+			if m.focusDetails {
+				m.detailScroll += 5
+			} else {
+				m.cursor += 5
+				if m.cursor > len(m.options)-1 {
+					m.cursor = len(m.options) - 1
+				}
+				m.detailScroll = 0
 			}
 		case tea.KeyHome:
-			m.cursor = 0
+			if m.focusDetails {
+				m.detailScroll = 0
+			} else {
+				m.cursor = 0
+				m.detailScroll = 0
+			}
 		case tea.KeyEnd:
-			if len(m.options) > 0 {
+			if m.focusDetails {
+				m.detailScroll = 1 << 30
+			} else if len(m.options) > 0 {
 				m.cursor = len(m.options) - 1
+				m.detailScroll = 0
 			}
 		case tea.KeySpace:
 			if m.multi && len(m.options) > 0 {
@@ -438,8 +485,12 @@ func (m selectionModel) renderBody(contentWidth, bodyHeight int) string {
 }
 
 func (m selectionModel) renderList(width, height int) string {
-	innerWidth := max(8, width-listPanelStyle.GetHorizontalFrameSize())
-	visibleRows := max(1, height-listPanelStyle.GetVerticalFrameSize())
+	panelStyle := listPanelStyle
+	if !m.focusDetails {
+		panelStyle = focusedListPanelStyle
+	}
+	innerWidth := max(8, width-panelStyle.GetHorizontalFrameSize())
+	visibleRows := max(1, height-panelStyle.GetVerticalFrameSize())
 	start, end := m.visibleRange(visibleRows)
 
 	rows := make([]string, 0, end-start)
@@ -451,7 +502,7 @@ func (m selectionModel) renderList(width, height int) string {
 	}
 
 	content := strings.Join(rows, "\n")
-	return lipgloss.NewStyle().Width(width).Height(height).Render(listPanelStyle.Width(innerWidth).Render(content))
+	return lipgloss.NewStyle().Width(width).Height(height).Render(panelStyle.Width(innerWidth).Render(content))
 }
 
 func (m selectionModel) renderRow(index int, option Option, width int) string {
@@ -495,17 +546,21 @@ func (m selectionModel) renderRow(index int, option Option, width int) string {
 }
 
 func (m selectionModel) renderDetails(width, height int) string {
-	innerWidth := max(8, width-detailPanelStyle.GetHorizontalFrameSize())
-	visibleRows := max(1, height-detailPanelStyle.GetVerticalFrameSize())
+	panelStyle := detailPanelStyle
+	if m.focusDetails {
+		panelStyle = focusedDetailPanelStyle
+	}
+	innerWidth := max(8, width-panelStyle.GetHorizontalFrameSize())
+	visibleRows := max(1, height-panelStyle.GetVerticalFrameSize())
 
 	lines := m.detailLines(innerWidth)
-	lines = clipLines(lines, visibleRows)
+	lines = applyScroll(lines, m.detailScroll, visibleRows)
 	if len(lines) == 0 {
-		lines = []string{mutedTextStyle.Render(m.catalog.Msg("这里会显示当前动作的详情。", "Current action details appear here."))}
+		lines = []string{mutedTextStyle.Render(m.catalog.Msg("这里会显示当前动作的详情。按 → 或 Tab 聚焦后可滚动。", "Current action details appear here. Press → or Tab to focus and scroll."))}
 	}
 
 	content := strings.Join(lines, "\n")
-	return lipgloss.NewStyle().Width(width).Height(height).Render(detailPanelStyle.Width(innerWidth).Render(content))
+	return lipgloss.NewStyle().Width(width).Height(height).Render(panelStyle.Width(innerWidth).Render(content))
 }
 
 func (m selectionModel) detailLines(width int) []string {
@@ -556,6 +611,10 @@ func (m selectionModel) renderFooter(contentWidth int) string {
 	controls := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		hintBadgeStyle.Render("↑/↓"),
+		" ",
+		hintBadgeStyle.Render("←/→"),
+		" ",
+		hintBadgeStyle.Render("Tab"),
 		" ",
 		hintBadgeStyle.Render("Enter"),
 		" ",
@@ -673,6 +732,33 @@ func clipLines(lines []string, limit int) []string {
 	clipped := append([]string{}, lines[:limit]...)
 	clipped[limit-1] = mutedTextStyle.Render("…")
 	return clipped
+}
+
+func applyScroll(lines []string, scroll int, limit int) []string {
+	if limit <= 0 || len(lines) == 0 {
+		return nil
+	}
+	if scroll < 0 {
+		scroll = 0
+	}
+	maxScroll := max(0, len(lines)-limit)
+	if scroll > maxScroll {
+		scroll = maxScroll
+	}
+	if len(lines) <= limit {
+		return lines
+	}
+
+	window := append([]string{}, lines[scroll:scroll+limit]...)
+	hasAbove := scroll > 0
+	hasBelow := scroll < maxScroll
+	if hasAbove {
+		window[0] = mutedTextStyle.Render("↑")
+	}
+	if hasBelow {
+		window[len(window)-1] = mutedTextStyle.Render("↓")
+	}
+	return window
 }
 
 func clampBlockHeight(content string, height int) string {

@@ -190,6 +190,76 @@ func TestFlowMouseWheelMovesMainCursor(t *testing.T) {
 	}
 }
 
+func TestFlowSelectionForCurrentScreenPropagatesDetailFocusAndScroll(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+	})
+	model.focusDetails = true
+	model.detailScroll = 7
+
+	screen := model.selectionForCurrentScreen()
+	if !screen.focusDetails {
+		t.Fatal("expected selection model to receive focusDetails=true")
+	}
+	if screen.detailScroll != 7 {
+		t.Fatalf("expected selection model to receive detailScroll=7, got %d", screen.detailScroll)
+	}
+}
+
+func TestFlowDetailScrollUsesArrowKeysWhenDetailHasFocus(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+	})
+	model.mainCursor = 2
+	model.focusDetails = true
+	model.detailScroll = 0
+
+	next, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = next.(interactiveFlowModel)
+	if model.mainCursor != 2 {
+		t.Fatalf("expected down arrow to keep cursor when detail focused, got %d", model.mainCursor)
+	}
+	if model.detailScroll != 1 {
+		t.Fatalf("expected down arrow to scroll detail when focused, got %d", model.detailScroll)
+	}
+}
+
+func TestFlowDetailScrollUsesMouseWheelWhenDetailHasFocus(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+	})
+	model.mainCursor = 1
+	model.focusDetails = true
+	model.detailScroll = 0
+
+	next, _ := model.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Type: tea.MouseWheelDown})
+	model = next.(interactiveFlowModel)
+	if model.mainCursor != 1 {
+		t.Fatalf("expected mouse wheel not to move cursor when detail focused, got %d", model.mainCursor)
+	}
+	if model.detailScroll != 1 {
+		t.Fatalf("expected mouse wheel down to scroll detail when focused, got %d", model.detailScroll)
+	}
+}
+
+func TestFlowCursorChangeResetsDetailScroll(t *testing.T) {
+	model := newTestInteractiveFlowModel(InteractiveCallbacks{
+		Status: func() Panel { return Panel{Title: "Environment"} },
+	})
+	model.mainCursor = 0
+	model.focusDetails = false
+	model.detailScroll = 5
+
+	next, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = next.(interactiveFlowModel)
+	if model.mainCursor != 1 {
+		t.Fatalf("expected down arrow to move cursor to 1, got %d", model.mainCursor)
+	}
+	if model.detailScroll != 0 {
+		t.Fatalf("expected cursor change to reset detail scroll, got %d", model.detailScroll)
+	}
+}
+
 func TestFlowUpdateActionRefreshesVersionAndNotice(t *testing.T) {
 	model := newTestInteractiveFlowModel(InteractiveCallbacks{
 		Status: func() Panel {

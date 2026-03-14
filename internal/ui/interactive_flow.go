@@ -96,9 +96,11 @@ type interactiveFlowModel struct {
 	width  int
 	height int
 
-	screen flowScreen
-	busy   bool
-	spin   int
+	screen       flowScreen
+	busy         bool
+	spin         int
+	focusDetails bool
+	detailScroll int
 
 	mainOptions            []Option
 	installHubOptions      []Option
@@ -142,6 +144,11 @@ type interactiveFlowModel struct {
 	notice                  *Panel
 	status                  Panel
 	bootstrapDetail         *Panel
+}
+
+func (m *interactiveFlowModel) resetDetailFocus() {
+	m.focusDetails = false
+	m.detailScroll = 0
 }
 
 func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks InteractiveCallbacks, output io.Writer) error {
@@ -307,6 +314,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = value.notice
 			}
 			m.screen = flowScreenMCPActions
+			m.resetDetailFocus()
 			m.mcpInstallOptions = nil
 			m.mcpRemoveOptions = nil
 		case flowActionSkillList, flowActionSkillInstall, flowActionSkillUninstall:
@@ -314,6 +322,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = value.notice
 			}
 			m.screen = flowScreenSkillActions
+			m.resetDetailFocus()
 			m.skillInstallOptions = nil
 			m.skillUninstallOptions = nil
 		case flowActionBootstrapAuto:
@@ -326,6 +335,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.refreshBootstrapDetail()
 		case flowActionInstall, flowActionUninstall, flowActionUninstallCLI, flowActionUpdate, flowActionClean:
 			m.screen = flowScreenMain
+			m.resetDetailFocus()
 			m.installOptions = nil
 			m.uninstallOptions = nil
 			m.uninstallCLIMode = false
@@ -341,9 +351,17 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch {
 		case value.Button == tea.MouseButtonWheelUp || value.Type == tea.MouseWheelUp:
-			m.moveCursor(-1)
+			if m.focusDetails {
+				m.detailScroll--
+			} else {
+				m.moveCursor(-1)
+			}
 		case value.Button == tea.MouseButtonWheelDown || value.Type == tea.MouseWheelDown:
-			m.moveCursor(1)
+			if m.focusDetails {
+				m.detailScroll++
+			} else {
+				m.moveCursor(1)
+			}
 		}
 		return m, nil
 	case tea.KeyMsg:
@@ -366,23 +384,56 @@ func (m interactiveFlowModel) View() string {
 
 func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key.Type {
+	case tea.KeyLeft:
+		m.focusDetails = false
+		return m, nil
+	case tea.KeyRight:
+		m.focusDetails = true
+		return m, nil
+	case tea.KeyTab:
+		m.focusDetails = !m.focusDetails
+		return m, nil
 	case tea.KeyUp:
-		m.moveCursor(-1)
+		if m.focusDetails {
+			m.detailScroll--
+		} else {
+			m.moveCursor(-1)
+		}
 		return m, nil
 	case tea.KeyDown:
-		m.moveCursor(1)
+		if m.focusDetails {
+			m.detailScroll++
+		} else {
+			m.moveCursor(1)
+		}
 		return m, nil
 	case tea.KeyPgUp:
-		m.moveCursor(-5)
+		if m.focusDetails {
+			m.detailScroll -= 5
+		} else {
+			m.moveCursor(-5)
+		}
 		return m, nil
 	case tea.KeyPgDown:
-		m.moveCursor(5)
+		if m.focusDetails {
+			m.detailScroll += 5
+		} else {
+			m.moveCursor(5)
+		}
 		return m, nil
 	case tea.KeyHome:
-		m.setCursor(0)
+		if m.focusDetails {
+			m.detailScroll = 0
+		} else {
+			m.setCursor(0)
+		}
 		return m, nil
 	case tea.KeyEnd:
-		m.setCursor(m.currentOptionsLen() - 1)
+		if m.focusDetails {
+			m.detailScroll = 1 << 30
+		} else {
+			m.setCursor(m.currentOptionsLen() - 1)
+		}
 		return m, nil
 	case tea.KeySpace:
 		if m.screen == flowScreenInstallTargets {
@@ -393,8 +444,12 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyEsc:
+		m.focusDetails = false
+		m.detailScroll = 0
 		return m.handleBack()
 	case tea.KeyEnter:
+		m.focusDetails = false
+		m.detailScroll = 0
 		return m.handleEnter()
 	case tea.KeyRunes:
 		if key.String() == " " {
@@ -779,11 +834,12 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	if cursor < 0 {
 		cursor = 0
 	}
+	previousCursor := m.currentCursor()
 	switch m.screen {
 	case flowScreenMain:
 		if len(m.mainOptions) == 0 {
 			m.mainCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.mainOptions)-1 {
 			cursor = len(m.mainOptions) - 1
@@ -792,7 +848,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenInstallHub:
 		if len(m.installHubOptions) == 0 {
 			m.installHubCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.installHubOptions)-1 {
 			cursor = len(m.installHubOptions) - 1
@@ -801,7 +857,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenMCPTargets:
 		if len(m.mcpTargets) == 0 {
 			m.mcpTargetCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.mcpTargets)-1 {
 			cursor = len(m.mcpTargets) - 1
@@ -811,7 +867,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenMCPActions:
 		if len(m.mcpActions) == 0 {
 			m.mcpActionCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.mcpActions)-1 {
 			cursor = len(m.mcpActions) - 1
@@ -820,7 +876,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenMCPInstall:
 		if len(m.mcpInstallOptions) == 0 {
 			m.mcpInstallCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.mcpInstallOptions)-1 {
 			cursor = len(m.mcpInstallOptions) - 1
@@ -829,7 +885,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenMCPRemove:
 		if len(m.mcpRemoveOptions) == 0 {
 			m.mcpRemoveCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.mcpRemoveOptions)-1 {
 			cursor = len(m.mcpRemoveOptions) - 1
@@ -838,7 +894,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenSkillTargets:
 		if len(m.skillTargets) == 0 {
 			m.skillTargetCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.skillTargets)-1 {
 			cursor = len(m.skillTargets) - 1
@@ -848,7 +904,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenSkillActions:
 		if len(m.skillActions) == 0 {
 			m.skillActionCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.skillActions)-1 {
 			cursor = len(m.skillActions) - 1
@@ -857,7 +913,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenSkillInstall:
 		if len(m.skillInstallOptions) == 0 {
 			m.skillInstallCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.skillInstallOptions)-1 {
 			cursor = len(m.skillInstallOptions) - 1
@@ -866,7 +922,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenSkillUninstall:
 		if len(m.skillUninstallOptions) == 0 {
 			m.skillUninstallCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.skillUninstallOptions)-1 {
 			cursor = len(m.skillUninstallOptions) - 1
@@ -875,7 +931,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenBootstrapTargets:
 		if len(m.bootstrapOptions) == 0 {
 			m.bootstrapCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.bootstrapOptions)-1 {
 			cursor = len(m.bootstrapOptions) - 1
@@ -886,7 +942,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenBootstrapActions:
 		if len(m.bootstrapActionOptions) == 0 {
 			m.bootstrapActionCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.bootstrapActionOptions)-1 {
 			cursor = len(m.bootstrapActionOptions) - 1
@@ -895,7 +951,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenProfile:
 		if len(m.profileOptions) == 0 {
 			m.profileCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.profileOptions)-1 {
 			cursor = len(m.profileOptions) - 1
@@ -904,7 +960,7 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenInstallTargets:
 		if len(m.installOptions) == 0 {
 			m.installCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.installOptions)-1 {
 			cursor = len(m.installOptions) - 1
@@ -913,12 +969,16 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 	case flowScreenUninstallTargets:
 		if len(m.uninstallOptions) == 0 {
 			m.uninstallCursor = 0
-			return
+			break
 		}
 		if cursor > len(m.uninstallOptions)-1 {
 			cursor = len(m.uninstallOptions) - 1
 		}
 		m.uninstallCursor = cursor
+	}
+
+	if m.currentCursor() != previousCursor {
+		m.detailScroll = 0
 	}
 }
 
@@ -1156,6 +1216,8 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		width:   m.width,
 		height:  m.height,
 	}
+	model.focusDetails = m.focusDetails
+	model.detailScroll = m.detailScroll
 
 	switch m.screen {
 	case flowScreenInstallHub:
