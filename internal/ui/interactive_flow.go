@@ -136,6 +136,7 @@ type interactiveFlowModel struct {
 	installOptions         []Option
 	uninstallOptions       []Option
 	uninstallCLIMode       bool
+	projectInstallMode     bool
 
 	mainCursor               int
 	installHubCursor         int
@@ -728,13 +729,22 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 	case flowScreenMCPInstall, flowScreenMCPRemove:
 		m.screen = flowScreenMCPActions
 	case flowScreenSkillTargets:
-		m.screen = flowScreenMain
+		if m.projectInstallMode {
+			m.projectInstallMode = false
+			m.screen = flowScreenInstallHub
+		} else {
+			m.screen = flowScreenMain
+		}
 	case flowScreenSkillScope:
 		m.screen = flowScreenSkillTargets
 	case flowScreenSkillProjectActions:
 		m.screen = flowScreenSkillScope
 	case flowScreenSkillProjectProfile:
-		m.screen = flowScreenSkillProjectActions
+		if m.projectInstallMode {
+			m.screen = flowScreenSkillTargets
+		} else {
+			m.screen = flowScreenSkillProjectActions
+		}
 	case flowScreenSkillActions:
 		m.screen = flowScreenSkillScope
 	case flowScreenSkillInstall, flowScreenSkillUninstall:
@@ -919,6 +929,14 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.selectedSkillTarget = m.skillTargets[m.skillTargetCursor].Value
+		if m.projectInstallMode {
+			// Project install mode: skip scope selection, go directly to profile.
+			m.screen = flowScreenSkillProjectProfile
+			m.notice = nil
+			m.focusDetails = false
+			m.detailScroll = 0
+			return m, nil
+		}
 		m.skillScopeOptions = m.skillScopeOptionsList()
 		m.skillScopeCursor = 0
 		if len(m.skillScopeOptions) > 0 {
@@ -1073,12 +1091,14 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 				})
 				return m, nil
 			}
+			m.projectInstallMode = true
+			m.screen = flowScreenSkillTargets
+			m.skillTargetCursor = 0
 			m.selectedSkillTarget = m.skillTargets[0].Value
-			m.screen = flowScreenSkillProjectProfile
 			m.notice = nil
 			m.focusDetails = false
 			m.detailScroll = 0
-			return m, nil
+			return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 		}
 	case flowScreenBootstrapTargets:
 		if len(m.bootstrapOptions) == 0 {
