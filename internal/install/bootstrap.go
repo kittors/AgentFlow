@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/kittors/AgentFlow/internal/debuglog"
 	"github.com/kittors/AgentFlow/internal/targets"
@@ -138,13 +139,21 @@ func (i *Installer) DetectTargetStatuses() []TargetStatus {
 	defer done()
 	runtimeStatus := i.CachedRuntimeStatus()
 	agentflowInstalled := sliceToStatusSet(i.DetectInstalledTargets())
-	statuses := make([]TargetStatus, 0, len(targets.Names()))
-	for _, name := range targets.Names() {
-		target := targets.All[name]
-		status := i.detectTargetStatusWith(target, runtimeStatus)
-		status.AgentFlowInstalled = agentflowInstalled[name]
-		statuses = append(statuses, status)
+
+	names := targets.Names()
+	statuses := make([]TargetStatus, len(names))
+	var wg sync.WaitGroup
+	for idx, name := range names {
+		wg.Add(1)
+		go func(idx int, name string) {
+			defer wg.Done()
+			target := targets.All[name]
+			status := i.detectTargetStatusWith(target, runtimeStatus)
+			status.AgentFlowInstalled = agentflowInstalled[name]
+			statuses[idx] = status
+		}(idx, name)
 	}
+	wg.Wait()
 	return statuses
 }
 
