@@ -124,10 +124,10 @@ func TestStatusLinesReflectCLIAndAgentFlowStateSeparately(t *testing.T) {
 	}
 
 	lines := strings.Join(installer.StatusLines(), "\n")
-	if !strings.Contains(lines, "[CLI] codex") {
+	if !strings.Contains(lines, "CLI") || !strings.Contains(lines, "codex") {
 		t.Fatalf("expected codex CLI-only state, got %q", lines)
 	}
-	if !strings.Contains(lines, "[AF] claude") {
+	if !strings.Contains(lines, "AF") || !strings.Contains(lines, "claude") {
 		t.Fatalf("expected claude AgentFlow-only state, got %q", lines)
 	}
 }

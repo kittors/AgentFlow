@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	agentflowassets "github.com/kittors/AgentFlow"
 	"github.com/kittors/AgentFlow/internal/config"
 	"github.com/kittors/AgentFlow/internal/i18n"
@@ -369,6 +371,15 @@ func (i *Installer) Clean() (int, error) {
 	return cleaned, nil
 }
 
+// Status badge styles.
+var (
+	statusOK   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))  // green
+	statusAF   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214")) // orange/yellow
+	statusCLI  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81"))  // cyan
+	statusNone = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))            // dark gray
+	legendDim  = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))            // muted
+)
+
 func (i *Installer) StatusLines() []string {
 	lines := []string{
 		i.Catalog.Msg("CLI 状态:", "CLI status:"),
@@ -376,15 +387,24 @@ func (i *Installer) StatusLines() []string {
 	for _, status := range i.DetectTargetStatuses() {
 		switch {
 		case status.CLIInstalled && status.AgentFlowInstalled:
-			lines = append(lines, fmt.Sprintf("  [OK] %s", status.Target.Name))
+			lines = append(lines, fmt.Sprintf("  %s %s", statusOK.Render("✔ OK"), status.Target.Name))
 		case status.CLIInstalled:
-			lines = append(lines, fmt.Sprintf("  [CLI] %s", status.Target.Name))
+			lines = append(lines, fmt.Sprintf("  %s %s", statusCLI.Render("● CLI"), status.Target.Name))
 		case status.AgentFlowInstalled:
-			lines = append(lines, fmt.Sprintf("  [AF] %s", status.Target.Name))
+			lines = append(lines, fmt.Sprintf("  %s %s",
+				statusAF.Render("▲ "+i.Catalog.Msg("仅AF", "AF only")),
+				status.Target.Name))
 		default:
-			lines = append(lines, fmt.Sprintf("  [--] %s", status.Target.Name))
+			lines = append(lines, fmt.Sprintf("  %s %s", statusNone.Render("○ --"), status.Target.Name))
 		}
 	}
+	lines = append(lines, "")
+	lines = append(lines, legendDim.Render(
+		i.Catalog.Msg(
+			"✔ CLI+AF 就绪 │ ● 仅CLI │ ▲ 仅AgentFlow规则 │ ○ 未安装",
+			"✔ CLI+AF ready │ ● CLI only │ ▲ AF rules only │ ○ not installed",
+		),
+	))
 	return lines
 }
 
