@@ -136,6 +136,8 @@ type interactiveFlowModel struct {
 	screen         flowScreen
 	busy           bool
 	spin           int
+	activeAction   flowAction // which action owns the current busy state
+	initLoading    bool       // true while Init's refreshStatusCmd is in flight
 	focusDetails   bool
 	detailScroll   int
 	updateProgress *updateProgressState // shared progress polled by tick
@@ -348,6 +350,8 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 		callbacks:   callbacks,
 		screen:      flowScreenMain,
 		projectRoot: wd,
+		busy:        true, // spinner shows immediately while Init loads status
+		initLoading: true, // tracks that Init's refreshStatusCmd is in flight
 		status: Panel{
 			Title: catalog.Msg("环境状态", "Environment"),
 			Lines: []string{catalog.Msg("正在加载状态…", "Loading status...")},
@@ -472,8 +476,9 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 }
 
 func (m interactiveFlowModel) Init() tea.Cmd {
-	// Enter busy state immediately so the spinner shows while status loads.
-	m.busy = true
+	// NOTE: Init() has a value receiver so setting m.busy here would be lost.
+	// Instead we set initLoading=true in the struct literal (NewInteractiveFlow)
+	// and handle it via flowResultMsg / flowTickMsg.
 	return tea.Batch(m.refreshStatusCmd(false), busyTickCmd())
 }
 
@@ -484,14 +489,28 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = value.Height
 		return m, nil
 	case flowTickMsg:
-		if !m.busy {
+		// Keep the spinner alive while busy OR while init is loading.
+		if !m.busy && !m.initLoading {
 			return m, nil
 		}
 		m.spin = (m.spin + 1) % len(spinnerFrames)
 		return m, busyTickCmd()
 	case flowResultMsg:
-		m.busy = false
-		m.spin = 0
+		// Only clear busy state if this result matches the active action,
+		// preventing a stale init-status result from killing an update spinner.
+		if value.action == flowActionRefreshStatus && m.initLoading {
+			m.initLoading = false
+			// If no other action is running, also clear busy.
+			if m.activeAction == flowActionRefreshStatus || m.activeAction == 0 {
+				m.busy = false
+				m.spin = 0
+			}
+		} else if value.action == m.activeAction {
+			m.busy = false
+			m.spin = 0
+			m.activeAction = 0
+		}
+		// Always apply data from the result regardless of busy state.
 		if strings.TrimSpace(value.version) != "" {
 			m.version = value.version
 		}
@@ -1400,6 +1419,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 func (m interactiveFlowModel) startBusy(action flowAction, message string) (tea.Model, tea.Cmd) {
 	m.busy = true
 	m.spin = 0
+	m.activeAction = action
 	if action == flowActionUpdate {
 		m.updateProgress = &updateProgressState{percent: -1}
 	} else {
