@@ -2765,4 +2765,4 @@ func busyTickCmd() tea.Cmd {
 	})
 }
 
-var spinnerFrames = []string{"·", "••", "•••"}
+var spinnerFrames = []string{"◐", "◓", "◑", "◒"}
