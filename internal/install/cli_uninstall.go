@@ -154,12 +154,11 @@ func (i *Installer) runNpmUninstall(target targets.Target, runtimeStatus Runtime
 		return nil, fmt.Errorf("missing npm package for %s", target.Name)
 	}
 
+	// Shell snippet that ensures fnm or nvm is loaded before running npm.
+	envSetup := nodeManagerSetup()
+
 	if runtimeStatus.Platform == platformWindows && scope == "wsl" && !runtimeStatus.InWSL {
-		script := fmt.Sprintf(`set -e
-export NVM_DIR="$HOME/.nvm"
-if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; fi
-npm uninstall -g %s
-`, shellLiteral(target.NPMPackage))
+		script := fmt.Sprintf("set -e\n%s\nnpm uninstall -g %s\n", envSetup, shellLiteral(target.NPMPackage))
 		return runCombined("wsl.exe", "bash", "-lc", script)
 	}
 
@@ -172,10 +171,21 @@ npm uninstall -g %s
 		return output, nil
 	}
 
-	script := fmt.Sprintf(`set -e
-export NVM_DIR="$HOME/.nvm"
-if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; fi
-npm uninstall -g %s
-`, shellLiteral(target.NPMPackage))
+	script := fmt.Sprintf("set -e\n%s\nnpm uninstall -g %s\n", envSetup, shellLiteral(target.NPMPackage))
 	return runCombined("bash", "-lc", script)
+}
+
+// nodeManagerSetup returns a shell snippet that ensures the correct Node.js
+// environment is active, supporting both fnm and nvm. fnm is checked first
+// because on systems where both are installed, fnm is typically the primary.
+func nodeManagerSetup() string {
+	return `# Try fnm first (Fast Node Manager)
+if command -v fnm >/dev/null 2>&1; then
+  eval "$(fnm env)" >/dev/null 2>&1
+elif [ -s "$HOME/.local/share/fnm/fnm" ]; then
+  eval "$("$HOME/.local/share/fnm/fnm" env)" >/dev/null 2>&1
+fi
+# Fall back to nvm
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; fi`
 }

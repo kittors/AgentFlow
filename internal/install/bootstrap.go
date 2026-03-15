@@ -453,25 +453,41 @@ func (i *Installer) runBootstrapScript(target targets.Target, runtimeStatus Runt
 	if target.MinNodeMajor > 0 {
 		nodeInstall = fmt.Sprintf("nvm install %d && nvm use %d", target.MinNodeMajor, target.MinNodeMajor)
 	}
+
+	// The script first tries fnm; if fnm is available and npm works, it skips nvm entirely.
+	// Otherwise it falls back to the nvm install-and-source flow.
 	script := fmt.Sprintf(`set -e
-export NVM_DIR="$HOME/.nvm"
-if [ ! -s "$NVM_DIR/nvm.sh" ]; then
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL %s | bash
-  elif command -v wget >/dev/null 2>&1; then
-    wget -qO- %s | bash
-  else
-    echo "AgentFlow: curl or wget is required to install nvm." >&2
-    exit 11
-  fi
+# Try fnm first (Fast Node Manager)
+USE_FNM=0
+if command -v fnm >/dev/null 2>&1; then
+  eval "$(fnm env)" >/dev/null 2>&1 && USE_FNM=1
+elif [ -s "$HOME/.local/share/fnm/fnm" ]; then
+  eval "$("$HOME/.local/share/fnm/fnm" env)" >/dev/null 2>&1 && USE_FNM=1
 fi
-. "$NVM_DIR/nvm.sh"
-%s
-npm install -g %s
+
+if [ "$USE_FNM" = "1" ] && command -v npm >/dev/null 2>&1; then
+  npm install -g %s
+else
+  # Fall back to nvm
+  export NVM_DIR="$HOME/.nvm"
+  if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL %s | bash
+    elif command -v wget >/dev/null 2>&1; then
+      wget -qO- %s | bash
+    else
+      echo "AgentFlow: curl or wget is required to install nvm." >&2
+      exit 11
+    fi
+  fi
+  . "$NVM_DIR/nvm.sh"
+  %s
+  npm install -g %s
+fi
 command -v %s >/dev/null 2>&1
 node --version
 npm --version
-`, shellLiteral(nvmInstallScriptURL), shellLiteral(nvmInstallScriptURL), nodeInstall, shellLiteral(target.NPMPackage), shellLiteral(target.Command))
+`, shellLiteral(target.NPMPackage), shellLiteral(nvmInstallScriptURL), shellLiteral(nvmInstallScriptURL), nodeInstall, shellLiteral(target.NPMPackage), shellLiteral(target.Command))
 
 	switch runtimeStatus.Platform {
 	case platformWindows:
