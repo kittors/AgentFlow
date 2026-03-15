@@ -154,12 +154,13 @@ func (i *Installer) runNpmUninstall(target targets.Target, runtimeStatus Runtime
 		return nil, fmt.Errorf("missing npm package for %s", target.Name)
 	}
 
-	// Shell snippet that ensures fnm or nvm is loaded before running npm.
-	envSetup := nodeManagerSetup()
+	// Build a script that tries npm uninstall from BOTH fnm and nvm environments.
+	// On systems with both node managers, packages may be installed under either
+	// or both. A single `npm uninstall -g` only affects the active npm's prefix.
+	uninstallScript := nodeManagerUninstallScript(target.NPMPackage)
 
 	if runtimeStatus.Platform == platformWindows && scope == "wsl" && !runtimeStatus.InWSL {
-		script := fmt.Sprintf("set -e\n%s\nnpm uninstall -g %s\n", envSetup, shellLiteral(target.NPMPackage))
-		return runCombined("wsl.exe", "bash", "-lc", script)
+		return runCombined("wsl.exe", "bash", "-lc", uninstallScript)
 	}
 
 	if runtimeStatus.Platform == platformWindows && !runtimeStatus.InWSL {
@@ -171,8 +172,7 @@ func (i *Installer) runNpmUninstall(target targets.Target, runtimeStatus Runtime
 		return output, nil
 	}
 
-	script := fmt.Sprintf("set -e\n%s\nnpm uninstall -g %s\n", envSetup, shellLiteral(target.NPMPackage))
-	return runCombined("bash", "-lc", script)
+	return runCombined("bash", "-lc", uninstallScript)
 }
 
 // nodeManagerSetup returns a shell snippet that ensures the correct Node.js
@@ -188,4 +188,52 @@ fi
 # Fall back to nvm
 export NVM_DIR="$HOME/.nvm"
 if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; fi`
+}
+
+// nodeManagerUninstallScript returns a shell script that tries npm uninstall
+// from BOTH fnm and nvm environments. This handles the common case where a
+// user has both node managers and packages are installed under one or both.
+// The script does NOT use `set -e` because individual npm uninstall calls may
+// fail (package not found in that environment) which is expected and harmless.
+func nodeManagerUninstallScript(npmPackage string) string {
+	pkg := shellLiteral(npmPackage)
+	return fmt.Sprintf(`_AF_UNINSTALLED=0
+
+# --- Try fnm first ---
+_AF_FNM_NPM=""
+if command -v fnm >/dev/null 2>&1; then
+  eval "$(fnm env)" >/dev/null 2>&1
+  _AF_FNM_NPM="$(command -v npm 2>/dev/null || true)"
+elif [ -s "$HOME/.local/share/fnm/fnm" ]; then
+  eval "$("$HOME/.local/share/fnm/fnm" env)" >/dev/null 2>&1
+  _AF_FNM_NPM="$(command -v npm 2>/dev/null || true)"
+fi
+
+if [ -n "$_AF_FNM_NPM" ]; then
+  "$_AF_FNM_NPM" uninstall -g %s >/dev/null 2>&1 && _AF_UNINSTALLED=1 || true
+fi
+
+# --- Try nvm ---
+_AF_NVM_NPM=""
+export NVM_DIR="$HOME/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+  _AF_NVM_NPM="$(command -v npm 2>/dev/null || true)"
+fi
+
+if [ -n "$_AF_NVM_NPM" ] && [ "$_AF_NVM_NPM" != "$_AF_FNM_NPM" ]; then
+  "$_AF_NVM_NPM" uninstall -g %s >/dev/null 2>&1 && _AF_UNINSTALLED=1 || true
+fi
+
+# --- Fallback: plain npm on PATH ---
+if [ "$_AF_UNINSTALLED" = "0" ]; then
+  _AF_PATH_NPM="$(command -v npm 2>/dev/null || true)"
+  if [ -n "$_AF_PATH_NPM" ]; then
+    "$_AF_PATH_NPM" uninstall -g %s || exit 1
+  else
+    echo "npm not found" >&2
+    exit 1
+  fi
+fi
+`, pkg, pkg, pkg)
 }

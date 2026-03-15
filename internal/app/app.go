@@ -754,7 +754,7 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		default:
 			normalEnvVars[key] = value
 			// Track model env var for non-codex targets.
-			if key == "ANTHROPIC_MODEL" || key == "GEMINI_MODEL" {
+			if key == "ANTHROPIC_MODEL" || key == "GEMINI_MODEL" || key == "DASHSCOPE_MODEL" {
 				modelEnvVar = key
 				modelValue = value
 			}

@@ -29,7 +29,8 @@ func TestUninstallCLINpmUsesBashOnUnix(t *testing.T) {
 			return nil, errors.New("unexpected command")
 		}
 		script := args[len(args)-1]
-		if strings.Contains(script, "npm uninstall -g '@openai/codex'") {
+		// The new uninstall script contains the package name for both fnm and nvm attempts.
+		if strings.Contains(script, "uninstall -g '@openai/codex'") {
 			called++
 			return []byte("ok\n"), nil
 		}
@@ -83,7 +84,7 @@ func TestUninstallCLINpmUsesWSLWhenDetected(t *testing.T) {
 			switch {
 			case strings.Contains(script, "command -v 'codex'"):
 				return []byte("/usr/bin/codex\n"), nil
-			case strings.Contains(script, "npm uninstall -g '@openai/codex'"):
+			case strings.Contains(script, "uninstall -g '@openai/codex'"):
 				uninstallSeen = true
 				return []byte("ok\n"), nil
 			default:

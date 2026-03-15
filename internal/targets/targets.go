@@ -88,6 +88,7 @@ var All = map[string]Target{
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
 		APIKeyEnv:             "GEMINI_API_KEY",
+		BaseURLEnv:            "GEMINI_API_BASE_URL",
 		ModelEnv:              "GEMINI_MODEL",
 		Models: []ModelOption{
 			{Value: "gemini-2.5-pro", Label: "Gemini 2.5 Pro (推荐/Recommended)", Default: true},
@@ -108,6 +109,12 @@ var All = map[string]Target{
 		RecommendWSLOnWindows: true,
 		APIKeyEnv:             "DASHSCOPE_API_KEY",
 		BaseURLEnv:            "DASHSCOPE_BASE_URL",
+		ModelEnv:              "DASHSCOPE_MODEL",
+		Models: []ModelOption{
+			{Value: "qwen3-coder", Label: "Qwen3 Coder (推荐/Recommended)", Default: true},
+			{Value: "qwen-max", Label: "Qwen Max"},
+			{Value: "qwen-plus", Label: "Qwen Plus"},
+		},
 	},
 	"kiro": {
 		Name:                  "kiro",
