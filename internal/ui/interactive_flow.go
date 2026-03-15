@@ -345,13 +345,14 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 	wd, _ := os.Getwd()
 
 	model := interactiveFlowModel{
-		catalog:     catalog,
-		version:     version,
-		callbacks:   callbacks,
-		screen:      flowScreenMain,
-		projectRoot: wd,
-		busy:        true, // spinner shows immediately while Init loads status
-		initLoading: true, // tracks that Init's refreshStatusCmd is in flight
+		catalog:      catalog,
+		version:      version,
+		callbacks:    callbacks,
+		screen:       flowScreenMain,
+		projectRoot:  wd,
+		busy:         true,                    // spinner shows immediately while Init loads status
+		initLoading:  true,                    // tracks that Init's refreshStatusCmd is in flight
+		activeAction: flowActionRefreshStatus, // initial action for busyMessage
 		status: Panel{
 			Title: catalog.Msg("环境状态", "Environment"),
 			Lines: []string{catalog.Msg("正在加载状态…", "Loading status...")},
@@ -2626,6 +2627,7 @@ func (m interactiveFlowModel) busyPanel() Panel {
 }
 
 func (m interactiveFlowModel) busyMessage() string {
+	// For sub-screen operations, the screen itself indicates the action.
 	switch {
 	case m.screen == flowScreenMCPTargets || m.screen == flowScreenMCPActions || m.screen == flowScreenMCPInstall || m.screen == flowScreenMCPRemove:
 		return m.catalog.Msg("正在更新 MCP 配置…", "Updating MCP configuration...")
@@ -2640,15 +2642,23 @@ func (m interactiveFlowModel) busyMessage() string {
 			return m.catalog.Msg("正在卸载所选 CLI…", "Uninstalling selected CLIs...")
 		}
 		return m.catalog.Msg("正在卸载所选目标…", "Uninstalling selected targets...")
-	case m.mainOptions[m.mainCursor].Value == string(ActionUpdate):
+	}
+
+	// For main-menu-level operations, use the tracked active action
+	// (NOT the cursor position) so moving the cursor doesn't change
+	// the displayed message mid-operation.
+	switch m.activeAction {
+	case flowActionUpdate:
 		if m.updateProgress != nil {
 			return m.updateProgressMessage()
 		}
 		return m.catalog.Msg("正在检查最新版本并更新…", "Checking the latest release and updating...")
-	case m.mainOptions[m.mainCursor].Value == string(ActionClean):
+	case flowActionClean:
 		return m.catalog.Msg("正在清理缓存…", "Cleaning caches...")
-	default:
+	case flowActionRefreshStatus:
 		return m.catalog.Msg("正在刷新状态…", "Refreshing status...")
+	default:
+		return m.catalog.Msg("正在执行，请稍候…", "Working, please wait...")
 	}
 }
 
