@@ -619,31 +619,6 @@ func nodeMajor(version string) int {
 	return major
 }
 
-// EnvVarConfig describes a single environment variable to configure for a CLI.
-type EnvVarConfig struct {
-	Label  string // Human-readable label (e.g. "API Key")
-	EnvVar string // Environment variable name (e.g. "OPENAI_API_KEY")
-}
-
-// CLIConfigFields returns the environment variables that should be configured
-// after installing the given CLI target. Returns nil if no configuration is needed.
-func (i *Installer) CLIConfigFields(targetName string) []EnvVarConfig {
-	target, ok := targets.Lookup(targetName)
-	if !ok {
-		return nil
-	}
-	if target.APIKeyEnv == "" {
-		return nil
-	}
-	fields := []EnvVarConfig{
-		{Label: "API Key", EnvVar: target.APIKeyEnv},
-	}
-	if target.BaseURLEnv != "" {
-		fields = append(fields, EnvVarConfig{Label: "Base URL", EnvVar: target.BaseURLEnv})
-	}
-	return fields
-}
-
 // WriteEnvConfig writes environment variable exports to the user's shell config
 // file (~/.zshrc, ~/.bashrc, or ~/.profile). It returns descriptive lines about
 // what was written and any errors encountered.

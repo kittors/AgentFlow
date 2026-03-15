@@ -49,10 +49,13 @@ type InteractiveCallbacks struct {
 	WriteEnvConfig         func(envVars map[string]string) Panel
 }
 
-// ConfigField describes a single configurable environment variable.
+// ConfigField describes a single configurable field for a CLI.
 type ConfigField struct {
-	Label  string // e.g. "API Key"
-	EnvVar string // e.g. "OPENAI_API_KEY"
+	Label   string   // e.g. "API Key"
+	EnvVar  string   // e.g. "OPENAI_API_KEY" or "__MODEL__" for non-env fields
+	Type    string   // "text" for free-form input, "select" for option list
+	Options []string // For "select" type: available choices
+	Default string   // Default value (pre-selected for "select")
 }
 
 type flowScreen int
@@ -212,11 +215,14 @@ func (m *interactiveFlowModel) resetDetailFocus() {
 	m.detailScroll = 0
 }
 
-// configFieldState holds the editing state for a single text input field.
+// configFieldState holds the editing state for a single config field.
 type configFieldState struct {
-	Label  string // e.g. "API Key"
-	EnvVar string // e.g. "OPENAI_API_KEY"
-	Value  string // current typed value
+	Label        string   // e.g. "API Key"
+	EnvVar       string   // e.g. "OPENAI_API_KEY"
+	Value        string   // current typed value (for text type)
+	FieldType    string   // "text" or "select"
+	Options      []string // available choices (for select type)
+	OptionCursor int      // currently selected option index (for select type)
 }
 
 func normalizeIdentifier(value string) string {
@@ -603,7 +609,26 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.configTarget = m.selectedBootstrapTarget
 					m.configFields = make([]configFieldState, len(fields))
 					for idx, f := range fields {
-						m.configFields[idx] = configFieldState{Label: f.Label, EnvVar: f.EnvVar}
+						fieldType := f.Type
+						if fieldType == "" {
+							fieldType = "text"
+						}
+						state := configFieldState{
+							Label:     f.Label,
+							EnvVar:    f.EnvVar,
+							FieldType: fieldType,
+							Options:   f.Options,
+						}
+						if fieldType == "select" && len(f.Options) > 0 {
+							state.Value = f.Default
+							for i, opt := range f.Options {
+								if opt == f.Default {
+									state.OptionCursor = i
+									break
+								}
+							}
+						}
+						m.configFields[idx] = state
 					}
 					m.configFieldCursor = 0
 					m.configEditing = true
@@ -926,17 +951,51 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 			m.configFieldCursor++
 		}
 		return m, nil
+	case tea.KeyLeft:
+		// For select fields: move to previous option.
+		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
+			f := &m.configFields[m.configFieldCursor]
+			if f.FieldType == "select" && len(f.Options) > 0 {
+				if f.OptionCursor > 0 {
+					f.OptionCursor--
+				} else {
+					f.OptionCursor = len(f.Options) - 1
+				}
+				f.Value = f.Options[f.OptionCursor]
+			}
+		}
+		return m, nil
+	case tea.KeyRight:
+		// For select fields: move to next option.
+		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
+			f := &m.configFields[m.configFieldCursor]
+			if f.FieldType == "select" && len(f.Options) > 0 {
+				if f.OptionCursor < len(f.Options)-1 {
+					f.OptionCursor++
+				} else {
+					f.OptionCursor = 0
+				}
+				f.Value = f.Options[f.OptionCursor]
+			}
+		}
+		return m, nil
 	case tea.KeyBackspace:
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
-			v := m.configFields[m.configFieldCursor].Value
-			if len(v) > 0 {
-				m.configFields[m.configFieldCursor].Value = v[:len(v)-1]
+			f := &m.configFields[m.configFieldCursor]
+			if f.FieldType != "select" {
+				v := f.Value
+				if len(v) > 0 {
+					f.Value = v[:len(v)-1]
+				}
 			}
 		}
 		return m, nil
 	case tea.KeyRunes:
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
-			m.configFields[m.configFieldCursor].Value += key.String()
+			f := &m.configFields[m.configFieldCursor]
+			if f.FieldType != "select" {
+				f.Value += key.String()
+			}
 		}
 		return m, nil
 	}
@@ -2200,21 +2259,36 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.panels = panels
 	case flowScreenBootstrapConfig:
 		model.subtitle = fmt.Sprintf(m.catalog.Msg("配置 %s（可选，留空跳过）", "Configure %s (optional, leave empty to skip)"), m.configTarget)
-		model.hint = m.catalog.Msg("↑/↓ 切换字段，直接输入值，Enter 保存，Esc 跳过配置。", "↑/↓ to switch fields, type to enter values, Enter to save, Esc to skip.")
+		model.hint = m.catalog.Msg("↑/↓ 切换字段，文本框直接输入，选择框 ←/→ 切换，Enter 保存，Esc 跳过。", "↑/↓ fields, type for text, ←/→ for select, Enter save, Esc skip.")
 		// Build virtual options from config fields to display as a form.
 		options := make([]Option, len(m.configFields))
 		for idx, f := range m.configFields {
-			displayValue := f.Value
-			if displayValue == "" {
-				displayValue = m.catalog.Msg("(留空则使用官方默认)", "(leave empty to use official default)")
+			var displayValue string
+			if f.FieldType == "select" && len(f.Options) > 0 {
+				// Show selector with ◀ current ▶ indicator.
+				current := f.Options[f.OptionCursor]
+				if idx == m.configFieldCursor && m.configEditing {
+					displayValue = fmt.Sprintf("◀ %s ▶  (%d/%d)", current, f.OptionCursor+1, len(f.Options))
+				} else {
+					displayValue = current
+				}
+			} else {
+				displayValue = f.Value
+				if displayValue == "" {
+					displayValue = m.catalog.Msg("(留空则使用官方默认)", "(leave empty to use official default)")
+				}
+				// Show cursor indicator for editing field.
+				if idx == m.configFieldCursor && m.configEditing {
+					displayValue = f.Value + "█"
+				}
 			}
-			// Show cursor indicator for editing field.
-			if idx == m.configFieldCursor && m.configEditing {
-				displayValue = f.Value + "█"
+			labelText := f.Label
+			if f.EnvVar != "" && !strings.HasPrefix(f.EnvVar, "__") {
+				labelText = fmt.Sprintf("%s (%s)", f.Label, f.EnvVar)
 			}
 			options[idx] = Option{
 				Value:       f.EnvVar,
-				Label:       fmt.Sprintf("%s (%s)", f.Label, f.EnvVar),
+				Label:       labelText,
 				Badge:       f.Label,
 				Description: displayValue,
 			}

@@ -2,6 +2,13 @@ package targets
 
 import "sort"
 
+// ModelOption describes a selectable model for a CLI target.
+type ModelOption struct {
+	Value   string // model identifier, e.g. "claude-sonnet-4-20250514"
+	Label   string // human-readable label, e.g. "Claude Sonnet 4"
+	Default bool   // whether this is the recommended default
+}
+
 type Target struct {
 	Name                  string
 	DisplayName           string
@@ -14,8 +21,13 @@ type Target struct {
 	DocsURL               string
 	BootstrapSupported    bool
 	RecommendWSLOnWindows bool
-	APIKeyEnv             string // Environment variable for API key (empty = no config needed)
-	BaseURLEnv            string // Environment variable for custom base URL (empty = not configurable)
+	APIKeyEnv             string        // Environment variable for API key (empty = no config needed)
+	BaseURLEnv            string        // Environment variable for custom base URL (empty = not configurable)
+	ModelEnv              string        // Environment variable for model selection (empty = not configurable via env)
+	Models                []ModelOption // Available models for selection
+	// HasConfigFile indicates this CLI stores settings in a local config file
+	// (e.g. ~/.codex/config.json) and needs special handling beyond env vars.
+	HasConfigFile bool
 }
 
 var All = map[string]Target{
@@ -32,6 +44,15 @@ var All = map[string]Target{
 		RecommendWSLOnWindows: true,
 		APIKeyEnv:             "OPENAI_API_KEY",
 		BaseURLEnv:            "OPENAI_BASE_URL",
+		HasConfigFile:         true,
+		Models: []ModelOption{
+			{Value: "o4-mini", Label: "o4-mini (推荐/Recommended)", Default: true},
+			{Value: "gpt-4.1", Label: "GPT-4.1"},
+			{Value: "gpt-4.1-mini", Label: "GPT-4.1 Mini"},
+			{Value: "gpt-4o", Label: "GPT-4o"},
+			{Value: "o3", Label: "o3"},
+			{Value: "o3-mini", Label: "o3-mini"},
+		},
 	},
 	"claude": {
 		Name:                  "claude",
@@ -47,6 +68,12 @@ var All = map[string]Target{
 		RecommendWSLOnWindows: true,
 		APIKeyEnv:             "ANTHROPIC_API_KEY",
 		BaseURLEnv:            "ANTHROPIC_BASE_URL",
+		ModelEnv:              "ANTHROPIC_MODEL",
+		Models: []ModelOption{
+			{Value: "claude-sonnet-4-20250514", Label: "Claude Sonnet 4 (推荐/Recommended)", Default: true},
+			{Value: "claude-opus-4-20250514", Label: "Claude Opus 4"},
+			{Value: "claude-haiku-3.5-20241022", Label: "Claude Haiku 3.5"},
+		},
 	},
 	"gemini": {
 		Name:                  "gemini",
@@ -60,7 +87,12 @@ var All = map[string]Target{
 		DocsURL:               "https://google-gemini.github.io/gemini-cli/docs/get-started/",
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
-		APIKeyEnv:             "GOOGLE_API_KEY",
+		APIKeyEnv:             "GEMINI_API_KEY",
+		ModelEnv:              "GEMINI_MODEL",
+		Models: []ModelOption{
+			{Value: "gemini-2.5-pro", Label: "Gemini 2.5 Pro (推荐/Recommended)", Default: true},
+			{Value: "gemini-2.5-flash", Label: "Gemini 2.5 Flash"},
+		},
 	},
 	"qwen": {
 		Name:                  "qwen",

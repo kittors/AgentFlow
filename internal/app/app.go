@@ -728,19 +728,78 @@ func (a *App) cliConfigFields(target string) []ui.ConfigField {
 	}
 	result := make([]ui.ConfigField, len(fields))
 	for i, f := range fields {
-		result[i] = ui.ConfigField{Label: f.Label, EnvVar: f.EnvVar}
+		result[i] = ui.ConfigField{
+			Label:   f.Label,
+			EnvVar:  f.EnvVar,
+			Type:    f.Type,
+			Options: f.Options,
+			Default: f.Default,
+		}
 	}
 	return result
 }
 
 func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
-	lines, err := a.Installer.WriteEnvConfig(envVars)
-	if err != nil {
-		return errorPanel(a.Catalog.Msg("配置写入失败", "Config write failed"), err)
+	// Separate normal env vars from special config-file fields.
+	normalEnvVars := make(map[string]string)
+	var codexModel, codexReasoning string
+	var modelEnvVar, modelValue string
+
+	for key, value := range envVars {
+		switch key {
+		case "__MODEL__":
+			codexModel = value
+		case "__CODEX_REASONING__":
+			codexReasoning = value
+		default:
+			normalEnvVars[key] = value
+			// Track model env var for non-codex targets.
+			if key == "ANTHROPIC_MODEL" || key == "GEMINI_MODEL" {
+				modelEnvVar = key
+				modelValue = value
+			}
+		}
 	}
+
+	var allLines []string
+
+	// Write normal env vars to shell rc.
+	if len(normalEnvVars) > 0 {
+		lines, err := a.Installer.WriteEnvConfig(normalEnvVars)
+		if err != nil {
+			return errorPanel(a.Catalog.Msg("配置写入失败", "Config write failed"), err)
+		}
+		allLines = append(allLines, lines...)
+	}
+
+	// Write Codex config.json if applicable.
+	if codexModel != "" || codexReasoning != "" {
+		if err := a.Installer.WriteCodexConfig(codexModel, codexReasoning); err != nil {
+			return errorPanel(a.Catalog.Msg("Codex 配置写入失败", "Codex config write failed"), err)
+		}
+		allLines = append(allLines, "")
+		allLines = append(allLines, a.Catalog.Msg("已写入 ~/.codex/config.json:", "Written to ~/.codex/config.json:"))
+		if codexModel != "" {
+			allLines = append(allLines, fmt.Sprintf("  model: %s", codexModel))
+		}
+		if codexReasoning != "" {
+			allLines = append(allLines, fmt.Sprintf("  reasoning: %s", codexReasoning))
+		}
+	}
+
+	// Report model env var if written.
+	if modelEnvVar != "" && modelValue != "" {
+		allLines = append(allLines, "")
+		allLines = append(allLines, fmt.Sprintf(a.Catalog.Msg("默认模型已设置: %s=%s", "Default model set: %s=%s"), modelEnvVar, modelValue))
+	}
+
+	if len(allLines) == 0 {
+		allLines = []string{a.Catalog.Msg("未写入任何配置（所有字段留空）。", "No configuration written (all fields left empty).")}
+	}
+
 	return ui.Panel{
 		Title: a.Catalog.Msg("配置写入成功", "Configuration saved"),
-		Lines: lines,
+		Lines: allLines,
 	}
 }
 

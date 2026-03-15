@@ -65,6 +65,113 @@ func (i *Installer) CachedRuntimeStatus() RuntimeStatus {
 	return status
 }
 
+// EnvVarConfig describes a single environment variable to configure for a CLI.
+type EnvVarConfig struct {
+	Label   string   // Human-readable label (e.g. "API Key")
+	EnvVar  string   // Environment variable name (e.g. "OPENAI_API_KEY")
+	Type    string   // "text" for free-form input, "select" for option list
+	Options []string // For "select" type: available choices
+	Default string   // Default value (pre-selected for "select", placeholder hint for "text")
+}
+
+// CLIConfigFields returns the environment variables and settings that should
+// be configured after installing the given CLI target.
+func (i *Installer) CLIConfigFields(targetName string) []EnvVarConfig {
+	target, ok := targets.Lookup(targetName)
+	if !ok {
+		return nil
+	}
+
+	var fields []EnvVarConfig
+
+	// API Key field.
+	if target.APIKeyEnv != "" {
+		fields = append(fields, EnvVarConfig{
+			Label:  "API Key",
+			EnvVar: target.APIKeyEnv,
+			Type:   "text",
+		})
+	}
+
+	// Base URL field.
+	if target.BaseURLEnv != "" {
+		fields = append(fields, EnvVarConfig{
+			Label:  "Base URL",
+			EnvVar: target.BaseURLEnv,
+			Type:   "text",
+		})
+	}
+
+	// Model selection field.
+	if len(target.Models) > 0 {
+		envVar := target.ModelEnv
+		if envVar == "" {
+			// Codex uses config.json instead of env var, but we still
+			// present it as a selectable field for the UI.
+			envVar = "__MODEL__"
+		}
+		options := make([]string, len(target.Models))
+		defaultVal := ""
+		for idx, m := range target.Models {
+			options[idx] = m.Value
+			if m.Default {
+				defaultVal = m.Value
+			}
+		}
+		fields = append(fields, EnvVarConfig{
+			Label:   i.Catalog.Msg("默认模型", "Default Model"),
+			EnvVar:  envVar,
+			Type:    "select",
+			Options: options,
+			Default: defaultVal,
+		})
+	}
+
+	// Codex-specific: thinking/reasoning level.
+	if target.HasConfigFile && target.Name == "codex" {
+		fields = append(fields, EnvVarConfig{
+			Label:   i.Catalog.Msg("思考等级", "Thinking Level"),
+			EnvVar:  "__CODEX_REASONING__",
+			Type:    "select",
+			Options: []string{"low", "medium", "high"},
+			Default: "medium",
+		})
+	}
+
+	return fields
+}
+
+// WriteCodexConfig writes model and reasoning settings to ~/.codex/config.json.
+func (i *Installer) WriteCodexConfig(model, reasoning string) error {
+	configPath := filepath.Join(i.HomeDir, ".codex", "config.json")
+
+	var settings map[string]any
+	if data, err := os.ReadFile(configPath); err == nil {
+		_ = json.Unmarshal(data, &settings)
+	}
+	if settings == nil {
+		settings = make(map[string]any)
+	}
+
+	if model != "" {
+		settings["model"] = model
+	}
+	if reasoning != "" {
+		settings["reasoning"] = reasoning
+	}
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, data, 0o644)
+}
+
 func (i *Installer) Install(targetName, profile string) error {
 	target, ok := targets.Lookup(targetName)
 	if !ok {
