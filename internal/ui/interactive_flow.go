@@ -171,10 +171,11 @@ type interactiveFlowModel struct {
 	installHubStatusPanel  *Panel
 
 	// Bootstrap config screen state.
-	configFields      []configFieldState
-	configFieldCursor int
-	configEditing     bool
-	configTarget      string
+	configFields        []configFieldState
+	pendingConfigFields []ConfigField // cached after bootstrap; shown when user chooses "configure"
+	configFieldCursor   int
+	configEditing       bool
+	configTarget        string
 
 	mainCursor               int
 	installHubCursor         int
@@ -602,39 +603,37 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = value.notice
 			}
 			m.refreshBootstrapDetail()
-			// If CLI has configurable env vars, transition to config screen.
+			// After successful bootstrap, offer post-install choices instead
+			// of auto-entering the config screen. The user can choose to
+			// configure custom API key / Base URL / Model, or exit and use
+			// the official CLI setup flow.
+			var hasConfig bool
 			if m.callbacks.CLIConfigFields != nil {
 				fields := m.callbacks.CLIConfigFields(m.selectedBootstrapTarget)
 				if len(fields) > 0 {
-					m.configTarget = m.selectedBootstrapTarget
-					m.configFields = make([]configFieldState, len(fields))
-					for idx, f := range fields {
-						fieldType := f.Type
-						if fieldType == "" {
-							fieldType = "text"
-						}
-						state := configFieldState{
-							Label:     f.Label,
-							EnvVar:    f.EnvVar,
-							FieldType: fieldType,
-							Options:   f.Options,
-						}
-						if fieldType == "select" && len(f.Options) > 0 {
-							state.Value = f.Default
-							for i, opt := range f.Options {
-								if opt == f.Default {
-									state.OptionCursor = i
-									break
-								}
-							}
-						}
-						m.configFields[idx] = state
-					}
-					m.configFieldCursor = 0
-					m.configEditing = true
-					m.screen = flowScreenBootstrapConfig
+					m.pendingConfigFields = fields
+					hasConfig = true
 				}
 			}
+			// Replace bootstrap action options with post-install choices.
+			postOpts := make([]Option, 0, 2)
+			if hasConfig {
+				postOpts = append(postOpts, Option{
+					Value:       "configure",
+					Label:       m.catalog.Msg("自定义配置（API Key / Base URL / 模型）", "Custom configuration (API Key / Base URL / Model)"),
+					Badge:       m.catalog.Msg("配置", "CONFIG"),
+					Description: m.catalog.Msg("手动输入 API Key、Base URL、选择模型等。适用于自建网关或第三方 API 代理。", "Manually enter API Key, Base URL, and select a model. Useful for self-hosted gateways or third-party API proxies."),
+				})
+			}
+			postOpts = append(postOpts, Option{
+				Value:       "done",
+				Label:       m.catalog.Msg("完成（使用官方默认配置）", "Done (use official default configuration)"),
+				Badge:       m.catalog.Msg("完成", "DONE"),
+				Description: m.catalog.Msg("退出安装向导。您可以稍后启动 CLI 并通过官方流程完成配置。", "Exit the installer. You can launch the CLI later and complete setup via the official flow."),
+			})
+			m.bootstrapActionOptions = postOpts
+			m.bootstrapActionCursor = 0
+			m.screen = flowScreenBootstrapActions
 		case flowActionWriteEnvConfig:
 			if value.notice != nil {
 				m.notice = value.notice
@@ -1397,6 +1396,43 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.notice = panelRef(panel)
 			}
 			m.refreshBootstrapDetail()
+			return m, nil
+		case "configure":
+			// User chose to configure custom settings.
+			if len(m.pendingConfigFields) > 0 {
+				m.configTarget = m.selectedBootstrapTarget
+				m.configFields = make([]configFieldState, len(m.pendingConfigFields))
+				for idx, f := range m.pendingConfigFields {
+					fieldType := f.Type
+					if fieldType == "" {
+						fieldType = "text"
+					}
+					state := configFieldState{
+						Label:     f.Label,
+						EnvVar:    f.EnvVar,
+						FieldType: fieldType,
+						Options:   f.Options,
+					}
+					if fieldType == "select" && len(f.Options) > 0 {
+						state.Value = f.Default
+						for i, opt := range f.Options {
+							if opt == f.Default {
+								state.OptionCursor = i
+								break
+							}
+						}
+					}
+					m.configFields[idx] = state
+				}
+				m.configFieldCursor = 0
+				m.configEditing = true
+				m.screen = flowScreenBootstrapConfig
+			}
+			return m, nil
+		case "done":
+			// Return to main menu.
+			m.pendingConfigFields = nil
+			m.screen = flowScreenMain
 			return m, nil
 		}
 	case flowScreenProfile:
