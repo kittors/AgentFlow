@@ -131,11 +131,12 @@ func detectWSL() (string, bool) {
 }
 
 func (i *Installer) DetectTargetStatuses() []TargetStatus {
+	runtimeStatus := i.CachedRuntimeStatus()
 	agentflowInstalled := sliceToStatusSet(i.DetectInstalledTargets())
 	statuses := make([]TargetStatus, 0, len(targets.Names()))
 	for _, name := range targets.Names() {
 		target := targets.All[name]
-		status := i.detectTargetStatus(target)
+		status := i.detectTargetStatusWith(target, runtimeStatus)
 		status.AgentFlowInstalled = agentflowInstalled[name]
 		statuses = append(statuses, status)
 	}
@@ -172,7 +173,10 @@ func (i *Installer) DetectTargetStatus(name string) (TargetStatus, error) {
 }
 
 func (i *Installer) detectTargetStatus(target targets.Target) TargetStatus {
-	runtimeStatus := i.RuntimeStatus()
+	return i.detectTargetStatusWith(target, i.CachedRuntimeStatus())
+}
+
+func (i *Installer) detectTargetStatusWith(target targets.Target, runtimeStatus RuntimeStatus) TargetStatus {
 	configDir := filepath.Join(i.HomeDir, target.Dir)
 	status := TargetStatus{
 		Target:             target,
@@ -492,7 +496,7 @@ func (i *Installer) hasWSLCommand(command string) bool {
 }
 
 func (i *Installer) RuntimeSummaryLines() []string {
-	status := i.RuntimeStatus()
+	status := i.CachedRuntimeStatus()
 	lines := []string{
 		fmt.Sprintf(i.Catalog.Msg("运行环境: %s", "Runtime: %s"), status.runtimeLabel(i.Catalog)),
 	}

@@ -38,9 +38,10 @@ var (
 )
 
 type Installer struct {
-	Catalog i18n.Catalog
-	Stdout  io.Writer
-	HomeDir string
+	Catalog       i18n.Catalog
+	Stdout        io.Writer
+	HomeDir       string
+	cachedRuntime *RuntimeStatus // cached to avoid repeated shell invocations
 }
 
 func New(catalog i18n.Catalog, stdout io.Writer) *Installer {
@@ -50,6 +51,18 @@ func New(catalog i18n.Catalog, stdout io.Writer) *Installer {
 		Stdout:  stdout,
 		HomeDir: homeDir,
 	}
+}
+
+// CachedRuntimeStatus returns the cached RuntimeStatus, computing it once
+// on first call. This avoids spawning multiple expensive shell subprocesses
+// (node --version, npm --version, nvm detection, etc.) on every call.
+func (i *Installer) CachedRuntimeStatus() RuntimeStatus {
+	if i.cachedRuntime != nil {
+		return *i.cachedRuntime
+	}
+	status := i.RuntimeStatus()
+	i.cachedRuntime = &status
+	return status
 }
 
 func (i *Installer) Install(targetName, profile string) error {
