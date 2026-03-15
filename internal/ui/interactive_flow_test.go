@@ -406,7 +406,7 @@ func TestFlowUpdateActionRefreshesVersionAndNotice(t *testing.T) {
 		Status: func() Panel {
 			return Panel{Title: "Environment", Lines: []string{"AgentFlow v1.0.4-main.deadbee"}}
 		},
-		Update: func() (Panel, string) {
+		Update: func(progress func(stage string, percent int, info string)) (Panel, string) {
 			return Panel{
 				Title: "Update result",
 				Lines: []string{"Updated to v1.0.4-main.deadbee."},
@@ -420,7 +420,7 @@ func TestFlowUpdateActionRefreshesVersionAndNotice(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected update action to return a command")
 	}
-	notice, version := model.callbacks.Update()
+	notice, version := model.callbacks.Update(func(string, int, string) {})
 	next, _ = model.Update(flowResultMsg{
 		action:  flowActionUpdate,
 		notice:  panelRef(notice),
@@ -655,7 +655,9 @@ func newTestInteractiveFlowModel(callbacks InteractiveCallbacks) interactiveFlow
 		callbacks.Uninstall = func(targets []string) Panel { return Panel{Title: "Uninstall result"} }
 	}
 	if callbacks.Update == nil {
-		callbacks.Update = func() (Panel, string) { return Panel{Title: "Update result"}, "" }
+		callbacks.Update = func(progress func(stage string, percent int, info string)) (Panel, string) {
+			return Panel{Title: "Update result"}, ""
+		}
 	}
 	if callbacks.Clean == nil {
 		callbacks.Clean = func() Panel { return Panel{Title: "Clean result"} }

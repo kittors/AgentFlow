@@ -41,7 +41,7 @@ type InteractiveCallbacks struct {
 	Install                func(profile string, targets []string) Panel
 	Uninstall              func(targets []string) Panel
 	UninstallCLI           func(targets []string) Panel
-	Update                 func() (Panel, string)
+	Update                 func(progress func(stage string, percent int, info string)) (Panel, string)
 	Clean                  func() Panel
 	CLIConfigFields        func(target string) []ConfigField
 	WriteEnvConfig         func(envVars map[string]string) Panel
@@ -116,6 +116,13 @@ type flowResultMsg struct {
 
 type flowTickMsg struct{}
 
+// flowProgressMsg carries live progress updates from a background operation.
+type flowProgressMsg struct {
+	stage   string // e.g. "checking", "found", "downloading", "replacing"
+	percent int    // 0–100 for download, -1 for indeterminate
+	info    string // contextual data (e.g. version string)
+}
+
 type interactiveFlowModel struct {
 	catalog   i18n.Catalog
 	version   string
@@ -124,11 +131,14 @@ type interactiveFlowModel struct {
 	width  int
 	height int
 
-	screen       flowScreen
-	busy         bool
-	spin         int
-	focusDetails bool
-	detailScroll int
+	screen         flowScreen
+	busy           bool
+	spin           int
+	focusDetails   bool
+	detailScroll   int
+	updateProgress string         // live stage description during update
+	updatePercent  int            // download percentage (-1 = indeterminate)
+	updateMsgCh    <-chan tea.Msg // channel streaming progress+result during update
 
 	mainOptions            []Option
 	installHubOptions      []Option
@@ -477,6 +487,20 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.spin = (m.spin + 1) % len(spinnerFrames)
 		return m, busyTickCmd()
+	case flowProgressMsg:
+		if !m.busy {
+			return m, nil
+		}
+		m.updateProgress = value.stage
+		m.updatePercent = value.percent
+		if value.info != "" {
+			m.updateProgress = value.stage + ":" + value.info
+		}
+		// Schedule the next read from the progress channel.
+		if m.updateMsgCh != nil {
+			return m, m.listenUpdateCmd()
+		}
+		return m, nil
 	case flowResultMsg:
 		m.busy = false
 		m.spin = 0
@@ -593,6 +617,9 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = value.notice
 			}
 		case flowActionUpdate:
+			m.updateProgress = ""
+			m.updatePercent = -1
+			m.updateMsgCh = nil
 			if value.notice != nil {
 				m.notice = value.notice
 			}
@@ -911,8 +938,10 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.screen = flowScreenInstallHub
 			m.installHubCursor = 0
 			m.notice = nil
-			// Async-load the install status panel (so arrow keys stay instant).
-			return m.startBusy(flowActionInstallHubRefresh, m.catalog.Msg("正在读取安装状态…", "Loading install status..."))
+			// Do NOT start any async operation here.
+			// statusPanel() runs 13+ shell commands + network requests which blocks
+			// the TUI for many seconds. Use the already-cached m.status instead.
+			return m, nil
 		case ActionMCP:
 			if m.callbacks.MCPTargetOptions == nil {
 				m.notice = panelRef(Panel{
@@ -990,7 +1019,11 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.notice = nil
 			return m, nil
 		case ActionUpdate:
-			return m.startBusy(flowActionUpdate, m.catalog.Msg("正在检查最新版本并更新…", "Checking the latest release and updating..."))
+			m.busy = true
+			m.spin = 0
+			m.updateProgress = ""
+			m.updatePercent = -1
+			return m, tea.Batch(m.streamUpdateCmd(), busyTickCmd())
 		case ActionStatus:
 			return m.startBusy(flowActionRefreshStatus, m.catalog.Msg("正在刷新状态…", "Refreshing status..."))
 		case ActionClean:
@@ -1385,6 +1418,8 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 func (m interactiveFlowModel) startBusy(action flowAction, message string) (tea.Model, tea.Cmd) {
 	m.busy = true
 	m.spin = 0
+	m.updateProgress = ""
+	m.updatePercent = -1
 	return m, tea.Batch(m.runActionCmd(action), busyTickCmd())
 }
 
@@ -1931,7 +1966,8 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 				skillSummary: panelRef(summary),
 			}
 		case flowActionUpdate:
-			notice, version := m.callbacks.Update()
+			// This branch is now unused; update uses streamUpdateCmd instead.
+			notice, version := m.callbacks.Update(func(string, int, string) {})
 			return flowResultMsg{
 				action:  action,
 				notice:  panelRef(notice),
@@ -2589,11 +2625,97 @@ func (m interactiveFlowModel) busyMessage() string {
 		}
 		return m.catalog.Msg("正在卸载所选目标…", "Uninstalling selected targets...")
 	case m.mainOptions[m.mainCursor].Value == string(ActionUpdate):
+		if m.updateProgress != "" {
+			return m.updateProgressMessage()
+		}
 		return m.catalog.Msg("正在检查最新版本并更新…", "Checking the latest release and updating...")
 	case m.mainOptions[m.mainCursor].Value == string(ActionClean):
 		return m.catalog.Msg("正在清理缓存…", "Cleaning caches...")
 	default:
 		return m.catalog.Msg("正在刷新状态…", "Refreshing status...")
+	}
+}
+
+// updateProgressMessage renders a human-readable message from the current
+// update progress state. It translates internal stage identifiers into
+// user-friendly descriptions.
+func (m interactiveFlowModel) updateProgressMessage() string {
+	parts := strings.SplitN(m.updateProgress, ":", 2)
+	stage := parts[0]
+	info := ""
+	if len(parts) > 1 {
+		info = parts[1]
+	}
+
+	switch stage {
+	case "checking":
+		return m.catalog.Msg("正在检查最新版本…", "Checking for the latest version...")
+	case "found":
+		if info != "" {
+			return fmt.Sprintf(m.catalog.Msg("发现新版本 v%s，准备下载…", "Found new version v%s, preparing download..."), info)
+		}
+		return m.catalog.Msg("发现新版本，准备下载…", "Found new version, preparing download...")
+	case "downloading":
+		if m.updatePercent >= 0 && m.updatePercent <= 100 {
+			if info != "" {
+				return fmt.Sprintf(m.catalog.Msg("正在下载 v%s… (%d%%)", "Downloading v%s... (%d%%)"), info, m.updatePercent)
+			}
+			return fmt.Sprintf(m.catalog.Msg("正在下载… (%d%%)", "Downloading... (%d%%)"), m.updatePercent)
+		}
+		if info != "" {
+			return fmt.Sprintf(m.catalog.Msg("正在下载 v%s…", "Downloading v%s..."), info)
+		}
+		return m.catalog.Msg("正在下载…", "Downloading...")
+	case "replacing":
+		return m.catalog.Msg("正在替换二进制文件…", "Replacing binary...")
+	default:
+		return m.catalog.Msg("正在检查最新版本并更新…", "Checking the latest release and updating...")
+	}
+}
+
+// streamUpdateCmd sets up a channel-based streaming update: it spawns the
+// update goroutine, stores the message channel in the model, and returns
+// the first listenUpdateCmd so progress messages flow into the event loop.
+func (m *interactiveFlowModel) streamUpdateCmd() tea.Cmd {
+	callbacks := m.callbacks
+
+	msgCh := make(chan tea.Msg, 32)
+	m.updateMsgCh = msgCh
+
+	go func() {
+		notice, version := callbacks.Update(func(stage string, percent int, info string) {
+			select {
+			case msgCh <- flowProgressMsg{stage: stage, percent: percent, info: info}:
+			default:
+			}
+		})
+		msgCh <- flowResultMsg{
+			action:  flowActionUpdate,
+			notice:  panelRef(notice),
+			status:  callbacks.Status(),
+			version: version,
+		}
+		close(msgCh)
+	}()
+
+	return m.listenUpdateCmd()
+}
+
+// listenUpdateCmd returns a tea.Cmd that reads the next message from the
+// update channel. When Update() receives the message, it schedules another
+// listenUpdateCmd if it was a progress message, creating a chain that
+// delivers all messages until the final flowResultMsg.
+func (m interactiveFlowModel) listenUpdateCmd() tea.Cmd {
+	ch := m.updateMsgCh
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return msg
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,6 +24,12 @@ var (
 )
 
 const defaultHTTPTimeout = 2 * time.Minute
+
+// ProgressFunc is called during SelfUpdateWithProgress to report current stage.
+// stage is one of: "checking", "found", "downloading", "replacing".
+// percent is 0–100 for download progress, or -1 for indeterminate stages.
+// info carries optional contextual data (e.g. the new version string for "found").
+type ProgressFunc func(stage string, percent int, info string)
 
 type Options struct {
 	Force         bool
@@ -106,7 +113,19 @@ func (c *Checker) Check(current string, options Options) (Result, error) {
 }
 
 func (c *Checker) SelfUpdate(current string) (Result, error) {
+	return c.SelfUpdateWithProgress(current, nil)
+}
+
+// SelfUpdateWithProgress behaves like SelfUpdate but calls progress at key
+// stages so the caller (e.g. the TUI) can display live feedback.
+func (c *Checker) SelfUpdateWithProgress(current string, progress ProgressFunc) (Result, error) {
+	if progress == nil {
+		progress = func(string, int, string) {}
+	}
+
 	current = normalizeVersion(current)
+	progress("checking", -1, "")
+
 	release, err := c.fetchLatestRelease()
 	if err != nil {
 		return Result{Current: current}, err
@@ -120,6 +139,8 @@ func (c *Checker) SelfUpdate(current string) (Result, error) {
 	if !result.UpdateAvailable {
 		return result, nil
 	}
+
+	progress("found", -1, result.Latest)
 
 	assetName, err := assetNameForPlatform(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
@@ -147,7 +168,9 @@ func (c *Checker) SelfUpdate(current string) (Result, error) {
 	if runtime.GOOS == "windows" {
 		return result, errors.New("self-update on Windows is not supported yet; rerun install.ps1")
 	}
-	if err := c.downloadAndReplace(downloadURL, executable); err != nil {
+
+	progress("downloading", 0, result.Latest)
+	if err := c.downloadAndReplace(downloadURL, executable, progress, result.Latest); err != nil {
 		return result, err
 	}
 
@@ -213,7 +236,7 @@ func releaseVersion(release releasePayload) string {
 	return "unknown"
 }
 
-func (c *Checker) downloadAndReplace(downloadURL, destination string) error {
+func (c *Checker) downloadAndReplace(downloadURL, destination string, progress ProgressFunc, version string) error {
 	request, err := http.NewRequest(http.MethodGet, downloadURL, nil)
 	if err != nil {
 		return err
@@ -229,12 +252,24 @@ func (c *Checker) downloadAndReplace(downloadURL, destination string) error {
 		return errors.New(response.Status)
 	}
 
+	// Wrap the body with a progress reader when Content-Length is available.
+	var body io.Reader = response.Body
+	if progress != nil && response.ContentLength > 0 {
+		body = &progressReader{
+			reader: response.Body,
+			total:  response.ContentLength,
+			onProgress: func(percent int) {
+				progress("downloading", percent, version)
+			},
+		}
+	}
+
 	tmpPath := destination + ".tmp"
 	file, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(file, response.Body); err != nil {
+	if _, err := io.Copy(file, body); err != nil {
 		file.Close()
 		_ = os.Remove(tmpPath)
 		return err
@@ -243,6 +278,8 @@ func (c *Checker) downloadAndReplace(downloadURL, destination string) error {
 		_ = os.Remove(tmpPath)
 		return err
 	}
+
+	progress("replacing", -1, version)
 
 	mode := os.FileMode(0o755)
 	if info, err := os.Stat(destination); err == nil {
@@ -270,6 +307,32 @@ func (c *Checker) downloadAndReplace(downloadURL, destination string) error {
 	}
 	_ = os.Remove(backupPath)
 	return nil
+}
+
+// progressReader wraps an io.Reader and calls onProgress with the current
+// download percentage (0–100) whenever data is read.
+type progressReader struct {
+	reader     io.Reader
+	total      int64
+	read       int64
+	lastReport int
+	onProgress func(percent int)
+}
+
+func (r *progressReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 {
+		r.read += int64(n)
+		percent := int(math.Min(float64(r.read)*100/float64(r.total), 100))
+		// Only call back when the percentage actually changes to avoid flooding.
+		if percent != r.lastReport {
+			r.lastReport = percent
+			if r.onProgress != nil {
+				r.onProgress(percent)
+			}
+		}
+	}
+	return n, err
 }
 
 func assetNameForPlatform(goos, goarch string) (string, error) {

@@ -414,7 +414,7 @@ func (a *App) runUpdate(args []string) int {
 		a.printPanel(panel)
 		return 1
 	}
-	panel, _ := a.updatePanel()
+	panel, _ := a.updatePanel(func(string, int, string) {})
 	a.printPanel(panel)
 	if strings.Contains(strings.ToLower(panel.Title), "失败") || strings.Contains(strings.ToLower(panel.Title), "failed") {
 		return 1
@@ -422,8 +422,12 @@ func (a *App) runUpdate(args []string) int {
 	return 0
 }
 
-func (a *App) updatePanel() (ui.Panel, string) {
-	result, err := a.Checker.SelfUpdate(a.Version)
+func (a *App) updatePanel(progress func(stage string, percent int, info string)) (ui.Panel, string) {
+	result, err := a.Checker.SelfUpdateWithProgress(a.Version, func(stage string, percent int, info string) {
+		if progress != nil {
+			progress(stage, percent, info)
+		}
+	})
 	if err != nil {
 		return errorPanel(a.Catalog.Msg("更新失败", "Update failed"), err), ""
 	}
