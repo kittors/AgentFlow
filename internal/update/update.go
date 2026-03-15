@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kittors/AgentFlow/internal/debuglog"
 )
 
 var (
@@ -79,6 +81,8 @@ func NewChecker() *Checker {
 }
 
 func (c *Checker) Check(current string, options Options) (Result, error) {
+	done := debuglog.Timed("update.Check")
+	defer done()
 	current = normalizeVersion(current)
 	result := Result{Current: current}
 
@@ -119,6 +123,8 @@ func (c *Checker) SelfUpdate(current string) (Result, error) {
 // SelfUpdateWithProgress behaves like SelfUpdate but calls progress at key
 // stages so the caller (e.g. the TUI) can display live feedback.
 func (c *Checker) SelfUpdateWithProgress(current string, progress ProgressFunc) (Result, error) {
+	done := debuglog.Timed("update.SelfUpdateWithProgress")
+	defer done()
 	if progress == nil {
 		progress = func(string, int, string) {}
 	}

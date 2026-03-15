@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/kittors/AgentFlow/internal/debuglog"
 	"github.com/kittors/AgentFlow/internal/i18n"
 )
 
@@ -497,6 +498,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spin = (m.spin + 1) % len(spinnerFrames)
 		return m, busyTickCmd()
 	case flowResultMsg:
+		debuglog.Log("[MSG] flowResultMsg action=%d busy=%v activeAction=%d initLoading=%v", value.action, m.busy, m.activeAction, m.initLoading)
 		// Only clear busy state if this result matches the active action,
 		// preventing a stale init-status result from killing an update spinner.
 		if value.action == flowActionRefreshStatus && m.initLoading {
@@ -1795,6 +1797,8 @@ func (m interactiveFlowModel) currentOptionsLen() int {
 
 func (m interactiveFlowModel) refreshStatusCmd(withNotice bool) tea.Cmd {
 	return func() tea.Msg {
+		done := debuglog.Timed("refreshStatusCmd")
+		defer done()
 		status := m.callbacks.Status()
 		result := flowResultMsg{
 			action: flowActionRefreshStatus,
@@ -1830,6 +1834,8 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 	}
 
 	return func() tea.Msg {
+		done := debuglog.Timed(fmt.Sprintf("runActionCmd(%d)", action))
+		defer done()
 		switch action {
 		case flowActionRefreshStatus:
 			return flowResultMsg{

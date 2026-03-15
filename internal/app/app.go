@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/kittors/AgentFlow/internal/buildinfo"
+	"github.com/kittors/AgentFlow/internal/debuglog"
 	"github.com/kittors/AgentFlow/internal/i18n"
 	"github.com/kittors/AgentFlow/internal/install"
 	"github.com/kittors/AgentFlow/internal/targets"
@@ -38,6 +39,8 @@ func New(stdout, stderr io.Writer) *App {
 }
 
 func (a *App) Run(args []string) int {
+	debuglog.Init()
+	debuglog.Log("App.Run args=%v version=%s", args, a.Version)
 	if len(args) == 0 {
 		return a.runInteractiveMainMenu()
 	}
@@ -423,6 +426,8 @@ func (a *App) runUpdate(args []string) int {
 }
 
 func (a *App) updatePanel(progress func(stage string, percent int, info string)) (ui.Panel, string) {
+	done := debuglog.Timed("updatePanel")
+	defer done()
 	result, err := a.Checker.SelfUpdateWithProgress(a.Version, func(stage string, percent int, info string) {
 		if progress != nil {
 			progress(stage, percent, info)
@@ -530,6 +535,8 @@ func (a *App) cleanPanel() ui.Panel {
 }
 
 func (a *App) statusPanel() ui.Panel {
+	done := debuglog.Timed("statusPanel")
+	defer done()
 	lines := make([]string, 0, 16)
 	if executable, err := os.Executable(); err == nil {
 		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("可执行文件: %s", "Executable: %s"), executable))

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kittors/AgentFlow/internal/debuglog"
 	"github.com/kittors/AgentFlow/internal/targets"
 )
 
@@ -80,6 +81,8 @@ func inWSL() bool {
 }
 
 func (i *Installer) RuntimeStatus() RuntimeStatus {
+	done := debuglog.Timed("RuntimeStatus")
+	defer done()
 	status := RuntimeStatus{
 		Platform: currentPlatform(),
 		InWSL:    inWSL(),
@@ -131,6 +134,8 @@ func detectWSL() (string, bool) {
 }
 
 func (i *Installer) DetectTargetStatuses() []TargetStatus {
+	done := debuglog.Timed("DetectTargetStatuses")
+	defer done()
 	runtimeStatus := i.CachedRuntimeStatus()
 	agentflowInstalled := sliceToStatusSet(i.DetectInstalledTargets())
 	statuses := make([]TargetStatus, 0, len(targets.Names()))
@@ -231,6 +236,8 @@ func (i *Installer) autoInstallSupported(target targets.Target, runtimeStatus Ru
 }
 
 func (i *Installer) detectCLIPath(target targets.Target, runtimeStatus RuntimeStatus) (string, string) {
+	done := debuglog.Timed("detectCLIPath(" + target.Name + ")")
+	defer done()
 	if target.Command == "" {
 		if info, err := os.Stat(filepath.Join(i.HomeDir, target.Dir)); err == nil && info.IsDir() {
 			return filepath.Join(i.HomeDir, target.Dir), "config"
