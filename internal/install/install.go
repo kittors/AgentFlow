@@ -65,6 +65,12 @@ func (i *Installer) CachedRuntimeStatus() RuntimeStatus {
 	return status
 }
 
+// InvalidateCache clears the cached RuntimeStatus so the next call
+// to CachedRuntimeStatus() re-evaluates all shell commands.
+func (i *Installer) InvalidateCache() {
+	i.cachedRuntime = nil
+}
+
 // EnvVarConfig describes a single environment variable to configure for a CLI.
 type EnvVarConfig struct {
 	Label   string   // Human-readable label (e.g. "API Key")
@@ -321,10 +327,6 @@ func (i *Installer) DetectInstalledCLIs() []string {
 	for _, status := range i.DetectTargetStatuses() {
 		if status.CLIInstalled {
 			result = append(result, status.Target.Name)
-			continue
-		}
-		if status.ConfigDirExists && status.Target.Command == "" {
-			result = append(result, status.Target.Name)
 		}
 	}
 	return result
@@ -379,8 +381,6 @@ func (i *Installer) StatusLines() []string {
 			lines = append(lines, fmt.Sprintf("  [CLI] %s", status.Target.Name))
 		case status.AgentFlowInstalled:
 			lines = append(lines, fmt.Sprintf("  [AF] %s", status.Target.Name))
-		case status.ConfigDirExists:
-			lines = append(lines, fmt.Sprintf("  [..] %s", status.Target.Name))
 		default:
 			lines = append(lines, fmt.Sprintf("  [--] %s", status.Target.Name))
 		}
