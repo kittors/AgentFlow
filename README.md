@@ -24,18 +24,152 @@
 
 ---
 
-## Overview
+## What is AgentFlow?
 
-AgentFlow is now shipped as a **Go CLI** with embedded workflow assets. The executable bundles `AGENTS.md`, `SKILL.md`, stage modules, templates, hooks, and agent role files, so installation no longer depends on Python, `uv`, `pip`, or PyInstaller.
+AgentFlow is a **multi-CLI agent workflow system** that transforms how AI coding assistants work. Instead of treating every request the same way, AgentFlow scores each input across five dimensions and routes it to the appropriate workflow depth — from instant answers to full-scale architecture reviews. It wraps AI coding CLIs (Codex, Claude, Gemini, Qwen, Grok, OpenCode) and IDEs (Cursor, Windsurf, Trae, VS Code Copilot, Cline, Antigravity) with a unified rule layer that brings **intelligent routing, safety detection, persistent memory, and sub-agent orchestration**.
 
-The current Go implementation covers:
+AgentFlow is shipped as a **single Go binary** with all workflow assets embedded — no Python, `pip`, `uv`, or PyInstaller required.
 
-- Cross-platform CLI binaries for macOS, Linux, and Windows
-- Interactive TUI menus for `install`, `uninstall`, `update`, `status`, and `clean`
-- Embedded deployment assets for Codex, Claude, Gemini, Qwen, Grok, and OpenCode
-- Profile-aware rules generation (`lite`, `standard`, `full`)
-- Claude hook merge / cleanup and Codex multi-agent config injection
-- Go-native tests, CI, release artifacts, KB/session/template helpers, and scanning utilities
+---
+
+## ✨ Key Features
+
+### 🎯 5-Level Intelligent Routing (R0–R4)
+
+Every input is scored on 5 dimensions — **action need**, **goal clarity**, **decision scope**, **impact range**, and **EHRB risk** — and routed to the appropriate workflow depth:
+
+| Level | Score | Trigger | Workflow |
+|-------|-------|---------|----------|
+| **R0** 💬 | ≤ 3 | Chat, Q&A, concept explanations | Direct response, no evaluation |
+| **R1** ⚡ | 4–6 | Single-file fixes, formatting | Quick flow: evaluate → fix → verify |
+| **R2** 📝 | 7–9 | New features, multi-file changes | Simplified design → develop → KB sync |
+| **R3** 📊 | 10–12 | Complex features, cross-module refactors | Full design (with multi-scheme comparison) → develop → KB sync |
+| **R4** 🏗️ | ≥ 13 | System-level refactors, stack migrations | Deep evaluation → multi-scheme architecture review → phased development |
+
+Automatic level escalation: R1→R2 when scope exceeds expectations; R2→R3 for architectural impact; R3→R4 for system-level restructuring.
+
+### 🛡️ EHRB Three-Layer Safety Detection
+
+**EHRB** (Extremely High Risk Behavior) adds a triple safety gate that intercepts destructive operations **before execution**:
+
+| Layer | What It Catches |
+|-------|----------------|
+| **Layer 1 — Keyword Scan** | `rm -rf`, `DROP TABLE`, `git push -f`, `chmod 777`, password/secret/token leakage, PII data, payment operations |
+| **Layer 2 — Semantic Analysis** | Data safety violations, permission bypass attempts, environment targeting mistakes, logic vulnerabilities |
+| **Layer 3 — Tool Output Inspection** | Command injection in external tool output, format hijacking, sensitive information leakage |
+
+Four processing modes: **Interactive** (warn → user confirm), **Delegated** (warn → downgrade to interactive), **Turbo** (log risk, continue, report at end), and **External Tool Output** (safe → normal, suspicious → prompt, high-risk → warning).
+
+### 🧠 Three-Layer Memory Model (L0 / L1 / L2)
+
+Context survives across sessions and projects through a structured memory architecture:
+
+| Layer | Scope | Location | Content |
+|-------|-------|----------|---------|
+| **L0 — User Memory** | Global (cross-project) | `~/.agentflow/user/profile.md` | User preferences, tech stack, communication style, global rules |
+| **L1 — Project Knowledge Base** | Project-level (cross-session) | `.agentflow/kb/` | Project structure, module docs, architecture decisions, coding conventions |
+| **L2 — Session Records** | Session-level | `.agentflow/sessions/` | Task progress, key decisions, issues encountered, context snapshots |
+
+Memory is automatically loaded on session start (L0 + latest L2) and saved on session end. Stage transitions trigger automatic snapshot saves.
+
+### 🕸️ Knowledge Graph Memory *(AgentFlow Unique)*
+
+Beyond flat-file knowledge bases, AgentFlow builds a **graph-based project memory** with nodes and edges (`nodes.json` + `edges.json`). The knowledge graph supports:
+
+- Progressive disclosure queries via `~graph`
+- Automatic graph updates on code changes
+- Node-level relationships between modules, decisions, and patterns
+- Richer context than traditional file-based memory
+
+### 🔍 Convention Extraction *(AgentFlow Unique)*
+
+AgentFlow automatically discovers coding patterns from your codebase and enforces them during development:
+
+- Auto-scans your project to extract conventions into `extracted.json`
+- Validates new code against established patterns when `CONVENTION_CHECK=1`
+- Manages conventions via `~conventions` command
+- Ensures consistency across the entire codebase
+
+### 🏗️ Architecture Scanning *(AgentFlow Unique)*
+
+Proactive issue detection that finds problems before they become tech debt:
+
+- Detects **large files** that should be split
+- Identifies **circular dependencies** between modules
+- Flags **missing tests** for critical code paths
+- Generates project dashboards via `~dashboard`
+- Accessible via `~scan` command
+
+### 🤖 RLM Sub-Agent Orchestration
+
+For complex tasks, AgentFlow dispatches specialized sub-agents based on task complexity:
+
+| Role | Responsibility |
+|------|---------------|
+| **Reviewer** | Code review, quality checks, test coverage analysis |
+| **Synthesizer** | Information aggregation, multi-source analysis |
+| **KB Keeper** | Knowledge base maintenance, documentation sync |
+| **Pkg Keeper** | Dependency management, package analysis |
+| **Writer** | Documentation writing, README generation |
+| **Architect** | System design, architecture evaluation |
+
+Complexity-based dispatching: `simple` → single agent, `moderate` → 2 agents, `complex` → 3+ agents, `architect` → full team with architecture review. Also maps to native CLI sub-agents (e.g., Codex's built-in multi-agent system).
+
+### 📏 Project Rules Generation
+
+AgentFlow generates AI-optimized project rule files for both CLIs and IDEs, with three profile levels:
+
+| Profile | Content |
+|---------|---------|
+| **lite** | Minimal rule set — core routing and safety only |
+| **standard** | + Shared operational modules (common rules, module loading, acceptance criteria) |
+| **full** | + Sub-agent orchestration guidance, attention control, hook integration |
+
+**Supported rule targets:**
+
+| Category | Targets | Rule Format |
+|----------|---------|------------|
+| CLI | Codex, Claude, Gemini, Qwen, Grok, OpenCode | `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `QWEN.md` / `GROK.md` |
+| IDE | Cursor, Windsurf, Trae, VS Code Copilot, Cline, Antigravity, Kiro | `.cursorrules` / `.windsurfrules` / `.trae/rules.md` / etc. |
+
+### 🔌 Skills & MCP Ecosystem
+
+AgentFlow integrates with the **Skills** and **MCP (Model Context Protocol)** ecosystems:
+
+- **Skills**: Install, list, and uninstall reusable AI skill packages (e.g., from [Vercel Skills Directory](https://vercel.com/docs/agent-resources/skills))
+- **MCP Servers**: Install, search, and manage MCP servers across targets; config is automatically written to each tool's native config file (`config.toml`, `settings.json`, `mcp.json`, etc.)
+- **Recommended MCPs**: `context7` (documentation lookup), `playwright` (browser automation), `filesystem` (file operations)
+
+### 🔄 Execution Modes
+
+Four execution modes give you full control over automation level:
+
+| Mode | Behavior |
+|------|----------|
+| **Interactive** (default) | Step-by-step with user confirmation at key decision points |
+| **Delegated** (`~auto`) | Auto-advance between stages; pause only on EHRB risks |
+| **Delegated Plan** (`~plan`) | Auto-design, then stop — generates proposal + task list without touching code |
+| **Turbo** | Fully autonomous: auto-execute all stages, auto-review, auto-test, up to 5 retries; outputs a comprehensive completion report |
+
+### 📊 Built-in Commands
+
+| Command | Description |
+|---------|-------------|
+| `~init` | Initialize project knowledge base (scan, index, graph, conventions) |
+| `~auto` | Full auto-execute workflow |
+| `~plan` | Plan only — design + task list, no code changes |
+| `~exec` | Execute an existing plan, or `~exec <requirement>` for combo flow |
+| `~status` | Show workflow status and task progress |
+| `~review` | Trigger code review |
+| `~scan` | Architecture scan (large files, circular deps, missing tests) |
+| `~conventions` | Extract and check coding conventions |
+| `~graph` | Knowledge graph operations |
+| `~dashboard` | Generate project dashboard |
+| `~memory` | Manage memory layers (L0/L1/L2) |
+| `~rlm` | Sub-agent management |
+| `~validatekb` | Validate knowledge base consistency |
+
+---
 
 ## Install
 
@@ -94,6 +228,8 @@ go build -o ./bin/agentflow ./cmd/agentflow
 ./bin/agentflow version
 ```
 
+---
+
 ## Quick Start
 
 ```bash
@@ -126,13 +262,11 @@ agentflow mcp search playwright
 
 When no command is provided and stdin is a TTY, AgentFlow opens the Bubble Tea based menu. Arrow keys, `Enter`, `Space`, and `Esc` behave consistently across macOS and Windows terminals.
 
-## Skills & MCP Ecosystem
-
-- Skills directory: https://vercel.com/docs/agent-resources/skills
-- Recommended MCP servers (pinned): `context7`, `playwright`, `filesystem`
-- MCP config paths: AgentFlow records managed MCP entries under each target config dir and writes into the tool’s real config file (e.g. Codex `config.toml`, Claude/Gemini/Qwen `settings.json`, Cursor `mcp.json`, Windsurf `mcp_config.json`).
+---
 
 ## Supported Targets
+
+### CLI Targets
 
 | Target | Config Directory | Rules File | Extra Integration |
 |--------|------------------|------------|-------------------|
@@ -143,39 +277,61 @@ When no command is provided and stdin is a TTY, AgentFlow opens the Bubble Tea b
 | Grok CLI | `~/.grok/` | `GROK.md` | Rules + embedded module deployment |
 | OpenCode | `~/.config/opencode/` | `AGENTS.md` | Rules + embedded module deployment |
 
-## Key Features
+### IDE Targets
 
-### 5-level routing
+| Target | Rules Format |
+|--------|-------------|
+| Cursor | `.cursorrules` |
+| Windsurf | `.windsurfrules` |
+| Trae | `.trae/rules.md` |
+| VS Code Copilot | `.github/copilot-instructions.md` |
+| Cline | `.clinerules` |
+| Kiro | Kiro rules format |
+| Antigravity | `.agents/` directory |
 
-Every input is scored on action need, goal clarity, decision scope, impact range, and EHRB risk, then routed to `R0` through `R4`.
+---
 
-### EHRB safety
+## How It Works
 
-AgentFlow adds a three-layer safety gate for destructive commands, secrets, permissions, production risk, and suspicious tool output.
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      User Input                              │
+└──────────────────┬───────────────────────────────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────────────────────────────┐
+│  ① Router: Score 5 dimensions → Route to R0/R1/R2/R3/R4     │
+│     • ~command → Command handler                             │
+│     • Skill/MCP match → Tool protocol                        │
+│     • Otherwise → Level routing                              │
+└──────────────────┬───────────────────────────────────────────┘
+                   │
+         ┌─────────┼─────────┬──────────┬──────────┐
+         ▼         ▼         ▼          ▼          ▼
+      R0 💬     R1 ⚡     R2 📝     R3 📊     R4 🏗️
+      Reply     Quick     Simplified  Standard   Architecture
+      only      fix       flow        flow       flow
+                   │         │          │          │
+                   ▼         ▼          ▼          ▼
+         ┌─────────────────────────────────────────────────────┐
+         │  ② EHRB Safety Gate (3 layers)                      │
+         │     Keywords → Semantics → Tool Output              │
+         └──────────────────┬──────────────────────────────────┘
+                            │
+                            ▼
+         ┌─────────────────────────────────────────────────────┐
+         │  ③ Stage Chain: EVALUATE → DESIGN → DEVELOP         │
+         │     Module loading per stage · Sub-agent dispatch    │
+         └──────────────────┬──────────────────────────────────┘
+                            │
+                            ▼
+         ┌─────────────────────────────────────────────────────┐
+         │  ④ KB Sync + Session Save                           │
+         │     L1 knowledge base · L2 session · Graph updates  │
+         └─────────────────────────────────────────────────────┘
+```
 
-### Knowledge base and sessions
-
-Project state is stored in `.agentflow/`:
-
-- `.agentflow/kb/`
-- `.agentflow/kb/plan/`
-- `.agentflow/kb/graph/`
-- `.agentflow/kb/conventions/`
-- `.agentflow/sessions/`
-
-### Embedded deployment assets
-
-The Go binary embeds:
-
-- `AGENTS.md`
-- `SKILL.md`
-- `agentflow/stages/`
-- `agentflow/functions/`
-- `agentflow/services/`
-- `agentflow/templates/`
-- `agentflow/hooks/`
-- `agentflow/agents/`
-- `agentflow/core/`
+---
 
 ## Repository Layout
 
@@ -190,11 +346,23 @@ AgentFlow/
 ├── internal/scan/          # Graph, convention, dashboard, arch scan
 ├── internal/targets/       # CLI targets and profiles
 ├── agentflow/              # Shipped prompt assets and templates
+│   ├── core/               # Routing, safety, subagent, attention, hooks
+│   ├── stages/             # DESIGN and DEVELOP stage modules
+│   ├── functions/          # ~init, ~plan, ~exec, ~scan, ~graph, etc.
+│   ├── services/           # Memory, knowledge, attention, package services
+│   ├── agents/             # reviewer.toml, architect.toml role configs
+│   ├── rlm/roles/          # 6 specialized sub-agent role definitions
+│   ├── hooks/              # Claude hooks JSON, Codex hooks TOML
+│   ├── templates/          # KB, plan, session, changelog, convention templates
+│   ├── project_rules/      # IDE-specific rule files (Cursor, Windsurf, etc.)
+│   └── rules/              # Caching, scaling, state, tools rules
 ├── embed.go                # Static asset embedding
 ├── install.sh              # POSIX release-binary installer
 ├── install.ps1             # Windows release-binary installer
 └── bin/agentflow.js        # npx bootstrap for the release binary
 ```
+
+---
 
 ## Development
 
@@ -223,6 +391,8 @@ Release builds are produced by `.github/workflows/release.yml` for:
 - macOS `arm64`
 - Windows `amd64`
 
+---
+
 ## FAQ
 
 <details>
@@ -232,23 +402,35 @@ No. AgentFlow is now implemented and distributed as a Go executable. Installatio
 
 <details>
 <summary><b>What happens if my existing rules file is custom?</b></summary>
-AgentFlow backs it up with a timestamped `*_bak` file before replacing it.
+AgentFlow backs it up with a timestamped <code>*_bak</code> file before replacing it.
 </details>
 
 <details>
 <summary><b>What does the profile flag change?</b></summary>
-`lite` deploys the smallest rules set, `standard` adds shared operational modules, and `full` appends sub-agent, attention, and hook guidance.
+<code>lite</code> deploys the smallest rules set (core routing + safety), <code>standard</code> adds shared operational modules (common rules, module loading, acceptance criteria), and <code>full</code> appends sub-agent orchestration, attention control, and hook guidance.
 </details>
 
 <details>
 <summary><b>What does Codex installation change?</b></summary>
-It deploys `reviewer.toml` and `architect.toml` into `~/.codex/agents/` and merges the required `[features] multi_agent = true` plus `[agents.*]` sections into `~/.codex/config.toml`.
+It deploys <code>reviewer.toml</code> and <code>architect.toml</code> into <code>~/.codex/agents/</code> and merges the required <code>[features] multi_agent = true</code> plus <code>[agents.*]</code> sections into <code>~/.codex/config.toml</code>.
 </details>
 
 <details>
 <summary><b>What does Claude installation change?</b></summary>
-It merges AgentFlow hook handlers into `~/.claude/settings.json` while preserving non-AgentFlow hooks.
+It merges AgentFlow hook handlers into <code>~/.claude/settings.json</code> while preserving non-AgentFlow hooks.
 </details>
+
+<details>
+<summary><b>How does AgentFlow differ from plain AGENTS.md / CLAUDE.md files?</b></summary>
+AgentFlow is a complete workflow system, not just a rules file. It adds 5-level intelligent routing, EHRB three-layer safety detection, three-layer persistent memory (user/project/session), knowledge graph memory, automatic convention extraction, architecture scanning, sub-agent orchestration with 6 specialized roles, and structured stage chains (EVALUATE → DESIGN → DEVELOP). A plain rules file gives instructions; AgentFlow gives the AI a full operating framework.
+</details>
+
+<details>
+<summary><b>Can I use AgentFlow with multiple CLIs simultaneously?</b></summary>
+Yes. <code>agentflow install --all</code> deploys to every detected CLI target. Each target gets its own rule file format and extra integrations (hooks, multi-agent config, etc.). The project-level knowledge base in <code>.agentflow/</code> is shared across all CLIs.
+</details>
+
+---
 
 ## Contributing
 
