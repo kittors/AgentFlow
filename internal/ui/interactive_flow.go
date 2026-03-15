@@ -679,13 +679,18 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		if m.busy {
-			// Allow navigation keys during busy state;
-			// block action keys (Enter, Space) until async completes.
+			// Allow navigation AND action keys during busy state.
+			// Starting a new action (Enter/Space) will override the active
+			// action via startBusy; the old goroutine's result is still
+			// applied for data but won't clear the busy state because
+			// activeAction no longer matches.
 			switch value.Type {
 			case tea.KeyUp, tea.KeyDown, tea.KeyLeft, tea.KeyRight,
 				tea.KeyTab, tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd,
 				tea.KeyEsc:
 				return m.handleBusyNavKey(value)
+			case tea.KeyEnter, tea.KeySpace:
+				// Fall through to handleKey so a new action can be started.
 			default:
 				return m, nil
 			}
