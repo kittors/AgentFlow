@@ -928,29 +928,37 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleConfigKey processes key events during the config text-input screen.
+// handleConfigKey processes key events during the config step-by-step wizard.
 func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key.Type {
 	case tea.KeyEsc:
-		// Skip config.
-		m.screen = flowScreenBootstrapActions
-		m.configEditing = false
-		return m, nil
-	case tea.KeyEnter:
-		// Save config.
+		// Skip remaining config and save what we have.
 		m.focusDetails = false
 		m.detailScroll = 0
 		return m.handleEnter()
-	case tea.KeyUp:
-		if m.configFieldCursor > 0 {
-			m.configFieldCursor--
+	case tea.KeyEnter:
+		// Accept current field and advance to next.
+		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
+			f := &m.configFields[m.configFieldCursor]
+			// For select fields, mark dirty if user pressed Enter (accepting default counts).
+			if f.FieldType == "select" && len(f.Options) > 0 {
+				f.Value = f.Options[f.OptionCursor]
+				f.Dirty = true
+			}
+			// Mark text fields as dirty if they have content.
+			if f.FieldType != "select" && strings.TrimSpace(f.Value) != "" {
+				f.Dirty = true
+			}
 		}
-		return m, nil
-	case tea.KeyDown, tea.KeyTab:
+		// Advance to next field or save if done.
 		if m.configFieldCursor < len(m.configFields)-1 {
 			m.configFieldCursor++
+			return m, nil
 		}
-		return m, nil
+		// All fields completed — trigger save.
+		m.focusDetails = false
+		m.detailScroll = 0
+		return m.handleEnter()
 	case tea.KeyLeft:
 		// For select fields: move to previous option.
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
@@ -2299,63 +2307,87 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		panels = append(panels, m.status)
 		model.panels = panels
 	case flowScreenBootstrapConfig:
-		model.subtitle = fmt.Sprintf(m.catalog.Msg("配置 %s — 在文本字段直接输入，选择框 ←/→ 切换", "Configure %s — type directly for text fields, ←/→ for selectors"), m.configTarget)
-		model.hint = m.catalog.Msg("↑/↓ 切换字段，直接打字输入文本，←/→ 切换选项，Enter 保存，Esc 跳过。", "↑/↓ switch fields, type to input text, ←/→ for options, Enter save, Esc skip.")
-		// Build virtual options from config fields to display as a form.
-		options := make([]Option, len(m.configFields))
-		for idx, f := range m.configFields {
-			var displayValue string
-			isActive := idx == m.configFieldCursor && m.configEditing
-			if f.FieldType == "select" && len(f.Options) > 0 {
-				// Show selector with ◀ current ▶ indicator.
-				current := f.Options[f.OptionCursor]
-				if isActive {
-					displayValue = fmt.Sprintf("◀ %s ▶  (%d/%d)", current, f.OptionCursor+1, len(f.Options))
-				} else {
-					displayValue = fmt.Sprintf("  %s", current)
-				}
+		// Step-by-step wizard: show one field at a time.
+		stepNum := m.configFieldCursor + 1
+		totalSteps := len(m.configFields)
+		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
+			f := m.configFields[m.configFieldCursor]
+			fieldLabel := f.Label
+			if f.EnvVar != "" && !strings.HasPrefix(f.EnvVar, "__") {
+				fieldLabel = fmt.Sprintf("%s (%s)", f.Label, f.EnvVar)
+			}
+			model.subtitle = fmt.Sprintf(
+				m.catalog.Msg("配置 %s — 步骤 %d/%d：%s", "Configure %s — Step %d/%d: %s"),
+				m.configTarget, stepNum, totalSteps, fieldLabel,
+			)
+			if f.FieldType == "select" {
+				model.hint = m.catalog.Msg("←/→ 切换选项，Enter 确认并继续，Esc 跳过剩余步骤。", "←/→ to switch options, Enter to confirm and continue, Esc to skip remaining.")
 			} else {
-				// Text input field — show a clear input box.
-				if isActive {
-					if f.Value == "" {
-						displayValue = fmt.Sprintf("[ %s█ ]",
-							m.catalog.Msg("请输入... ", "type here... "))
-					} else {
-						displayValue = fmt.Sprintf("[ %s█ ]", f.Value)
-					}
-				} else if f.Value != "" {
-					displayValue = fmt.Sprintf("[ %s ]", f.Value)
+				model.hint = m.catalog.Msg("直接输入文本，Enter 确认并继续（留空跳过），Esc 跳过剩余步骤。", "Type to input, Enter to confirm and continue (empty = skip), Esc to skip remaining.")
+			}
+
+			// Build a single option for the current field.
+			var displayValue string
+			if f.FieldType == "select" && len(f.Options) > 0 {
+				current := f.Options[f.OptionCursor]
+				displayValue = fmt.Sprintf("◀ %s ▶  (%d/%d)", current, f.OptionCursor+1, len(f.Options))
+			} else {
+				if f.Value == "" {
+					displayValue = fmt.Sprintf("[ %s█ ]",
+						m.catalog.Msg("请输入... ", "type here... "))
 				} else {
-					displayValue = m.catalog.Msg(
-						fmt.Sprintf("[ 请输入 %s ]", f.Label),
-						fmt.Sprintf("[ enter %s ]", f.Label),
-					)
+					displayValue = fmt.Sprintf("[ %s█ ]", f.Value)
 				}
 			}
-			// Add type indicator to label.
 			typeIcon := "📝"
 			if f.FieldType == "select" {
 				typeIcon = "🔽"
 			}
-			labelText := fmt.Sprintf("%s %s", typeIcon, f.Label)
-			if f.EnvVar != "" && !strings.HasPrefix(f.EnvVar, "__") {
-				labelText = fmt.Sprintf("%s %s (%s)", typeIcon, f.Label, f.EnvVar)
-			}
-			options[idx] = Option{
+			model.options = []Option{{
 				Value:       f.EnvVar,
-				Label:       labelText,
-				Badge:       f.Label,
+				Label:       fmt.Sprintf("%s %s", typeIcon, fieldLabel),
+				Badge:       fmt.Sprintf("%d/%d", stepNum, totalSteps),
 				Description: displayValue,
+			}}
+			model.cursor = 0
+		}
+		// Build detail panel showing wizard progress.
+		var summaryLines []string
+		summaryLines = append(summaryLines,
+			fmt.Sprintf(m.catalog.Msg("目标: %s", "Target: %s"), m.configTarget),
+			"",
+		)
+		for idx, f := range m.configFields {
+			label := f.Label
+			if idx < m.configFieldCursor {
+				// Completed fields.
+				val := f.Value
+				if val == "" {
+					val = m.catalog.Msg("(已跳过)", "(skipped)")
+				} else if f.FieldType == "text" && len(val) > 6 {
+					// Mask API keys for security.
+					if strings.Contains(strings.ToLower(f.Label), "key") {
+						val = val[:3] + "***" + val[len(val)-3:]
+					}
+				}
+				summaryLines = append(summaryLines,
+					fmt.Sprintf("  ✅ %s: %s", label, val))
+			} else if idx == m.configFieldCursor {
+				summaryLines = append(summaryLines,
+					fmt.Sprintf("  👉 %s: %s",
+						label,
+						m.catalog.Msg("输入中…", "entering…")))
+			} else {
+				summaryLines = append(summaryLines,
+					fmt.Sprintf("  ○  %s: %s",
+						label,
+						m.catalog.Msg("待输入", "pending")))
 			}
 		}
-		model.options = options
-		model.cursor = m.configFieldCursor
-		panels := make([]Panel, 0, 2)
-		if m.notice != nil {
-			panels = append(panels, *m.notice)
-		}
-		panels = append(panels, m.status)
-		model.panels = panels
+		model.panels = []Panel{{
+			Title: m.catalog.Msg("配置进度", "Configuration progress"),
+			Lines: summaryLines,
+		}}
 	default:
 		model.subtitle = m.catalog.Msg("跨平台 Go CLI。所有动作都在同一个 TUI 会话内完成。", "Cross-platform Go CLI. All actions now stay inside one TUI session.")
 		model.hint = m.catalog.Msg("↑/↓ 或滚轮切换动作，Enter 执行，Esc 退出。", "Use ↑/↓ or the mouse wheel to change actions, Enter to run, Esc to exit.")
