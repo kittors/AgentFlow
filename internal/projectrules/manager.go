@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	agentflowassets "github.com/kittors/AgentFlow"
@@ -93,12 +94,26 @@ func (m *Manager) Install(root string, targetNames []string, options InstallOpti
 
 		for _, file := range files {
 			dst := filepath.Join(root, file.RelPath)
-			if _, statErr := os.Stat(dst); statErr == nil && !config.IsAgentFlowFile(dst) {
+			existing, err := os.ReadFile(dst)
+			exists := err == nil
+
+			if exists && !config.IsAgentFlowFile(dst) && !file.Inject {
 				if _, err := config.BackupUserFile(dst); err != nil {
 					return nil, err
 				}
 			}
-			if err := config.SafeWrite(dst, file.Content, file.Mode); err != nil {
+
+			finalContent := file.Content
+			if file.Inject && exists {
+				re := regexp.MustCompile(`(?s)<!-- ` + regexp.QuoteMeta(config.AgentFlowMarker) + `.*?<!-- /` + regexp.QuoteMeta(config.AgentFlowMarker) + `.*?-->\n?`)
+				if re.Match(existing) {
+					finalContent = []byte(re.ReplaceAllString(string(existing), string(file.Content)))
+				} else {
+					finalContent = append(file.Content, existing...)
+				}
+			}
+
+			if err := config.SafeWrite(dst, finalContent, file.Mode); err != nil {
 				return nil, err
 			}
 			written = append(written, dst)
@@ -108,7 +123,7 @@ func (m *Manager) Install(root string, targetNames []string, options InstallOpti
 }
 
 // Uninstall removes AgentFlow-managed project rule files from the given root.
-// Only files that contain the AgentFlow marker are removed (user files are left alone).
+// It cleanly strips injected marker blocks from user files without deleting user content.
 func (m *Manager) Uninstall(root string, targetNames []string) ([]string, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
@@ -127,73 +142,103 @@ func (m *Manager) Uninstall(root string, targetNames []string) ([]string, error)
 
 		paths := expectedPaths(root, name)
 		for _, path := range paths {
-			if _, statErr := os.Stat(path); statErr != nil {
+			existing, err := os.ReadFile(path)
+			if err != nil {
 				continue // file doesn't exist
 			}
-			if !config.IsAgentFlowFile(path) {
-				continue // not managed by AgentFlow, skip
+
+			re := regexp.MustCompile(`(?s)<!-- ` + regexp.QuoteMeta(config.AgentFlowMarker) + `.*?<!-- /` + regexp.QuoteMeta(config.AgentFlowMarker) + `.*?-->\n?`)
+			if fileIsSkill := strings.HasSuffix(path, filepath.FromSlash(".agents/skills/agentflow/SKILL.md")); fileIsSkill {
+				if err := config.SafeRemove(path); err != nil {
+					return removed, err
+				}
+				removed = append(removed, path)
+			} else if re.Match(existing) {
+				newContent := []byte(re.ReplaceAllString(string(existing), ""))
+				if strings.TrimSpace(string(newContent)) == "" {
+					if err := config.SafeRemove(path); err != nil {
+						return removed, err
+					}
+				} else {
+					if err := config.SafeWrite(path, newContent, 0o644); err != nil {
+						return removed, err
+					}
+				}
+				removed = append(removed, path)
+			} else if config.IsAgentFlowFile(path) {
+				if err := config.SafeRemove(path); err != nil {
+					return removed, err
+				}
+				removed = append(removed, path)
 			}
-			if err := config.SafeRemove(path); err != nil {
-				return removed, err
-			}
-			removed = append(removed, path)
 		}
 	}
+	cleanEmptyParents(root, filepath.Join(root, ".agents", "skills", "agentflow", "SKILL.md"))
 	return removed, nil
+}
+
+func cleanEmptyParents(root, startPath string) {
+	dir := filepath.Dir(startPath)
+	for dir != root && strings.HasPrefix(dir, root) && len(dir) > len(root) {
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) > 0 {
+			break
+		}
+		os.Remove(dir)
+		dir = filepath.Dir(dir)
+	}
 }
 
 type writeFile struct {
 	RelPath string
 	Content []byte
 	Mode    os.FileMode
+	Inject  bool
 }
 
 func expectedPaths(root, targetName string) []string {
+	paths := []string{filepath.Join(root, ".agents", "skills", "agentflow", "SKILL.md")}
 	switch targetName {
 	case "codex":
-		return []string{
-			filepath.Join(root, "AGENTS.md"),
-			filepath.Join(root, ".agentflow", "rules_codex.md"),
-		}
+		paths = append(paths, filepath.Join(root, "AGENTS.md"))
 	case "claude":
-		return []string{
-			filepath.Join(root, "CLAUDE.md"),
-			filepath.Join(root, ".agentflow", "rules_claude.md"),
-		}
-	default:
-		return nil
+		paths = append(paths, filepath.Join(root, "CLAUDE.md"))
 	}
-
+	return paths
 }
 
 func buildWrites(target Target, profile string) ([]writeFile, error) {
+	if profile == "" {
+		profile = targets.DefaultProfile
+	}
 	switch target.Name {
 	case "codex", "claude":
-		content, err := buildAgentFlowRules(target.Name, profile)
+		filename := rulesFilenameForCLITarget(target.Name)
+		refContent := fmt.Sprintf("<!-- %s v1.0.0 -->\n\n> **[AgentFlow 管理规则]**\n> 请务必严格按照全局规范（如全局规则或 `.agents/skills/agentflow/SKILL.md`）执行所有操作。\n\n<!-- /%s -->\n", config.AgentFlowMarker, config.AgentFlowMarker)
+
+		skillContent, err := readAssetWithFallback("agentflow/_SKILL.md", "SKILL.md")
 		if err != nil {
 			return nil, err
 		}
-		filename := rulesFilenameForCLITarget(target.Name)
-		rulesPath := filepath.Join(".agentflow", "rules_"+target.Name+".md")
-
-		refContent := fmt.Sprintf("<!-- %s v1.0.0 -->\n\n# AgentFlow 管理规则\n请务必严格按照 `%s` 中定义的规则和规范执行所有操作。\n", config.AgentFlowMarker, filepath.ToSlash(rulesPath))
+		skillPath := filepath.Join(".agents", "skills", "agentflow", "SKILL.md")
 
 		return []writeFile{
 			{
 				RelPath: filename,
 				Content: []byte(refContent),
 				Mode:    0o644,
+				Inject:  true,
 			},
 			{
-				RelPath: rulesPath,
-				Content: []byte(content),
+				RelPath: skillPath,
+				Content: skillContent,
 				Mode:    0o644,
+				Inject:  false,
 			},
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported target: %s", target.Name)
 	}
-
 }
 
 func rulesFilenameForCLITarget(name string) string {
@@ -208,101 +253,6 @@ func rulesFilenameForCLITarget(name string) string {
 		return "CLAUDE.md"
 	default:
 		return "AGENTS.md"
-	}
-}
-
-func buildAgentFlowRules(targetName, profile string) (string, error) {
-	t, ok := targets.Lookup(targetName)
-	if !ok {
-		return "", fmt.Errorf("unknown cli target: %s", targetName)
-	}
-	if profile == "" {
-		profile = targets.DefaultProfile
-	}
-	if !targets.ValidProfile(profile) {
-		return "", fmt.Errorf("invalid profile: %s", profile)
-	}
-
-	content, err := readAssetWithFallback("agentflow/_AGENTS.md", "AGENTS.md")
-	if err != nil {
-		return "", err
-	}
-
-	rendered := string(content)
-	if !strings.Contains(rendered, config.AgentFlowMarker) {
-		rendered = "<!-- AGENTFLOW_ROUTER: v1.0.0 -->\n" + rendered
-	}
-	rendered = strings.ReplaceAll(rendered, "{TARGET_CLI}", t.DisplayName)
-	rendered = strings.ReplaceAll(rendered, "{HOOKS_SUMMARY}", t.HooksSummary)
-
-	modules := targets.Profiles[profile]
-	if len(modules) == 0 {
-		return strings.TrimRight(rendered, "\n") + "\n", nil
-	}
-
-	var builder strings.Builder
-	builder.WriteString(rendered)
-	builder.WriteString("\n\n---\n\n")
-	builder.WriteString(fmt.Sprintf("<!-- PROFILE:%s — Extended modules appended below -->\n\n", profile))
-	for _, modFile := range modules {
-		moduleContent, err := buildCoreModuleForTarget(targetName, modFile)
-		if err != nil {
-			return "", err
-		}
-		if strings.TrimSpace(moduleContent) == "" {
-			continue
-		}
-		builder.WriteString(moduleContent)
-		builder.WriteString("\n\n")
-	}
-	return strings.TrimRight(builder.String(), "\n") + "\n", nil
-}
-
-func buildCoreModuleForTarget(targetName, modFile string) (string, error) {
-	content, err := readAssetWithFallback(filepath.ToSlash(filepath.Join("agentflow", "core", modFile)))
-	if err != nil {
-		return "", err
-	}
-
-	rendered := string(content)
-	if modFile == "subagent.md" {
-		cliFile := installSubagentFile(targetName)
-		cliContent, err := readAssetWithFallback(filepath.ToSlash(filepath.Join("agentflow", "core", cliFile)))
-		if err != nil {
-			return "", err
-		}
-		rendered = strings.ReplaceAll(rendered, "{CLI_SUBAGENT_PROTOCOL}", string(cliContent))
-	}
-	if modFile == "hooks.md" {
-		cliFile := installHooksFile(targetName)
-		cliContent, err := readAssetWithFallback(filepath.ToSlash(filepath.Join("agentflow", "core", cliFile)))
-		if err != nil {
-			return "", err
-		}
-		rendered = strings.ReplaceAll(rendered, "{HOOKS_MATRIX}", string(cliContent))
-	}
-	return rendered, nil
-}
-
-func installSubagentFile(targetName string) string {
-	switch targetName {
-	case "codex":
-		return "subagent_codex.md"
-	case "claude":
-		return "subagent_claude.md"
-	default:
-		return "subagent_other.md"
-	}
-}
-
-func installHooksFile(targetName string) string {
-	switch targetName {
-	case "codex":
-		return "hooks_codex.md"
-	case "claude":
-		return "hooks_claude.md"
-	default:
-		return "hooks_other.md"
 	}
 }
 
