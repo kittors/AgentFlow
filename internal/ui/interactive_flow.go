@@ -18,40 +18,41 @@ import (
 )
 
 type InteractiveCallbacks struct {
-	Status                 func() Panel
-	MCPTargetOptions       func() []Option
-	MCPInstallOptions      func() []Option
-	MCPRemoveOptions       func(target string) []Option
-	MCPList                func(target string) Panel
-	MCPInstall             func(target, server string) Panel
-	MCPInstallWithEnv      func(target, server string, env map[string]string) Panel
-	MCPConfigFields        func(server string) []ConfigField
-	MCPRemove              func(target, server string) Panel
-	SkillTargetOptions     func() []Option
-	SkillGlobalSupported   func(target string) bool
-	SkillInstallOptions    func(target string) []Option
-	SkillUninstallOptions  func(target string) []Option
-	SkillList              func(target string) Panel
-	SkillInstall           func(target, source string) Panel
-	SkillUninstall         func(target, name string) Panel
-	ProjectRulesPanel      func(root, target string) Panel
-	ProjectRulesInstall    func(root, target, profile string) Panel
-	ProjectRulesUninstall  func(root, target string) Panel
-	BootstrapOptions       func() []Option
-	BootstrapAutoSupported func(target string) bool
-	BootstrapDetails       func(target string) Panel
-	BootstrapAuto          func(target string) Panel
-	BootstrapManual        func(target string) Panel
-	InstallOptions         func() []Option
-	UninstallOptions       func() []Option
-	UninstallCLIOptions    func() []Option
-	Install                func(profile string, targets []string) Panel
-	Uninstall              func(targets []string) Panel
-	UninstallCLI           func(targets []string) Panel
-	Update                 func(progress func(stage string, percent int, info string)) (Panel, string)
-	Clean                  func() Panel
-	CLIConfigFields        func(target string) []ConfigField
-	WriteEnvConfig         func(envVars map[string]string) Panel
+	Status                  func() Panel
+	MCPTargetOptions        func() []Option
+	MCPInstallOptions       func() []Option
+	MCPRemoveOptions        func(target string) []Option
+	MCPList                 func(target string) Panel
+	MCPInstall              func(target, server string) Panel
+	MCPInstallWithEnv       func(target, server string, env map[string]string) Panel
+	MCPConfigFields         func(server string) []ConfigField
+	MCPRemove               func(target, server string) Panel
+	SkillTargetOptions      func() []Option
+	SkillGlobalSupported    func(target string) bool
+	SkillInstallOptions     func(target string) []Option
+	SkillUninstallOptions   func(target string) []Option
+	SkillList               func(target string) Panel
+	SkillInstall            func(target, source string) Panel
+	SkillUninstall          func(target, name string) Panel
+	ProjectRulesPanel       func(root, target string) Panel
+	ProjectRulesInstall     func(root, target, profile string) Panel
+	ProjectRulesUninstall   func(root, target string) Panel
+	UninstallProjectOptions func() []Option
+	BootstrapOptions        func() []Option
+	BootstrapAutoSupported  func(target string) bool
+	BootstrapDetails        func(target string) Panel
+	BootstrapAuto           func(target string) Panel
+	BootstrapManual         func(target string) Panel
+	InstallOptions          func() []Option
+	UninstallOptions        func() []Option
+	UninstallCLIOptions     func() []Option
+	Install                 func(profile string, targets []string) Panel
+	Uninstall               func(targets []string) Panel
+	UninstallCLI            func(targets []string) Panel
+	Update                  func(progress func(stage string, percent int, info string)) (Panel, string)
+	Clean                   func() Panel
+	CLIConfigFields         func(target string) []ConfigField
+	WriteEnvConfig          func(envVars map[string]string) Panel
 }
 
 // ConfigField describes a single configurable field for a CLI.
@@ -82,6 +83,7 @@ const (
 	flowScreenBootstrapTargets
 	flowScreenBootstrapActions
 	flowScreenProfile
+	flowScreenInstallScope
 	flowScreenInstallTargets
 	flowScreenUninstallTargets
 	flowScreenUpdateConfirm
@@ -109,6 +111,7 @@ const (
 	flowActionBootstrapAuto
 	flowActionInstall
 	flowActionUninstall
+	flowActionUninstallProject
 	flowActionUninstallCLI
 	flowActionWriteEnvConfig
 	flowActionMCPInstallWithEnv
@@ -201,6 +204,7 @@ type interactiveFlowModel struct {
 	bootstrapCursor          int
 	bootstrapActionCursor    int
 	profileCursor            int
+	installScopeCursor       int
 	installCursor            int
 	uninstallCursor          int
 
@@ -424,21 +428,15 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 			},
 			{
 				Value:       "install-agentflow",
-				Label:       catalog.Msg("安装 AgentFlow 到已安装 CLI（全局）", "Install AgentFlow into existing CLIs (global)"),
-				Badge:       catalog.Msg("全局", "GLOBAL"),
-				Description: catalog.Msg("对已经存在的 CLI 写入 AgentFlow 规则、模块、技能和 hooks（写入用户级配置目录）。", "Write AgentFlow rules, modules, skills, and hooks into CLIs that already exist (user-level config directory)."),
-			},
-			{
-				Value:       "install-project",
-				Label:       catalog.Msg("安装 AgentFlow 到当前项目（项目级）", "Install AgentFlow into current project (project-level)"),
-				Badge:       catalog.Msg("项目", "PROJECT"),
-				Description: catalog.Msg("将 AgentFlow 规则文件写入当前工作目录，适合团队协作和项目级配置。", "Write AgentFlow rule files into the current working directory, ideal for team collaboration and project-level configuration."),
+				Label:       catalog.Msg("安装 AgentFlow", "Install AgentFlow"),
+				Badge:       catalog.Msg("安装", "INSTALL"),
+				Description: catalog.Msg("安装 AgentFlow 规则到全局 CLI 或当前项目目录。全局安装写入用户配置目录（~/.codex, ~/.claude），项目安装写入当前工作目录。", "Install AgentFlow rules globally (user config dirs) or into the current project directory."),
 			},
 			{
 				Value:       "uninstall-agentflow",
-				Label:       catalog.Msg("卸载 AgentFlow（保留 CLI）", "Uninstall AgentFlow (keep CLIs)"),
+				Label:       catalog.Msg("卸载 AgentFlow", "Uninstall AgentFlow"),
 				Badge:       catalog.Msg("卸载", "REMOVE"),
-				Description: catalog.Msg("从已接入 CLI 中清理 AgentFlow 产物，同时保留你的原有配置。", "Remove AgentFlow assets from integrated CLIs while preserving your own config where possible."),
+				Description: catalog.Msg("卸载已安装的 AgentFlow 规则（全局/项目级），同时保留 CLI 工具和你的原有配置。", "Remove installed AgentFlow rules (global/project), while preserving CLI tools and your own config."),
 			},
 			{
 				Value:       "uninstall-cli",
@@ -650,7 +648,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.screen = flowScreenBootstrapActions
 			m.configEditing = false
-		case flowActionInstall, flowActionUninstall, flowActionUninstallCLI, flowActionClean:
+		case flowActionInstall, flowActionUninstall, flowActionUninstallCLI, flowActionUninstallProject, flowActionClean:
 			m.screen = flowScreenMain
 			m.resetDetailFocus()
 			m.installOptions = nil
@@ -945,6 +943,8 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 		m.pendingConfigFields = nil
 		m.bootstrapActionOptions = m.defaultBootstrapActionOptions()
 	case flowScreenProfile:
+		m.screen = flowScreenInstallScope
+	case flowScreenInstallScope:
 		m.screen = flowScreenInstallHub
 	case flowScreenInstallTargets:
 		m.screen = flowScreenProfile
@@ -1404,53 +1404,33 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.refreshBootstrapDetail()
 			return m, nil
 		case "install-agentflow":
-			m.installOptions = m.installOptionsList()
-			if len(m.installOptions) == 0 {
-				m.notice = panelRef(Panel{
-					Title: m.catalog.Msg("安装提示", "Install hint"),
-					Lines: []string{
-						m.catalog.Msg("还没有可安装 AgentFlow 的 CLI。先进入“安装 CLI 工具”分支完成 Codex 或 Claude 的安装。", "There are no CLI targets ready for AgentFlow yet. Use the CLI install branch first to install Codex or Claude."),
-					},
-				})
-				return m, nil
-			}
-			m.screen = flowScreenProfile
+			m.screen = flowScreenInstallScope
+			m.installScopeCursor = 0
 			m.notice = nil
 			return m, nil
-		case "install-project":
-			if m.callbacks.SkillTargetOptions == nil {
-				m.notice = panelRef(Panel{
-					Title: m.catalog.Msg("项目级安装", "Project install"),
-					Lines: []string{m.catalog.Msg("当前构建未启用项目级安装回调。", "Project install callbacks are not enabled in this build.")},
-				})
-				return m, nil
-			}
-			m.skillTargets = cloneOptions(m.callbacks.SkillTargetOptions())
-			if len(m.skillTargets) == 0 {
-				m.notice = panelRef(Panel{
-					Title: m.catalog.Msg("项目级安装", "Project install"),
-					Lines: []string{m.catalog.Msg("未检测到可管理的目标。", "No manageable targets detected.")},
-				})
-				return m, nil
-			}
-			m.projectInstallMode = true
-			m.screen = flowScreenSkillTargets
-			m.skillTargetCursor = 0
-			m.selectedSkillTarget = m.skillTargets[0].Value
-			m.notice = nil
-			m.focusDetails = false
-			m.detailScroll = 0
-			return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 		case "uninstall-agentflow":
 			m.uninstallCLIMode = false
-			m.uninstallOptions = cloneOptions(m.callbacks.UninstallOptions())
-			if len(m.uninstallOptions) == 0 {
+			// Build combined uninstall targets: global + project.
+			var options []Option
+			if m.callbacks.UninstallOptions != nil {
+				for _, opt := range m.callbacks.UninstallOptions() {
+					opt.Badge = m.catalog.Msg("全局", "GLOBAL")
+					options = append(options, opt)
+				}
+			}
+			if m.callbacks.UninstallProjectOptions != nil {
+				for _, opt := range m.callbacks.UninstallProjectOptions() {
+					options = append(options, opt)
+				}
+			}
+			if len(options) == 0 {
 				m.notice = panelRef(Panel{
 					Title: m.catalog.Msg("卸载结果", "Uninstall result"),
-					Lines: []string{m.catalog.Msg("未检测到已安装的 AgentFlow。", "No AgentFlow installations found.")},
+					Lines: []string{m.catalog.Msg("未检测到已安装的 AgentFlow（全局或项目级）。", "No AgentFlow installations found (global or project-level).")},
 				})
 				return m, nil
 			}
+			m.uninstallOptions = options
 			m.screen = flowScreenUninstallTargets
 			m.notice = nil
 			return m, nil
@@ -1471,6 +1451,47 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.screen = flowScreenUninstallTargets
 			m.notice = nil
 			return m, nil
+		}
+	case flowScreenInstallScope:
+		scopeOptions := m.installScopeOptionsList()
+		if m.installScopeCursor >= len(scopeOptions) {
+			return m, nil
+		}
+		switch scopeOptions[m.installScopeCursor].Value {
+		case "scope-global":
+			m.installOptions = m.installOptionsList()
+			if len(m.installOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("安装提示", "Install hint"),
+					Lines: []string{
+						m.catalog.Msg("还没有可安装 AgentFlow 的 CLI。先进入「安装 CLI 工具」分支完成 Codex 或 Claude 的安装。", "There are no CLI targets ready for AgentFlow yet. Use the CLI install branch first to install Codex or Claude."),
+					},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenProfile
+			m.notice = nil
+			return m, nil
+		case "scope-project":
+			if m.callbacks.SkillTargetOptions == nil {
+				return m, nil
+			}
+			m.skillTargets = cloneOptions(m.callbacks.SkillTargetOptions())
+			if len(m.skillTargets) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("项目级安装", "Project install"),
+					Lines: []string{m.catalog.Msg("未检测到可管理的目标。", "No manageable targets detected.")},
+				})
+				return m, nil
+			}
+			m.projectInstallMode = true
+			m.screen = flowScreenSkillTargets
+			m.skillTargetCursor = 0
+			m.selectedSkillTarget = m.skillTargets[0].Value
+			m.notice = nil
+			m.focusDetails = false
+			m.detailScroll = 0
+			return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 		}
 	case flowScreenBootstrapTargets:
 		if len(m.bootstrapOptions) == 0 {
@@ -1569,6 +1590,23 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		if m.uninstallCLIMode {
 			return m.startBusy(flowActionUninstallCLI, m.catalog.Msg("正在卸载所选 CLI…", "Uninstalling selected CLIs..."))
 		}
+		// Check if any selected targets are project-level (prefixed with "project:").
+		hasProject := false
+		hasGlobal := false
+		for _, v := range selected {
+			if strings.HasPrefix(v, "project:") {
+				hasProject = true
+			} else {
+				hasGlobal = true
+			}
+		}
+		if hasProject && !hasGlobal {
+			return m.startBusy(flowActionUninstallProject, m.catalog.Msg("正在卸载项目级规则…", "Uninstalling project-level rules..."))
+		}
+		if hasGlobal && !hasProject {
+			return m.startBusy(flowActionUninstall, m.catalog.Msg("正在卸载所选目标…", "Uninstalling selected targets..."))
+		}
+		// Both: run global first, then project.
 		return m.startBusy(flowActionUninstall, m.catalog.Msg("正在卸载所选目标…", "Uninstalling selected targets..."))
 	case flowScreenUpdateConfirm:
 		if len(m.updateConfirmOptions) == 0 {
@@ -1878,6 +1916,16 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 			cursor = len(m.profileOptions) - 1
 		}
 		m.profileCursor = cursor
+	case flowScreenInstallScope:
+		scopeOpts := m.installScopeOptionsList()
+		if len(scopeOpts) == 0 {
+			m.installScopeCursor = 0
+			break
+		}
+		if cursor > len(scopeOpts)-1 {
+			cursor = len(scopeOpts) - 1
+		}
+		m.installScopeCursor = cursor
 	case flowScreenInstallTargets:
 		if len(m.installOptions) == 0 {
 			m.installCursor = 0
@@ -1953,6 +2001,8 @@ func (m interactiveFlowModel) currentCursor() int {
 		return m.bootstrapActionCursor
 	case flowScreenProfile:
 		return m.profileCursor
+	case flowScreenInstallScope:
+		return m.installScopeCursor
 	case flowScreenInstallTargets:
 		return m.installCursor
 	case flowScreenUninstallTargets:
@@ -1998,6 +2048,8 @@ func (m interactiveFlowModel) currentOptionsLen() int {
 		return len(m.bootstrapActionOptions)
 	case flowScreenProfile:
 		return len(m.profileOptions)
+	case flowScreenInstallScope:
+		return len(m.installScopeOptionsList())
 	case flowScreenInstallTargets:
 		return len(m.installOptions)
 	case flowScreenUninstallTargets:
@@ -2294,6 +2346,27 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 				notice: panelRef(notice),
 				status: m.callbacks.Status(),
 			}
+		case flowActionUninstallProject:
+			lines := []string{}
+			for _, target := range selectedUninstallTargets {
+				if !strings.HasPrefix(target, "project:") {
+					continue
+				}
+				targetName := strings.TrimPrefix(target, "project:")
+				if m.callbacks.ProjectRulesUninstall != nil {
+					result := m.callbacks.ProjectRulesUninstall(projectRoot, targetName)
+					lines = append(lines, result.Lines...)
+				}
+			}
+			notice := Panel{
+				Title: m.catalog.Msg("项目级卸载结果", "Project uninstall result"),
+				Lines: lines,
+			}
+			return flowResultMsg{
+				action: action,
+				notice: panelRef(notice),
+				status: m.callbacks.Status(),
+			}
 		case flowActionWriteEnvConfig:
 			notice := Panel{}
 			if m.callbacks.WriteEnvConfig != nil {
@@ -2410,11 +2483,31 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.cursor = m.bootstrapActionCursor
 		model.panels = m.bootstrapActionPanels()
 	case flowScreenProfile:
-		model.subtitle = m.catalog.Msg("选择部署 Profile。Esc 返回安装中心。", "Select a deployment profile. Press Esc to return to the install hub.")
+		model.subtitle = m.catalog.Msg("选择部署 Profile。Esc 返回范围选择。", "Select a deployment profile. Press Esc to return to scope selection.")
 		model.hint = m.catalog.Msg("↑/↓ 切换 Profile，Enter 下一步，Esc 返回。", "Use ↑/↓ to switch profiles, Enter to continue, Esc to go back.")
 		model.options = cloneOptions(m.profileOptions)
 		model.cursor = m.profileCursor
 		model.panels = m.profilePanels()
+	case flowScreenInstallScope:
+		model.subtitle = m.catalog.Msg("选择安装范围：全局或项目级。Esc 返回安装中心。", "Choose install scope: global or project-level. Press Esc to return to install hub.")
+		model.hint = m.catalog.Msg("↑/↓ 切换范围，Enter 确认，Esc 返回。", "Use ↑/↓ to switch scope, Enter to confirm, Esc to go back.")
+		scopeOptions := m.installScopeOptionsList()
+		model.options = cloneOptions(scopeOptions)
+		model.cursor = m.installScopeCursor
+		panels := make([]Panel, 0, 2)
+		if m.notice != nil {
+			panels = append(panels, *m.notice)
+		}
+		panels = append(panels, Panel{
+			Title: m.catalog.Msg("安装范围说明", "Install scope"),
+			Lines: []string{
+				m.catalog.Msg("全局安装：写入用户配置目录（如 ~/.codex, ~/.claude），所有项目共享。", "Global: writes to user config dirs (e.g. ~/.codex, ~/.claude), shared across all projects."),
+				m.catalog.Msg("项目安装：写入当前工作目录，仅对当前项目生效，适合团队共享。", "Project: writes to current working directory, effective for this project only, ideal for team sharing."),
+				"",
+				fmt.Sprintf(m.catalog.Msg("当前目录: %s", "Current directory: %s"), m.projectRoot),
+			},
+		})
+		model.panels = panels
 	case flowScreenInstallTargets:
 		model.subtitle = m.catalog.Msg("选择要安装的目标。Esc 返回 Profile。", "Choose install targets. Press Esc to return to profile.")
 		model.hint = m.catalog.Msg("Space 选择多个目标，Enter 安装，Esc 返回。", "Use Space to select multiple targets, Enter to install, Esc to go back.")
@@ -3112,6 +3205,23 @@ func (m interactiveFlowModel) uninstallOptionsList() []Option {
 		return nil
 	}
 	return cloneOptions(m.callbacks.UninstallOptions())
+}
+
+func (m interactiveFlowModel) installScopeOptionsList() []Option {
+	return []Option{
+		{
+			Value:       "scope-global",
+			Label:       m.catalog.Msg("全局安装", "Global install"),
+			Badge:       m.catalog.Msg("全局", "GLOBAL"),
+			Description: m.catalog.Msg("将 AgentFlow 规则写入用户级配置目录（~/.codex, ~/.claude），对所有项目生效。", "Write AgentFlow rules into user-level config dirs (~/.codex, ~/.claude), effective for all projects."),
+		},
+		{
+			Value:       "scope-project",
+			Label:       m.catalog.Msg("项目级安装", "Project install"),
+			Badge:       m.catalog.Msg("项目", "PROJECT"),
+			Description: m.catalog.Msg("将 AgentFlow 规则文件写入当前工作目录，仅对本项目生效，适合团队协作。", "Write AgentFlow rule files into the current working directory, effective for this project only, ideal for team collaboration."),
+		},
+	}
 }
 
 func (m *interactiveFlowModel) toggleSelected(options *[]Option, cursor int) {

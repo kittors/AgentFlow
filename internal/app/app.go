@@ -106,40 +106,41 @@ func (a *App) runInteractiveMainMenu() int {
 	}
 
 	if err := ui.RunInteractiveFlow(a.Catalog, a.Version, ui.InteractiveCallbacks{
-		Status:                 a.statusPanel,
-		MCPTargetOptions:       a.mcpTargetOptions,
-		MCPInstallOptions:      a.mcpInstallOptions,
-		MCPRemoveOptions:       a.mcpRemoveOptions,
-		MCPList:                a.mcpListPanel,
-		MCPInstall:             a.mcpInstallPanel,
-		MCPInstallWithEnv:      a.mcpInstallWithEnvPanel,
-		MCPConfigFields:        a.mcpConfigFields,
-		MCPRemove:              a.mcpRemovePanel,
-		SkillTargetOptions:     a.skillTargetOptions,
-		SkillGlobalSupported:   a.skillGlobalSupported,
-		SkillInstallOptions:    a.skillInstallOptions,
-		SkillUninstallOptions:  a.skillUninstallOptions,
-		SkillList:              a.skillListPanel,
-		SkillInstall:           a.skillInstallPanel,
-		SkillUninstall:         a.skillUninstallPanel,
-		ProjectRulesPanel:      a.projectRulesPanel,
-		ProjectRulesInstall:    a.projectRulesInstallPanel,
-		ProjectRulesUninstall:  a.projectRulesUninstallPanel,
-		BootstrapOptions:       a.bootstrapTargetOptions,
-		BootstrapAutoSupported: a.bootstrapAutoSupported,
-		BootstrapDetails:       a.bootstrapTargetPanel,
-		BootstrapAuto:          a.bootstrapAutoPanel,
-		BootstrapManual:        a.bootstrapManualPanel,
-		InstallOptions:         a.installTargetOptions,
-		UninstallOptions:       a.uninstallTargetOptions,
-		UninstallCLIOptions:    a.uninstallCLITargetOptions,
-		Install:                a.installTargetsPanel,
-		Uninstall:              a.uninstallTargetsPanel,
-		UninstallCLI:           a.uninstallCLITargetsPanel,
-		Update:                 a.updatePanel,
-		Clean:                  a.cleanPanel,
-		CLIConfigFields:        a.cliConfigFields,
-		WriteEnvConfig:         a.writeEnvConfigPanel,
+		Status:                  a.statusPanel,
+		MCPTargetOptions:        a.mcpTargetOptions,
+		MCPInstallOptions:       a.mcpInstallOptions,
+		MCPRemoveOptions:        a.mcpRemoveOptions,
+		MCPList:                 a.mcpListPanel,
+		MCPInstall:              a.mcpInstallPanel,
+		MCPInstallWithEnv:       a.mcpInstallWithEnvPanel,
+		MCPConfigFields:         a.mcpConfigFields,
+		MCPRemove:               a.mcpRemovePanel,
+		SkillTargetOptions:      a.skillTargetOptions,
+		SkillGlobalSupported:    a.skillGlobalSupported,
+		SkillInstallOptions:     a.skillInstallOptions,
+		SkillUninstallOptions:   a.skillUninstallOptions,
+		SkillList:               a.skillListPanel,
+		SkillInstall:            a.skillInstallPanel,
+		SkillUninstall:          a.skillUninstallPanel,
+		ProjectRulesPanel:       a.projectRulesPanel,
+		ProjectRulesInstall:     a.projectRulesInstallPanel,
+		ProjectRulesUninstall:   a.projectRulesUninstallPanel,
+		BootstrapOptions:        a.bootstrapTargetOptions,
+		BootstrapAutoSupported:  a.bootstrapAutoSupported,
+		BootstrapDetails:        a.bootstrapTargetPanel,
+		BootstrapAuto:           a.bootstrapAutoPanel,
+		BootstrapManual:         a.bootstrapManualPanel,
+		InstallOptions:          a.installTargetOptions,
+		UninstallOptions:        a.uninstallTargetOptions,
+		UninstallProjectOptions: a.uninstallProjectTargetOptions,
+		UninstallCLIOptions:     a.uninstallCLITargetOptions,
+		Install:                 a.installTargetsPanel,
+		Uninstall:               a.uninstallTargetsPanel,
+		UninstallCLI:            a.uninstallCLITargetsPanel,
+		Update:                  a.updatePanel,
+		Clean:                   a.cleanPanel,
+		CLIConfigFields:         a.cliConfigFields,
+		WriteEnvConfig:          a.writeEnvConfigPanel,
 	}, a.Stdout); err != nil {
 		fmt.Fprintln(a.Stderr, err.Error())
 		return 1
@@ -820,6 +821,36 @@ func (a *App) uninstallTargetOptions() []ui.Option {
 			Label:       name,
 			Badge:       strings.ToUpper(name),
 			Description: a.Catalog.Msg("移除该 CLI 中由 AgentFlow 写入的规则、技能和 hooks。", "Remove the AgentFlow rules, skills, and hooks written into this CLI."),
+		})
+	}
+	return options
+}
+
+func (a *App) uninstallProjectTargetOptions() []ui.Option {
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	manager := projectrules.NewManager()
+	statuses, err := manager.Detect(wd)
+	if err != nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var options []ui.Option
+	for _, status := range statuses {
+		if !status.Exists || !status.Managed {
+			continue
+		}
+		if seen[status.Target] {
+			continue
+		}
+		seen[status.Target] = true
+		options = append(options, ui.Option{
+			Value:       "project:" + status.Target,
+			Label:       fmt.Sprintf(a.Catalog.Msg("项目级 %s", "Project %s"), status.Target),
+			Badge:       a.Catalog.Msg("项目", "PROJECT"),
+			Description: fmt.Sprintf(a.Catalog.Msg("删除当前项目目录中 %s 的 AgentFlow 规则文件（%s）。", "Remove AgentFlow rule files for %s from project directory (%s)."), status.Target, status.Detected),
 		})
 	}
 	return options
