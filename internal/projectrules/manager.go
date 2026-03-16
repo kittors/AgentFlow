@@ -151,9 +151,15 @@ type writeFile struct {
 func expectedPaths(root, targetName string) []string {
 	switch targetName {
 	case "codex":
-		return []string{filepath.Join(root, "AGENTS.md")}
+		return []string{
+			filepath.Join(root, "AGENTS.md"),
+			filepath.Join(root, ".agentflow", "rules_codex.md"),
+		}
 	case "claude":
-		return []string{filepath.Join(root, "CLAUDE.md")}
+		return []string{
+			filepath.Join(root, "CLAUDE.md"),
+			filepath.Join(root, ".agentflow", "rules_claude.md"),
+		}
 	default:
 		return nil
 	}
@@ -168,11 +174,22 @@ func buildWrites(target Target, profile string) ([]writeFile, error) {
 			return nil, err
 		}
 		filename := rulesFilenameForCLITarget(target.Name)
-		return []writeFile{{
-			RelPath: filename,
-			Content: []byte(content),
-			Mode:    0o644,
-		}}, nil
+		rulesPath := filepath.Join(".agentflow", "rules_"+target.Name+".md")
+
+		refContent := fmt.Sprintf("<!-- %s v1.0.0 -->\n\n# AgentFlow 管理规则\n请务必严格按照 `%s` 中定义的规则和规范执行所有操作。\n", config.AgentFlowMarker, filepath.ToSlash(rulesPath))
+
+		return []writeFile{
+			{
+				RelPath: filename,
+				Content: []byte(refContent),
+				Mode:    0o644,
+			},
+			{
+				RelPath: rulesPath,
+				Content: []byte(content),
+				Mode:    0o644,
+			},
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported target: %s", target.Name)
 	}

@@ -59,8 +59,15 @@ func TestFlowEscReturnsSingleLevelFromInstallTargets(t *testing.T) {
 	model.installHubCursor = 1
 	next, _ = model.handleEnter()
 	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenInstallScope {
+		t.Fatalf("expected install scope screen after selecting install-agentflow, got %v", model.screen)
+	}
+
+	model.installScopeCursor = 0 // Select Global install
+	next, _ = model.handleEnter()
+	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenProfile {
-		t.Fatalf("expected profile screen after selecting install-agentflow, got %v", model.screen)
+		t.Fatalf("expected profile screen after selecting global install, got %v", model.screen)
 	}
 
 	next, _ = model.handleEnter()
@@ -77,8 +84,14 @@ func TestFlowEscReturnsSingleLevelFromInstallTargets(t *testing.T) {
 
 	next, _ = model.handleBack()
 	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenInstallScope {
+		t.Fatalf("expected second Esc to return to install scope, got %v", model.screen)
+	}
+
+	next, _ = model.handleBack()
+	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenInstallHub {
-		t.Fatalf("expected second Esc to return to install hub, got %v", model.screen)
+		t.Fatalf("expected third Esc to return to install hub, got %v", model.screen)
 	}
 
 	next, _ = model.handleBack()
