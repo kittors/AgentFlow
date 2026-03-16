@@ -695,7 +695,7 @@ func (i *Installer) WriteEnvConfig(envVars map[string]string) ([]string, error) 
 		lines = append(lines, "  "+line)
 	}
 	lines = append(lines, "")
-	lines = append(lines, fmt.Sprintf(i.Catalog.Msg("运行 source %s 或重启终端以生效。", "Run source %s or restart your terminal to apply."), rcFile))
+	lines = append(lines, i.Catalog.Msg("✅ 配置已在当前会话中生效。新终端窗口请运行 source 或重启终端。", "✅ Configuration applied in current session. For new terminals, run source or restart."))
 	return lines, nil
 }
 

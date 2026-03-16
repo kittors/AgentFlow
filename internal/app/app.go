@@ -830,6 +830,10 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 			return errorPanel(a.Catalog.Msg("配置写入失败", "Config write failed"), err)
 		}
 		allLines = append(allLines, lines...)
+		// Also set in current process so changes take effect immediately.
+		for key, value := range normalEnvVars {
+			os.Setenv(key, value)
+		}
 	}
 
 	// Write Codex config.json if applicable.
