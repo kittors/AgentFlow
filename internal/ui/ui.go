@@ -129,57 +129,6 @@ var (
 			Padding(0, 1)
 )
 
-func RunMainMenu(catalog i18n.Catalog, version string, panels []Panel, output io.Writer) (Action, bool, error) {
-	options := []Option{
-		{
-			Value:       string(ActionInstall),
-			Label:       catalog.Msg("安装到 CLI", "Install to CLI targets"),
-			Badge:       catalog.Msg("安装", "SETUP"),
-			Description: catalog.Msg("先安装 Codex / Claude / Gemini 等 CLI，或继续把 AgentFlow 部署到已存在的 CLI（全局），也可安装到当前项目。", "Install Codex / Claude / Gemini first, or deploy AgentFlow into CLIs that already exist (global), or install into the current project."),
-		},
-		{
-			Value:       string(ActionMCP),
-			Label:       catalog.Msg("管理 MCP Servers", "Manage MCP servers"),
-			Badge:       "MCP",
-			Description: catalog.Msg("为目标 CLI/IDE 写入、查看与移除 MCP servers 配置（置顶推荐 Context7 / Playwright / Filesystem / Tavily）。", "Write, inspect, and remove MCP server configs for a target CLI/IDE (pinned Context7 / Playwright / Filesystem / Tavily)."),
-		},
-		{
-			Value:       string(ActionSkill),
-			Label:       catalog.Msg("管理 Skills", "Manage skills"),
-			Badge:       "SKILL",
-			Description: catalog.Msg("为目标 CLI 安装、查看与卸载 skills（支持 skills.sh/GitHub）。", "Install, inspect, and uninstall skills for a target CLI (skills.sh/GitHub)."),
-		},
-		{
-			Value:       string(ActionUninstall),
-			Label:       catalog.Msg("卸载已安装目标", "Uninstall from installed targets"),
-			Badge:       catalog.Msg("移除", "REMOVE"),
-			Description: catalog.Msg("从已接入 CLI 中清理 AgentFlow 产物，同时保留你的原有配置。", "Remove AgentFlow assets from integrated CLIs while preserving your own config where possible."),
-		},
-		{
-			Value:       string(ActionClean),
-			Label:       catalog.Msg("清理缓存", "Clean caches"),
-			Badge:       catalog.Msg("清理", "CLEAN"),
-			Description: catalog.Msg("清除 AgentFlow 生成的缓存、临时目录和派生产物，保持环境整洁。", "Remove AgentFlow caches, temporary directories, and derived artifacts to keep the environment tidy."),
-		},
-		{
-			Value:       string(ActionExit),
-			Label:       catalog.Msg("退出", "Exit"),
-			Badge:       catalog.Msg("退出", "EXIT"),
-			Description: catalog.Msg("退出交互菜单并返回终端。", "Leave the interactive menu and return to the terminal."),
-		},
-	}
-
-	value, _, canceled, err := runSelection(output, selectionModel{
-		catalog:  catalog,
-		title:    fmt.Sprintf("AgentFlow v%s", version),
-		subtitle: catalog.Msg("跨平台 Go CLI。操作列表保持紧凑，状态和结果统一收进右侧面板。", "Cross-platform Go CLI. Keep actions compact while status and results stay inside the right panel."),
-		hint:     catalog.Msg("↑/↓ 或滚轮切换动作，Enter 执行，Esc 退出。", "Use ↑/↓ or the mouse wheel to change actions, Enter to run, Esc to exit."),
-		options:  options,
-		panels:   panels,
-	})
-	return Action(value), canceled, err
-}
-
 func SelectLanguage(defaultLanguage string, output io.Writer) (string, bool, error) {
 	catalog := i18n.NewCatalogWithLanguage(defaultLanguage)
 	cursor := 1
