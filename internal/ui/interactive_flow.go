@@ -408,7 +408,7 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Value:       "bootstrap-cli",
 				Label:       catalog.Msg("安装 CLI 工具", "Install CLI tools"),
 				Badge:       catalog.Msg("CLI", "CLI"),
-				Description: catalog.Msg("快速安装 Codex、Claude Code、Gemini、Qwen、Kiro CLI，并补齐 Node / nvm / WSL2 依赖（Kiro 使用官方脚本）。", "Quickly install Codex, Claude Code, Gemini, Qwen, and Kiro CLI, including Node / nvm / WSL2 prerequisites (Kiro uses the official install script)."),
+				Description: catalog.Msg("快速安装 Codex 和 Claude Code，并补齐 Node 依赖。", "Quickly install Codex and Claude Code, including Node prerequisites."),
 			},
 			{
 				Value:       "install-agentflow",
@@ -432,7 +432,7 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Value:       "uninstall-cli",
 				Label:       catalog.Msg("卸载 CLI 工具（完整卸载）", "Uninstall CLI tools (full removal)"),
 				Badge:       catalog.Msg("CLI", "CLI"),
-				Description: catalog.Msg("卸载 Codex / Claude / Gemini 等 CLI 本体，并默认删除配置目录。", "Uninstall CLI tools like Codex / Claude / Gemini and purge their config directories by default."),
+				Description: catalog.Msg("卸载 Codex / Claude，并默认删除配置目录。", "Uninstall CLI tools like Codex / Claude and purge their config directories by default."),
 			},
 		},
 		mcpActions: []Option{
@@ -1345,7 +1345,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.notice = panelRef(Panel{
 					Title: m.catalog.Msg("安装提示", "Install hint"),
 					Lines: []string{
-						m.catalog.Msg("还没有可安装 AgentFlow 的 CLI。先进入“安装 CLI 工具”分支完成 Codex、Claude 或 Gemini 的安装。", "There are no CLI targets ready for AgentFlow yet. Use the CLI install branch first to install Codex, Claude, or Gemini."),
+						m.catalog.Msg("还没有可安装 AgentFlow 的 CLI。先进入“安装 CLI 工具”分支完成 Codex 或 Claude 的安装。", "There are no CLI targets ready for AgentFlow yet. Use the CLI install branch first to install Codex or Claude."),
 					},
 				})
 				return m, nil

@@ -20,22 +20,12 @@ import (
 
 var (
 	targetSubagentFiles = map[string]string{
-		"codex":    "subagent_codex.md",
-		"claude":   "subagent_claude.md",
-		"gemini":   "subagent_gemini.md",
-		"qwen":     "subagent_other.md",
-		"kiro":     "subagent_other.md",
-		"opencode": "subagent_opencode.md",
-		"grok":     "subagent_other.md",
+		"codex":  "subagent_codex.md",
+		"claude": "subagent_claude.md",
 	}
 	targetHooksFiles = map[string]string{
-		"codex":    "hooks_codex.md",
-		"claude":   "hooks_claude.md",
-		"gemini":   "hooks_other.md",
-		"qwen":     "hooks_other.md",
-		"kiro":     "hooks_other.md",
-		"opencode": "hooks_other.md",
-		"grok":     "hooks_other.md",
+		"codex":  "hooks_codex.md",
+		"claude": "hooks_claude.md",
 	}
 )
 
@@ -114,8 +104,6 @@ func (i *Installer) CLIConfigFields(targetName string) []EnvVarConfig {
 	if len(target.Models) > 0 {
 		envVar := target.ModelEnv
 		if envVar == "" {
-			// Codex uses config.json instead of env var, but we still
-			// present it as a selectable field for the UI.
 			envVar = "__MODEL__"
 		}
 		options := make([]string, len(target.Models))

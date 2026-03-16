@@ -92,7 +92,7 @@ If you change asset names, install scripts, or the `npx` bootstrap path, update:
 Please include:
 
 - OS and architecture
-- CLI target in use (`codex`, `claude`, `gemini`, `qwen`, `grok`, `opencode`)
+- CLI target in use (`codex`, `claude`)
 - Exact command you ran
 - Expected behavior vs actual behavior
 - Relevant config snippets if install/uninstall integration is involved

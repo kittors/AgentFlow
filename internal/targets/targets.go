@@ -75,78 +75,12 @@ var All = map[string]Target{
 			{Value: "claude-haiku-3.5-20241022", Label: "Claude Haiku 3.5"},
 		},
 	},
-	"gemini": {
-		Name:                  "gemini",
-		DisplayName:           "Gemini CLI",
-		Dir:                   ".gemini",
-		RulesFile:             "GEMINI.md",
-		HooksSummary:          "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
-		Command:               "gemini",
-		NPMPackage:            "@google/gemini-cli",
-		MinNodeMajor:          20,
-		DocsURL:               "https://google-gemini.github.io/gemini-cli/docs/get-started/",
-		BootstrapSupported:    true,
-		RecommendWSLOnWindows: true,
-		APIKeyEnv:             "GEMINI_API_KEY",
-		BaseURLEnv:            "GEMINI_API_BASE_URL",
-		ModelEnv:              "GEMINI_MODEL",
-		Models: []ModelOption{
-			{Value: "gemini-2.5-pro", Label: "Gemini 2.5 Pro (推荐/Recommended)", Default: true},
-			{Value: "gemini-2.5-flash", Label: "Gemini 2.5 Flash"},
-		},
-	},
-	"qwen": {
-		Name:                  "qwen",
-		DisplayName:           "Qwen CLI",
-		Dir:                   ".qwen",
-		RulesFile:             "QWEN.md",
-		HooksSummary:          "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
-		Command:               "qwen",
-		NPMPackage:            "@qwen-code/qwen-code",
-		MinNodeMajor:          20,
-		DocsURL:               "https://qwen-code.github.io/qwen-code-docs/",
-		BootstrapSupported:    true,
-		RecommendWSLOnWindows: true,
-		APIKeyEnv:             "DASHSCOPE_API_KEY",
-		BaseURLEnv:            "DASHSCOPE_BASE_URL",
-		ModelEnv:              "DASHSCOPE_MODEL",
-		Models: []ModelOption{
-			{Value: "qwen3-coder", Label: "Qwen3 Coder (推荐/Recommended)", Default: true},
-			{Value: "qwen-max", Label: "Qwen Max"},
-			{Value: "qwen-plus", Label: "Qwen Plus"},
-		},
-	},
-	"kiro": {
-		Name:                  "kiro",
-		DisplayName:           "Kiro CLI",
-		Dir:                   ".kiro",
-		RulesFile:             "KIRO.md",
-		HooksSummary:          "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
-		Command:               "kiro-cli",
-		DocsURL:               "https://kiro.dev/cli/",
-		BootstrapSupported:    true,
-		RecommendWSLOnWindows: true,
-	},
-	"grok": {
-		Name:         "grok",
-		DisplayName:  "Grok CLI",
-		Dir:          ".grok",
-		RulesFile:    "GROK.md",
-		HooksSummary: "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
-	},
-	"opencode": {
-		Name:         "opencode",
-		DisplayName:  "OpenCode",
-		Dir:          ".config/opencode",
-		RulesFile:    "AGENTS.md",
-		HooksSummary: "当前不支持 Hooks; 所有 Hook 功能自动降级，不影响核心工作流。",
-	},
 }
 
 var SupportedTargets = All
 
 func Names() []string {
-	return []string{"codex", "claude", "gemini", "qwen", "kiro", "grok", "opencode"}
+	return []string{"codex", "claude"}
 }
 
 func Lookup(name string) (Target, bool) {
@@ -161,5 +95,5 @@ func SortedTargetNames() []string {
 }
 
 func BootstrapNames() []string {
-	return []string{"codex", "claude", "gemini", "qwen", "kiro"}
+	return []string{"codex", "claude"}
 }

@@ -37,4 +37,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Convention extraction via `~conventions`
 - Architecture scanning via `~scan`
 - Project dashboard generation via `~dashboard`
-- Multi-CLI deployment targets for Codex, Claude, Gemini, OpenCode, Qwen, and Grok
+- Multi-CLI deployment targets for Codex and Claude

@@ -600,7 +600,7 @@ func TestFlowBootstrapBranchDefaultsToManualWhenAutoUnsupported(t *testing.T) {
 	model := newTestInteractiveFlowModel(InteractiveCallbacks{
 		Status: func() Panel { return Panel{Title: "Environment"} },
 		BootstrapOptions: func() []Option {
-			return []Option{{Value: "gemini", Label: "Gemini CLI", Badge: "GEMINI"}}
+			return []Option{{Value: "claude", Label: "Claude Code", Badge: "CLAUDE"}}
 		},
 		BootstrapAutoSupported: func(target string) bool {
 			return false

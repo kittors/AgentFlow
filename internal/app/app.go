@@ -1,13 +1,10 @@
 package app
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -107,9 +104,6 @@ func (a *App) runInteractiveMainMenu() int {
 		return code
 	}
 
-	// Show splash screen with loading and daily update check.
-	a.showSplashScreen()
-
 	if err := ui.RunInteractiveFlow(a.Catalog, a.Version, ui.InteractiveCallbacks{
 		Status:                 a.statusPanel,
 		MCPTargetOptions:       a.mcpTargetOptions,
@@ -147,148 +141,6 @@ func (a *App) runInteractiveMainMenu() int {
 		return 1
 	}
 	return 0
-}
-
-// showSplashScreen displays a loading screen with ASCII art logo,
-// version info, and a daily update check before entering the TUI.
-func (a *App) showSplashScreen() {
-	const (
-		esc    = "\033["
-		cyan   = esc + "1;36m"
-		blue   = esc + "1;34m"
-		purple = esc + "1;35m"
-		green  = esc + "1;32m"
-		gray   = esc + "0;90m"
-		white  = esc + "1;37m"
-		bgBlue = esc + "1;97;44m"
-		reset  = esc + "0m"
-	)
-
-	// Hide cursor, clear screen.
-	fmt.Fprint(a.Stdout, esc+"?25l"+esc+"2J"+esc+"H")
-	defer fmt.Fprint(a.Stdout, esc+"?25h")
-
-	// Each art line = one color, one raw string. No mid-line color split.
-	art := cyan + "     _                    _    _____ _" + reset + "\n" +
-		cyan + `    / \   __ _  ___ _ __ | |_ |  ___| | _____      __` + reset + "\n" +
-		blue + "   / _ \\ / _` |/ _ \\ '_ \\| __|_  | |/ _ \\ \\ /\\ / /" + reset + "\n" +
-		blue + `  / ___ \ (_| |  __/ | | | |_ |  _| | | (_) \ V  V /` + reset + "\n" +
-		purple + `  /_/  \_\__, |\___|_| |_|\__|_|   |_|\___/ \_/\_/` + reset + "\n" +
-		purple + `         |___/` + reset
-
-	ver := bgBlue + fmt.Sprintf(" v%s ", a.Version) + reset
-	tag := gray + a.Catalog.Msg("✨ 多 CLI 代理工作流编排系统", "✨ Multi-CLI Agent Workflow Orchestrator") + reset
-
-	render := func(status string) {
-		fmt.Fprint(a.Stdout, esc+"H")
-		fmt.Fprintf(a.Stdout, "\n\n  %s\n\n  %s  %s\n\n  %s\n\n", art, ver, tag, status)
-	}
-
-	// Background update check (24h cache).
-	type res struct {
-		r   update.Result
-		err error
-	}
-	ch := make(chan res, 1)
-	go func() {
-		r, err := a.Checker.Check(a.Version, update.Options{CacheTTLHours: 24})
-		ch <- res{r, err}
-	}()
-
-	frames := [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	txt := a.Catalog.Msg("正在检查更新…", "Checking for updates…")
-	frame := 0
-	for {
-		select {
-		case r := <-ch:
-			if r.err == nil && r.r.UpdateAvailable {
-				// Show update info and ask user.
-				yellow := esc + "1;33m"
-				render(green + fmt.Sprintf(
-					a.Catalog.Msg("⬆️  发现新版本 v%s（当前 v%s）",
-						"⬆️  New version v%s available (current v%s)"),
-					r.r.Latest, a.Version) + reset + "\n\n  " +
-					yellow + a.Catalog.Msg("是否立即更新？[Y/n] ", "Update now? [Y/n] ") + reset)
-
-				// Show cursor for input.
-				fmt.Fprint(a.Stdout, esc+"?25h")
-
-				// Read user choice with timeout.
-				answerCh := make(chan string, 1)
-				go func() {
-					reader := bufio.NewReader(os.Stdin)
-					line, _ := reader.ReadString('\n')
-					answerCh <- strings.TrimSpace(strings.ToLower(line))
-				}()
-
-				var answer string
-				select {
-				case answer = <-answerCh:
-				case <-time.After(10 * time.Second):
-					answer = "n" // timeout → skip
-				}
-
-				if answer == "" || answer == "y" || answer == "yes" {
-					// User chose to update. Hide cursor again.
-					fmt.Fprint(a.Stdout, esc+"?25l")
-
-					// Show downloading spinner.
-					doneCh := make(chan struct{})
-					var updateErr error
-					go func() {
-						_, updateErr = a.Checker.SelfUpdate(a.Version)
-						close(doneCh)
-					}()
-
-					dlTxt := a.Catalog.Msg("正在下载更新…", "Downloading update…")
-					dlFrame := 0
-				downloadLoop:
-					for {
-						select {
-						case <-doneCh:
-							break downloadLoop
-						default:
-							render(white + fmt.Sprintf("%s %s", frames[dlFrame%len(frames)], dlTxt) + reset)
-							dlFrame++
-							time.Sleep(80 * time.Millisecond)
-						}
-					}
-
-					if updateErr != nil {
-						red := esc + "0;31m"
-						render(red + fmt.Sprintf(
-							a.Catalog.Msg("❌ 更新失败: %v", "❌ Update failed: %v"),
-							updateErr) + reset)
-						time.Sleep(2 * time.Second)
-						return
-					}
-
-					render(green + a.Catalog.Msg("✅ 更新完成，正在重启…", "✅ Updated! Restarting…") + reset)
-					time.Sleep(500 * time.Millisecond)
-
-					// Restart: exec the new binary in place.
-					exe, err := os.Executable()
-					if err == nil {
-						syscall.Exec(exe, os.Args, os.Environ())
-					}
-					// If exec failed, tell user to restart manually.
-					render(green + a.Catalog.Msg("✅ 更新完成！请重新运行 agentflow。",
-						"✅ Updated! Please restart agentflow.") + reset)
-					time.Sleep(2 * time.Second)
-					os.Exit(0)
-				}
-				// User chose N — continue to TUI.
-				return
-			}
-			render(green + a.Catalog.Msg("✅ 已是最新版本", "✅ Up to date") + reset)
-			time.Sleep(800 * time.Millisecond)
-			return
-		default:
-			render(white + fmt.Sprintf("%s %s", frames[frame%len(frames)], txt) + reset)
-			frame++
-			time.Sleep(80 * time.Millisecond)
-		}
-	}
 }
 
 func (a *App) ensureInteractiveLanguage() (int, bool) {
@@ -966,7 +818,7 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		default:
 			normalEnvVars[key] = value
 			// Track model env var for non-codex targets.
-			if key == "ANTHROPIC_MODEL" || key == "GEMINI_MODEL" || key == "DASHSCOPE_MODEL" {
+			if key == "ANTHROPIC_MODEL" {
 				modelEnvVar = key
 				modelValue = value
 			}

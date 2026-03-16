@@ -3,11 +3,11 @@ package targets
 import "testing"
 
 func TestSupportedTargets(t *testing.T) {
-	if len(SupportedTargets) != 7 {
-		t.Fatalf("expected 7 targets, got %d", len(SupportedTargets))
+	if len(SupportedTargets) != 2 {
+		t.Fatalf("expected 2 targets, got %d", len(SupportedTargets))
 	}
 
-	for _, name := range []string{"codex", "claude", "gemini", "qwen", "kiro", "grok", "opencode"} {
+	for _, name := range []string{"codex", "claude"} {
 		if _, ok := SupportedTargets[name]; !ok {
 			t.Fatalf("missing target %s", name)
 		}

@@ -29,7 +29,7 @@ func IsAgentFlowFile(path string) bool {
 
 	buffer := make([]byte, MarkerScanBytes)
 	n, err := file.Read(buffer)
-	if err != nil && !errors.Is(err, io.EOF) {
+	if err != nil && err != io.EOF {
 		return false
 	}
 	return HasMarker(buffer[:n])

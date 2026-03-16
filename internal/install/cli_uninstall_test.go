@@ -3,9 +3,7 @@ package install
 import (
 	"bytes"
 	"errors"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -102,45 +100,6 @@ func TestUninstallCLINpmUsesWSLWhenDetected(t *testing.T) {
 	}
 	if !uninstallSeen {
 		t.Fatal("expected WSL npm uninstall to be executed")
-	}
-}
-
-func TestInstallAndUninstallKiroCreatesAndRemovesAgentFiles(t *testing.T) {
-	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
-	installer.HomeDir = t.TempDir()
-
-	if err := installer.Install("kiro", "lite"); err != nil {
-		t.Fatalf("Install returned error: %v", err)
-	}
-
-	kiroDir := filepath.Join(installer.HomeDir, ".kiro")
-	agentPath := filepath.Join(kiroDir, "agents", "agentflow.json")
-	promptPath := filepath.Join(kiroDir, "prompts", "agentflow.md")
-
-	agentBytes, err := os.ReadFile(agentPath)
-	if err != nil {
-		t.Fatalf("expected agent config to exist: %v", err)
-	}
-	if !strings.Contains(string(agentBytes), "AGENTFLOW_ROUTER:") {
-		t.Fatalf("expected marker in agent config, got %q", string(agentBytes))
-	}
-
-	promptBytes, err := os.ReadFile(promptPath)
-	if err != nil {
-		t.Fatalf("expected prompt file to exist: %v", err)
-	}
-	if !strings.Contains(string(promptBytes), "AGENTFLOW_ROUTER:") {
-		t.Fatal("expected marker in prompt file")
-	}
-
-	if err := installer.Uninstall("kiro"); err != nil {
-		t.Fatalf("Uninstall returned error: %v", err)
-	}
-	if _, err := os.Stat(agentPath); !os.IsNotExist(err) {
-		t.Fatalf("expected agent config removed, got err=%v", err)
-	}
-	if _, err := os.Stat(promptPath); !os.IsNotExist(err) {
-		t.Fatalf("expected prompt removed, got err=%v", err)
 	}
 }
 

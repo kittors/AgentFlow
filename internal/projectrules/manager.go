@@ -119,32 +119,15 @@ func expectedPaths(root, targetName string) []string {
 		return []string{filepath.Join(root, "AGENTS.md")}
 	case "claude":
 		return []string{filepath.Join(root, "CLAUDE.md")}
-	case "gemini":
-		return []string{filepath.Join(root, "GEMINI.md")}
-	case "qwen":
-		return []string{filepath.Join(root, "QWEN.md")}
-	case "kiro":
-		return []string{filepath.Join(root, "KIRO.md")}
-	case "cursor":
-		return []string{filepath.Join(root, ".cursor", "rules", "agentflow.mdc")}
-	case "windsurf":
-		return []string{filepath.Join(root, ".windsurfrules")}
-	case "trae":
-		return []string{filepath.Join(root, ".trae", "rules", "agentflow.md")}
-	case "vscode-copilot":
-		return []string{filepath.Join(root, ".github", "copilot-instructions.md")}
-	case "cline":
-		return []string{filepath.Join(root, ".clinerules")}
-	case "antigravity":
-		return []string{filepath.Join(root, ".agents", "skills", "agentflow", "SKILL.md")}
 	default:
 		return nil
 	}
+
 }
 
 func buildWrites(target Target, profile string) ([]writeFile, error) {
 	switch target.Name {
-	case "codex", "claude", "gemini", "qwen", "kiro":
+	case "codex", "claude":
 		content, err := buildAgentFlowRules(target.Name, profile)
 		if err != nil {
 			return nil, err
@@ -155,51 +138,10 @@ func buildWrites(target Target, profile string) ([]writeFile, error) {
 			Content: []byte(content),
 			Mode:    0o644,
 		}}, nil
-
-	case "cursor":
-		content, err := readAssetWithFallback("agentflow/project_rules/ide_cursor_agentflow.mdc")
-		if err != nil {
-			return nil, err
-		}
-		return []writeFile{{RelPath: filepath.Join(".cursor", "rules", "agentflow.mdc"), Content: content, Mode: 0o644}}, nil
-
-	case "windsurf":
-		content, err := readAssetWithFallback("agentflow/project_rules/ide_windsurf_agentflow.md")
-		if err != nil {
-			return nil, err
-		}
-		return []writeFile{{RelPath: ".windsurfrules", Content: content, Mode: 0o644}}, nil
-
-	case "trae":
-		content, err := readAssetWithFallback("agentflow/project_rules/ide_trae_agentflow.md")
-		if err != nil {
-			return nil, err
-		}
-		return []writeFile{{RelPath: filepath.Join(".trae", "rules", "agentflow.md"), Content: content, Mode: 0o644}}, nil
-
-	case "vscode-copilot":
-		content, err := readAssetWithFallback("agentflow/project_rules/ide_vscode_copilot_agentflow.md")
-		if err != nil {
-			return nil, err
-		}
-		return []writeFile{{RelPath: filepath.Join(".github", "copilot-instructions.md"), Content: content, Mode: 0o644}}, nil
-
-	case "cline":
-		content, err := readAssetWithFallback("agentflow/project_rules/ide_cline_agentflow.md")
-		if err != nil {
-			return nil, err
-		}
-		return []writeFile{{RelPath: ".clinerules", Content: content, Mode: 0o644}}, nil
-
-	case "antigravity":
-		content, err := readAssetWithFallback("agentflow/_SKILL.md", "SKILL.md")
-		if err != nil {
-			return nil, err
-		}
-		return []writeFile{{RelPath: filepath.Join(".agents", "skills", "agentflow", "SKILL.md"), Content: content, Mode: 0o644}}, nil
 	default:
 		return nil, fmt.Errorf("unsupported target: %s", target.Name)
 	}
+
 }
 
 func rulesFilenameForCLITarget(name string) string {
@@ -212,12 +154,6 @@ func rulesFilenameForCLITarget(name string) string {
 		return "AGENTS.md"
 	case "claude":
 		return "CLAUDE.md"
-	case "gemini":
-		return "GEMINI.md"
-	case "qwen":
-		return "QWEN.md"
-	case "kiro":
-		return "KIRO.md"
 	default:
 		return "AGENTS.md"
 	}
@@ -302,10 +238,6 @@ func installSubagentFile(targetName string) string {
 		return "subagent_codex.md"
 	case "claude":
 		return "subagent_claude.md"
-	case "gemini":
-		return "subagent_gemini.md"
-	case "opencode":
-		return "subagent_opencode.md"
 	default:
 		return "subagent_other.md"
 	}

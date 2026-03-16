@@ -26,7 +26,7 @@
 
 ## 什么是 AgentFlow？
 
-AgentFlow 是一个**多 CLI 智能工作流系统**，它从根本上改变了 AI 编程助手的工作方式。AgentFlow 不会对每个请求一视同仁，而是按五个维度为每次输入打分，将其路由到对应的工作流深度——从即时回答到完整的架构评审。它为 AI 编程 CLI（Codex、Claude、Gemini、Qwen、Grok、OpenCode）和 IDE（Cursor、Windsurf、Trae、VS Code Copilot、Cline、Antigravity）提供了统一的规则层，带来**智能路由、安全检测、持久化记忆和子代理编排**。
+AgentFlow 是一个**多 CLI 智能工作流系统**，它从根本上改变了 AI 编程助手的工作方式。AgentFlow 不会对每个请求一视同仁，而是按五个维度为每次输入打分，将其路由到对应的工作流深度——从即时回答到完整的架构评审。它为 AI 编程 CLI（Codex、Claude Code）提供了统一的规则层，带来**智能路由、安全检测、持久化记忆和子代理编排**。
 
 AgentFlow 以**单个 Go 二进制**发布，所有工作流资源内嵌其中——不需要 Python、`pip`、`uv` 或 PyInstaller。
 
@@ -129,7 +129,7 @@ AgentFlow 为 CLI 和 IDE 生成 AI 优化的项目规则文件，支持三种 p
 
 | 类别 | 目标 | 规则格式 |
 |------|------|----------|
-| CLI | Codex、Claude、Gemini、Qwen、Grok、OpenCode | `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `QWEN.md` / `GROK.md` |
+| CLI | Codex、Claude | `AGENTS.md` / `CLAUDE.md` |
 | IDE | Cursor、Windsurf、Trae、VS Code Copilot、Cline、Antigravity、Kiro | `.cursorrules` / `.windsurfrules` / `.trae/rules.md` 等 |
 
 ### 🔌 Skills 与 MCP 生态
@@ -320,7 +320,7 @@ agentflow version               # 输出当前版本与更新提示
 
 # 项目级规则（CLI + IDE）
 agentflow rules detect
-agentflow rules install codex claude gemini qwen kiro cursor windsurf trae vscode-copilot cline antigravity
+agentflow rules install codex claude
 
 # Skills（Codex）
 agentflow skill list codex
@@ -346,21 +346,11 @@ agentflow mcp search playwright
 |------|----------|----------|----------|
 | Codex CLI | `~/.codex/` | `AGENTS.md` | 注入 `agents/reviewer.toml`、`agents/architect.toml`，并 merge `config.toml` 多代理配置 |
 | Claude Code | `~/.claude/` | `CLAUDE.md` | merge / 清理 `settings.json` hooks |
-| Gemini CLI | `~/.gemini/` | `GEMINI.md` | 部署规则与嵌入模块 |
-| Qwen CLI | `~/.qwen/` | `QWEN.md` | 部署规则与嵌入模块 |
-| Grok CLI | `~/.grok/` | `GROK.md` | 部署规则与嵌入模块 |
-| OpenCode | `~/.config/opencode/` | `AGENTS.md` | 部署规则与嵌入模块 |
 
 ### IDE 目标
 
 | 目标 | 规则格式 |
 |------|----------|
-| Cursor | `.cursorrules` |
-| Windsurf | `.windsurfrules` |
-| Trae | `.trae/rules.md` |
-| VS Code Copilot | `.github/copilot-instructions.md` |
-| Cline | `.clinerules` |
-| Kiro | Kiro 规则格式 |
 | Antigravity | `.agents/` 目录 |
 
 ---

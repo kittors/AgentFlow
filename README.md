@@ -26,7 +26,7 @@
 
 ## What is AgentFlow?
 
-AgentFlow is a **multi-CLI agent workflow system** that transforms how AI coding assistants work. Instead of treating every request the same way, AgentFlow scores each input across five dimensions and routes it to the appropriate workflow depth — from instant answers to full-scale architecture reviews. It wraps AI coding CLIs (Codex, Claude, Gemini, Qwen, Grok, OpenCode) and IDEs (Cursor, Windsurf, Trae, VS Code Copilot, Cline, Antigravity) with a unified rule layer that brings **intelligent routing, safety detection, persistent memory, and sub-agent orchestration**.
+AgentFlow is a **multi-CLI agent workflow system** that transforms how AI coding assistants work. Instead of treating every request the same way, AgentFlow scores each input across five dimensions and routes it to the appropriate workflow depth — from instant answers to full-scale architecture reviews. It wraps AI coding CLIs (Codex, Claude Code) with a unified rule layer that brings **intelligent routing, safety detection, persistent memory, and sub-agent orchestration**.
 
 AgentFlow is shipped as a **single Go binary** with all workflow assets embedded — no Python, `pip`, `uv`, or PyInstaller required.
 
@@ -129,7 +129,7 @@ AgentFlow generates AI-optimized project rule files for both CLIs and IDEs, with
 
 | Category | Targets | Rule Format |
 |----------|---------|------------|
-| CLI | Codex, Claude, Gemini, Qwen, Grok, OpenCode | `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` / `QWEN.md` / `GROK.md` |
+| CLI | Codex, Claude | `AGENTS.md` / `CLAUDE.md` |
 | IDE | Cursor, Windsurf, Trae, VS Code Copilot, Cline, Antigravity, Kiro | `.cursorrules` / `.windsurfrules` / `.trae/rules.md` / etc. |
 
 ### 🔌 Skills & MCP Ecosystem
@@ -320,7 +320,7 @@ agentflow version               # Print current version + update hint
 
 # Project rules (CLI + IDE)
 agentflow rules detect
-agentflow rules install codex claude gemini qwen kiro cursor windsurf trae vscode-copilot cline antigravity
+agentflow rules install codex claude
 
 # Skills (Codex)
 agentflow skill list codex
@@ -346,21 +346,11 @@ When no command is provided and stdin is a TTY, AgentFlow opens the Bubble Tea b
 |--------|------------------|------------|-------------------|
 | Codex CLI | `~/.codex/` | `AGENTS.md` | `agents/reviewer.toml`, `agents/architect.toml`, `config.toml` multi-agent merge |
 | Claude Code | `~/.claude/` | `CLAUDE.md` | `settings.json` hook merge / cleanup |
-| Gemini CLI | `~/.gemini/` | `GEMINI.md` | Rules + embedded module deployment |
-| Qwen CLI | `~/.qwen/` | `QWEN.md` | Rules + embedded module deployment |
-| Grok CLI | `~/.grok/` | `GROK.md` | Rules + embedded module deployment |
-| OpenCode | `~/.config/opencode/` | `AGENTS.md` | Rules + embedded module deployment |
 
 ### IDE Targets
 
 | Target | Rules Format |
 |--------|-------------|
-| Cursor | `.cursorrules` |
-| Windsurf | `.windsurfrules` |
-| Trae | `.trae/rules.md` |
-| VS Code Copilot | `.github/copilot-instructions.md` |
-| Cline | `.clinerules` |
-| Kiro | Kiro rules format |
 | Antigravity | `.agents/` directory |
 
 ---

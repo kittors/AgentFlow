@@ -46,46 +46,7 @@ func TestDetectTargetStatusWindowsWithoutWSLDisablesAutoInstall(t *testing.T) {
 	}
 }
 
-func TestManualInstallLinesWindowsIncludeWSLGuidance(t *testing.T) {
-	restoreBootstrapTestEnv(t)
-	runtimeGOOS = "windows"
-	t.Setenv("WSL_DISTRO_NAME", "")
-	t.Setenv("WSL_INTEROP", "")
 
-	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
-	lines, err := installer.ManualInstallLines("gemini")
-	if err != nil {
-		t.Fatalf("ManualInstallLines returned error: %v", err)
-	}
-
-	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "WSL2") {
-		t.Fatalf("expected WSL2 guidance, got %q", joined)
-	}
-	if !strings.Contains(joined, "npm install -g @google/gemini-cli") {
-		t.Fatalf("expected npm install command, got %q", joined)
-	}
-}
-
-func TestInstallCreatesMissingTargetDir(t *testing.T) {
-	restoreBootstrapTestEnv(t)
-	runtimeGOOS = "darwin"
-
-	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
-	installer.HomeDir = t.TempDir()
-
-	if err := installer.Install("gemini", "lite"); err != nil {
-		t.Fatalf("Install returned error: %v", err)
-	}
-
-	targetDir := filepath.Join(installer.HomeDir, ".gemini")
-	if info, err := os.Stat(targetDir); err != nil || !info.IsDir() {
-		t.Fatalf("expected target dir to be created, err=%v", err)
-	}
-	if _, err := os.Stat(filepath.Join(targetDir, "GEMINI.md")); err != nil {
-		t.Fatalf("expected rules file to exist, err=%v", err)
-	}
-}
 
 func TestStatusLinesReflectCLIAndAgentFlowStateSeparately(t *testing.T) {
 	restoreBootstrapTestEnv(t)
