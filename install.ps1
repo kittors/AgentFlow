@@ -82,10 +82,8 @@ function Start-AgentFlowMenu {
     }
 }
 
-Write-Host ""
-Write-Host "AgentFlow" -ForegroundColor Cyan
-Write-Host (msg "Go Binary Installer" "Go Binary Installer") -ForegroundColor DarkGray
-Write-Host ""
+Write-Host "`nAgentFlow Installer`n" -ForegroundColor Cyan
+
 
 Write-Step (msg "步骤 1/3: 解析下载地址" "Step 1/3: Resolve download URL")
 $downloadUrl = Resolve-DownloadUrl

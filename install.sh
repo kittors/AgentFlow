@@ -217,20 +217,7 @@ download_binary() {
     chmod +x "${binary_path}"
 }
 
-printf "\n"
-# Use $'...' to embed real ESC bytes; printf '%s\n' preserves backslashes in art.
-_C=$'\033[1;36m'
-_B=$'\033[1;34m'
-_P=$'\033[1;35m'
-_R=$'\033[0m'
-printf '%s\n' "${_C}     _                    _   ${_B} _____ _               ${_R}"
-printf '%s\n' "${_C}    / \\   __ _  ___ _ __ | |_ ${_B}|  ___| | _____      __${_R}"
-printf '%s\n' "${_C}   / _ \\ / _\` |/ _ \\ '_ \\| __|${_B}|_  | |/ _ \\ \\ /\\ / /${_R}"
-printf '%s\n' "${_C}  / ___ \\ (_| |  __/ | | | |_ ${_P}|  _| | | (_) \\ V  V / ${_R}"
-printf '%s\n' "${_C} /_/   \\_\\__, |\\___|_| |_|\\__|${_P}_|   |_|\\___/ \\_/\\_/  ${_R}"
-printf '%s\n' "${_C}         |___/                ${_P}                       ${_R}"
-echo ""
-printf "${DIM}%s${RESET}\n\n" "$(msg "Go Binary Installer" "Go Binary Installer")"
+printf "\n${BOLD}${CYAN}AgentFlow Installer${RESET}\n\n"
 
 
 
