@@ -24,9 +24,21 @@ var skillSourceDescriptionCache sync.Map
 func (a *App) mcpTargetOptions() []ui.Option {
 	homeDir, _ := os.UserHomeDir()
 	names := targets.SortedMCPTargetNames()
+
+	// Build a set of installed targets (CLI or AgentFlow present).
+	installed := make(map[string]bool)
+	for _, status := range a.Installer.DetectTargetStatuses() {
+		if status.CLIInstalled || status.AgentFlowInstalled {
+			installed[status.Target.Name] = true
+		}
+	}
+
 	options := make([]ui.Option, 0, len(names))
 	for _, name := range names {
 		target, _ := targets.LookupMCP(name)
+		if !installed[target.Name] {
+			continue // skip targets whose CLI is not installed
+		}
 		options = append(options, ui.Option{
 			Value:       target.Name,
 			Label:       target.DisplayName,

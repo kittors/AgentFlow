@@ -2299,33 +2299,47 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		panels = append(panels, m.status)
 		model.panels = panels
 	case flowScreenBootstrapConfig:
-		model.subtitle = fmt.Sprintf(m.catalog.Msg("配置 %s（可选，留空跳过）", "Configure %s (optional, leave empty to skip)"), m.configTarget)
-		model.hint = m.catalog.Msg("↑/↓ 切换字段，文本框直接输入，选择框 ←/→ 切换，Enter 保存，Esc 跳过。", "↑/↓ fields, type for text, ←/→ for select, Enter save, Esc skip.")
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("配置 %s — 在文本字段直接输入，选择框 ←/→ 切换", "Configure %s — type directly for text fields, ←/→ for selectors"), m.configTarget)
+		model.hint = m.catalog.Msg("↑/↓ 切换字段，直接打字输入文本，←/→ 切换选项，Enter 保存，Esc 跳过。", "↑/↓ switch fields, type to input text, ←/→ for options, Enter save, Esc skip.")
 		// Build virtual options from config fields to display as a form.
 		options := make([]Option, len(m.configFields))
 		for idx, f := range m.configFields {
 			var displayValue string
+			isActive := idx == m.configFieldCursor && m.configEditing
 			if f.FieldType == "select" && len(f.Options) > 0 {
 				// Show selector with ◀ current ▶ indicator.
 				current := f.Options[f.OptionCursor]
-				if idx == m.configFieldCursor && m.configEditing {
+				if isActive {
 					displayValue = fmt.Sprintf("◀ %s ▶  (%d/%d)", current, f.OptionCursor+1, len(f.Options))
 				} else {
-					displayValue = current
+					displayValue = fmt.Sprintf("  %s", current)
 				}
 			} else {
-				displayValue = f.Value
-				if displayValue == "" {
-					displayValue = m.catalog.Msg("(留空则使用官方默认)", "(leave empty to use official default)")
-				}
-				// Show cursor indicator for editing field.
-				if idx == m.configFieldCursor && m.configEditing {
-					displayValue = f.Value + "█"
+				// Text input field — show a clear input box.
+				if isActive {
+					if f.Value == "" {
+						displayValue = fmt.Sprintf("[ %s█ ]",
+							m.catalog.Msg("请输入... ", "type here... "))
+					} else {
+						displayValue = fmt.Sprintf("[ %s█ ]", f.Value)
+					}
+				} else if f.Value != "" {
+					displayValue = fmt.Sprintf("[ %s ]", f.Value)
+				} else {
+					displayValue = m.catalog.Msg(
+						fmt.Sprintf("[ 请输入 %s ]", f.Label),
+						fmt.Sprintf("[ enter %s ]", f.Label),
+					)
 				}
 			}
-			labelText := f.Label
+			// Add type indicator to label.
+			typeIcon := "📝"
+			if f.FieldType == "select" {
+				typeIcon = "🔽"
+			}
+			labelText := fmt.Sprintf("%s %s", typeIcon, f.Label)
 			if f.EnvVar != "" && !strings.HasPrefix(f.EnvVar, "__") {
-				labelText = fmt.Sprintf("%s (%s)", f.Label, f.EnvVar)
+				labelText = fmt.Sprintf("%s %s (%s)", typeIcon, f.Label, f.EnvVar)
 			}
 			options[idx] = Option{
 				Value:       f.EnvVar,
