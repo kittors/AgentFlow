@@ -225,6 +225,7 @@ type configFieldState struct {
 	Options      []string // available choices (for select type)
 	OptionCursor int      // currently selected option index (for select type)
 	Dirty        bool     // true if user explicitly modified this field
+	CursorPos    int      // cursor position within Value (for text type)
 }
 
 func normalizeIdentifier(value string) string {
@@ -960,7 +961,6 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 		m.detailScroll = 0
 		return m.handleEnter()
 	case tea.KeyLeft:
-		// For select fields: move to previous option.
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
 			f := &m.configFields[m.configFieldCursor]
 			if f.FieldType == "select" && len(f.Options) > 0 {
@@ -971,11 +971,15 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 				}
 				f.Value = f.Options[f.OptionCursor]
 				f.Dirty = true
+			} else if f.FieldType != "select" {
+				// Move text cursor left.
+				if f.CursorPos > 0 {
+					f.CursorPos--
+				}
 			}
 		}
 		return m, nil
 	case tea.KeyRight:
-		// For select fields: move to next option.
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
 			f := &m.configFields[m.configFieldCursor]
 			if f.FieldType == "select" && len(f.Options) > 0 {
@@ -986,18 +990,22 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 				}
 				f.Value = f.Options[f.OptionCursor]
 				f.Dirty = true
+			} else if f.FieldType != "select" {
+				// Move text cursor right.
+				if f.CursorPos < len(f.Value) {
+					f.CursorPos++
+				}
 			}
 		}
 		return m, nil
 	case tea.KeyBackspace:
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
 			f := &m.configFields[m.configFieldCursor]
-			if f.FieldType != "select" {
-				v := f.Value
-				if len(v) > 0 {
-					f.Value = v[:len(v)-1]
-					f.Dirty = true
-				}
+			if f.FieldType != "select" && f.CursorPos > 0 {
+				// Delete character before cursor.
+				f.Value = f.Value[:f.CursorPos-1] + f.Value[f.CursorPos:]
+				f.CursorPos--
+				f.Dirty = true
 			}
 		}
 		return m, nil
@@ -1005,7 +1013,10 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
 			f := &m.configFields[m.configFieldCursor]
 			if f.FieldType != "select" {
-				f.Value += key.String()
+				// Insert characters at cursor position.
+				ins := key.String()
+				f.Value = f.Value[:f.CursorPos] + ins + f.Value[f.CursorPos:]
+				f.CursorPos += len(ins)
 				f.Dirty = true
 			}
 		}
@@ -2333,10 +2344,14 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 				displayValue = fmt.Sprintf("◀ %s ▶  (%d/%d)", current, f.OptionCursor+1, len(f.Options))
 			} else {
 				if f.Value == "" {
-					displayValue = fmt.Sprintf("[ %s█ ]",
-						m.catalog.Msg("请输入... ", "type here... "))
+					displayValue = m.catalog.Msg("请输入... ", "type here... ") + "█"
 				} else {
-					displayValue = fmt.Sprintf("[ %s█ ]", f.Value)
+					// Show cursor at CursorPos within the value.
+					pos := f.CursorPos
+					if pos > len(f.Value) {
+						pos = len(f.Value)
+					}
+					displayValue = f.Value[:pos] + "█" + f.Value[pos:]
 				}
 			}
 			typeIcon := "📝"
