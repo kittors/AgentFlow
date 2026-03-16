@@ -636,8 +636,9 @@ func nodeMajor(version string) int {
 }
 
 // WriteEnvConfig writes environment variable exports to the user's shell config
-// file (~/.zshrc, ~/.bashrc, or ~/.profile). It returns descriptive lines about
-// what was written and any errors encountered.
+// file (~/.zshrc, ~/.bashrc, or ~/.profile). Instead of appending a new block
+// every time, it looks for an existing "# AgentFlow CLI configuration" section
+// and replaces it in-place. This prevents duplicate blocks from accumulating.
 func (i *Installer) WriteEnvConfig(envVars map[string]string) ([]string, error) {
 	if len(envVars) == 0 {
 		return []string{i.Catalog.Msg("没有需要写入的配置。", "No configuration to write.")}, nil
@@ -648,41 +649,74 @@ func (i *Installer) WriteEnvConfig(envVars map[string]string) ([]string, error) 
 		return nil, errors.New(i.Catalog.Msg("未找到 shell 配置文件（~/.zshrc 或 ~/.bashrc）。", "Could not find a shell config file (~/.zshrc or ~/.bashrc)."))
 	}
 
-	// Read existing content to check for duplicates.
 	existing, _ := os.ReadFile(rcFile)
 	content := string(existing)
 
-	var newLines []string
+	// Build the new config block.
+	var exportLines []string
 	for envVar, value := range envVars {
 		if strings.TrimSpace(value) == "" {
 			continue
 		}
-		exportLine := fmt.Sprintf("export %s=%s", envVar, shellQuote(value))
-
-		// Comment out any existing export for this variable.
-		marker := fmt.Sprintf("export %s=", envVar)
-		if strings.Contains(content, marker) {
-			updatedContent := strings.Builder{}
-			for _, line := range strings.Split(content, "\n") {
-				trimmed := strings.TrimSpace(line)
-				if strings.HasPrefix(trimmed, marker) && !strings.HasPrefix(trimmed, "#") {
-					updatedContent.WriteString("# " + line + "  # replaced by AgentFlow\n")
-				} else {
-					updatedContent.WriteString(line + "\n")
-				}
-			}
-			content = updatedContent.String()
-		}
-		newLines = append(newLines, exportLine)
+		exportLines = append(exportLines, fmt.Sprintf("export %s=%s", envVar, shellQuote(value)))
 	}
-
-	if len(newLines) == 0 {
+	if len(exportLines) == 0 {
 		return []string{i.Catalog.Msg("所有配置项均为空，未写入。", "All config values were empty; nothing written.")}, nil
 	}
 
-	// Append the new exports.
-	block := "\n# AgentFlow CLI configuration\n" + strings.Join(newLines, "\n") + "\n"
-	content = strings.TrimRight(content, "\n") + "\n" + block
+	const marker = "# AgentFlow CLI configuration"
+	newBlock := marker + "\n" + strings.Join(exportLines, "\n") + "\n"
+
+	// Try to find and replace an existing AgentFlow config block.
+	// A block starts with "# AgentFlow CLI configuration" and ends at the next
+	// blank line (or a line that doesn't start with "export " or "#").
+	if idx := strings.Index(content, marker); idx >= 0 {
+		// Remove ALL "# AgentFlow CLI configuration" blocks (there may be duplicates).
+		var cleaned strings.Builder
+		lines := strings.Split(content, "\n")
+		inBlock := false
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == marker {
+				inBlock = true
+				continue
+			}
+			if inBlock {
+				// Lines belonging to the block: export, commented-out exports, blank lines between them.
+				if strings.HasPrefix(trimmed, "export ") || strings.HasPrefix(trimmed, "# export ") {
+					continue
+				}
+				if trimmed == "" {
+					inBlock = false
+					continue
+				}
+				// Non-empty, non-export line — block ended.
+				inBlock = false
+			}
+			cleaned.WriteString(line + "\n")
+		}
+		content = strings.TrimRight(cleaned.String(), "\n") + "\n"
+	}
+
+	// Also comment out any standalone (non-AgentFlow-block) exports for the same variables.
+	for envVar := range envVars {
+		exportPrefix := fmt.Sprintf("export %s=", envVar)
+		if strings.Contains(content, exportPrefix) {
+			var updated strings.Builder
+			for _, line := range strings.Split(content, "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, exportPrefix) && !strings.HasPrefix(trimmed, "#") {
+					updated.WriteString("# " + line + "  # replaced by AgentFlow\n")
+				} else {
+					updated.WriteString(line + "\n")
+				}
+			}
+			content = updated.String()
+		}
+	}
+
+	// Append the single new block.
+	content = strings.TrimRight(content, "\n") + "\n\n" + newBlock
 
 	if err := os.WriteFile(rcFile, []byte(content), 0644); err != nil {
 		return nil, fmt.Errorf(i.Catalog.Msg("写入 %s 失败: %v", "failed to write %s: %v"), rcFile, err)
@@ -691,12 +725,72 @@ func (i *Installer) WriteEnvConfig(envVars map[string]string) ([]string, error) 
 	lines := []string{
 		fmt.Sprintf(i.Catalog.Msg("已写入 %s:", "Written to %s:"), rcFile),
 	}
-	for _, line := range newLines {
+	for _, line := range exportLines {
 		lines = append(lines, "  "+line)
 	}
 	lines = append(lines, "")
 	lines = append(lines, i.Catalog.Msg("✅ 配置已在当前会话中生效。新终端窗口请运行 source 或重启终端。", "✅ Configuration applied in current session. For new terminals, run source or restart."))
 	return lines, nil
+}
+
+// CleanEnvConfig removes all "# AgentFlow CLI configuration" blocks and
+// any "# replaced by AgentFlow" comment lines from the user's shell config
+// file. This is called during uninstall to clean up env vars.
+func (i *Installer) CleanEnvConfig() error {
+	rcFile := i.detectShellRC()
+	if rcFile == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(rcFile)
+	if err != nil {
+		return nil // File doesn't exist, nothing to clean.
+	}
+
+	const marker = "# AgentFlow CLI configuration"
+	content := string(data)
+
+	// Nothing to clean if no AgentFlow markers present.
+	if !strings.Contains(content, marker) && !strings.Contains(content, "# replaced by AgentFlow") {
+		return nil
+	}
+
+	var cleaned strings.Builder
+	lines := strings.Split(content, "\n")
+	inBlock := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Skip AgentFlow config block headers.
+		if trimmed == marker {
+			inBlock = true
+			continue
+		}
+
+		// Skip lines inside an AgentFlow config block.
+		if inBlock {
+			if strings.HasPrefix(trimmed, "export ") || strings.HasPrefix(trimmed, "# export ") {
+				continue
+			}
+			if trimmed == "" {
+				inBlock = false
+				continue
+			}
+			inBlock = false
+		}
+
+		// Skip standalone "replaced by AgentFlow" comment lines.
+		if strings.HasSuffix(trimmed, "# replaced by AgentFlow") {
+			continue
+		}
+
+		cleaned.WriteString(line + "\n")
+	}
+
+	// Remove excessive trailing newlines.
+	result := strings.TrimRight(cleaned.String(), "\n") + "\n"
+
+	return os.WriteFile(rcFile, []byte(result), 0644)
 }
 
 // detectShellRC finds the best shell config file to write to.

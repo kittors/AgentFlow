@@ -47,6 +47,13 @@ func (i *Installer) UninstallCLI(targetName string) ([]string, error) {
 	if runtimeStatus.Platform == platformWindows && scope == "wsl" && !runtimeStatus.InWSL {
 		lines = append(lines, i.Catalog.Msg("该卸载在 WSL2 中执行。", "This uninstall was executed inside WSL2."))
 	}
+
+	// Clean up AgentFlow env vars from shell RC file.
+	if err := i.CleanEnvConfig(); err != nil {
+		lines = append(lines, i.Catalog.Msg("注意: 清理 shell 环境变量失败，请手动检查 ~/.zshrc 或 ~/.bashrc。", "Note: failed to clean shell env vars, please check ~/.zshrc or ~/.bashrc manually."))
+	} else {
+		lines = append(lines, i.Catalog.Msg("已清理 shell 配置文件中的 AgentFlow 环境变量。", "Cleaned up AgentFlow env vars from shell config."))
+	}
 	return lines, nil
 }
 
