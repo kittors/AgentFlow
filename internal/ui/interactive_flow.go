@@ -224,6 +224,7 @@ type configFieldState struct {
 	FieldType    string   // "text" or "select"
 	Options      []string // available choices (for select type)
 	OptionCursor int      // currently selected option index (for select type)
+	Dirty        bool     // true if user explicitly modified this field
 }
 
 func normalizeIdentifier(value string) string {
@@ -961,6 +962,7 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 					f.OptionCursor = len(f.Options) - 1
 				}
 				f.Value = f.Options[f.OptionCursor]
+				f.Dirty = true
 			}
 		}
 		return m, nil
@@ -975,6 +977,7 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 					f.OptionCursor = 0
 				}
 				f.Value = f.Options[f.OptionCursor]
+				f.Dirty = true
 			}
 		}
 		return m, nil
@@ -985,6 +988,7 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 				v := f.Value
 				if len(v) > 0 {
 					f.Value = v[:len(v)-1]
+					f.Dirty = true
 				}
 			}
 		}
@@ -994,6 +998,7 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 			f := &m.configFields[m.configFieldCursor]
 			if f.FieldType != "select" {
 				f.Value += key.String()
+				f.Dirty = true
 			}
 		}
 		return m, nil
@@ -1496,10 +1501,10 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case flowScreenBootstrapConfig:
-		// Collect filled values.
+		// Collect only user-modified values (Dirty flag tracks explicit edits).
 		envVars := make(map[string]string)
 		for _, f := range m.configFields {
-			if strings.TrimSpace(f.Value) != "" {
+			if f.Dirty && strings.TrimSpace(f.Value) != "" {
 				envVars[f.EnvVar] = f.Value
 			}
 		}
