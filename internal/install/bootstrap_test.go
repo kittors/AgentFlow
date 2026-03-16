@@ -46,8 +46,6 @@ func TestDetectTargetStatusWindowsWithoutWSLDisablesAutoInstall(t *testing.T) {
 	}
 }
 
-
-
 func TestStatusLinesReflectCLIAndAgentFlowStateSeparately(t *testing.T) {
 	restoreBootstrapTestEnv(t)
 	runtimeGOOS = "darwin"
