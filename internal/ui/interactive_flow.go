@@ -122,6 +122,7 @@ type flowResultMsg struct {
 }
 
 type flowTickMsg struct{}
+type flowToastClearMsg struct{}
 
 // updateProgressState holds thread-safe progress info that is written by the
 // update goroutine and polled by the busy tick.
@@ -206,6 +207,7 @@ type interactiveFlowModel struct {
 	selectedSkillValue      string
 	selectedBootstrapTarget string
 	notice                  *Panel
+	toast                   string // transient toast text, auto-clears after 1.5s
 	status                  Panel
 	bootstrapDetail         *Panel
 	projectRulesDetail      *Panel
@@ -508,6 +510,9 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.spin = (m.spin + 1) % len(spinnerFrames)
 		return m, busyTickCmd()
+	case flowToastClearMsg:
+		m.toast = ""
+		return m, nil
 	case flowResultMsg:
 		debuglog.Log("[MSG] flowResultMsg action=%d busy=%v activeAction=%d initLoading=%v", value.action, m.busy, m.activeAction, m.initLoading)
 		// Only clear busy state if this result matches the active action,
@@ -887,9 +892,9 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(textLines) > 0 {
 				text := strings.Join(textLines, "\n")
 				if copyToClipboard(text) == nil {
-					m.notice = panelRef(Panel{
-						Title: m.catalog.Msg("已复制", "Copied"),
-						Lines: []string{m.catalog.Msg("右侧面板内容已复制到剪贴板。", "Detail panel content copied to clipboard.")},
+					m.toast = m.catalog.Msg("✅ 已复制到剪贴板", "✅ Copied to clipboard")
+					return m, tea.Tick(1500*time.Millisecond, func(time.Time) tea.Msg {
+						return flowToastClearMsg{}
 					})
 				}
 			}
@@ -2219,6 +2224,7 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 	}
 	model.focusDetails = m.focusDetails
 	model.detailScroll = m.detailScroll
+	model.toast = m.toast
 
 	switch m.screen {
 	case flowScreenInstallHub:

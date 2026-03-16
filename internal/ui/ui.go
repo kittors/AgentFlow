@@ -47,6 +47,7 @@ type selectionModel struct {
 	hint     string
 	options  []Option
 	panels   []Panel
+	toast    string // transient toast text shown at bottom-right
 
 	cursor   int
 	multi    bool
@@ -428,7 +429,29 @@ func (m selectionModel) View() string {
 	view := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
 
 	if m.width > 0 && m.height > 0 {
-		return cropBlock(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, view), m.height)
+		placed := cropBlock(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Top, view), m.height)
+		// Overlay toast at bottom-right if present.
+		if m.toast != "" {
+			toastStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("230")).
+				Background(lipgloss.Color("35")).
+				Bold(true).
+				Padding(0, 2)
+			toastRendered := toastStyle.Render(m.toast)
+			toastWidth := ansi.StringWidth(toastRendered)
+			lines := strings.Split(placed, "\n")
+			if len(lines) >= 3 {
+				toastLine := len(lines) - 3
+				line := lines[toastLine]
+				lineWidth := ansi.StringWidth(line)
+				if lineWidth > toastWidth+2 {
+					padding := strings.Repeat(" ", lineWidth-toastWidth)
+					lines[toastLine] = padding + toastRendered
+				}
+			}
+			placed = strings.Join(lines, "\n")
+		}
+		return placed
 	}
 	return view
 }
