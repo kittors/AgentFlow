@@ -147,34 +147,30 @@ func (a *App) runInteractiveMainMenu() int {
 	return 0
 }
 
-// showSplashScreen displays a beautiful loading screen with ASCII art logo,
+// showSplashScreen displays a beautiful loading screen with a logo,
 // version info, and a daily background update check before entering the TUI.
 func (a *App) showSplashScreen() {
 	// ANSI: hide cursor, clear screen.
 	fmt.Fprint(a.Stdout, "\033[?25l\033[2J\033[H")
 	defer fmt.Fprint(a.Stdout, "\033[?25h") // show cursor
 
-	// ASCII art logo with a cute look.
-	logo := []string{
-		"    _                    _   _____ _               ",
-		"   / \\   __ _  ___ _ __ | |_|  ___| | _____      __",
-		"  / _ \\ / _` |/ _ \\ '_ \\| __| |_  | |/ _ \\ \\ /\\ / /",
-		" / ___ \\ (_| |  __/ | | | |_|  _| | | (_) \\ V  V / ",
-		"/_/   \\_\\__, |\\___|_| |_|\\__|_|   |_|\\___/ \\_/\\_/  ",
-		"        |___/                                       ",
-	}
+	// Styled logo using lipgloss — compact and reliable.
+	border := lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render(
+		"  ╔══════════════════════════════════════════════╗")
+	borderBot := lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render(
+		"  ╚══════════════════════════════════════════════╝")
 
-	// Gradient colors for logo lines (cyan → blue → purple).
-	logoColors := []string{"86", "81", "75", "69", "63", "57"}
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("81")).
+		Bold(true)
+	accentStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("69")).
+		Bold(true)
 
-	var renderedLogo []string
-	for i, line := range logo {
-		color := logoColors[i%len(logoColors)]
-		style := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(color)).
-			Bold(true)
-		renderedLogo = append(renderedLogo, style.Render(line))
-	}
+	titleLine := lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render("  ║") +
+		"    " + titleStyle.Render("Agent") + accentStyle.Render("Flow") +
+		"  " + lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("~ Multi-CLI Orchestrator") +
+		"    " + lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render("║")
 
 	versionBadge := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("230")).
@@ -184,65 +180,55 @@ func (a *App) showSplashScreen() {
 		Render(fmt.Sprintf("v%s", a.Version))
 
 	tagline := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("244")).
-		Italic(true).
+		Foreground(lipgloss.Color("109")).
 		Render(a.Catalog.Msg("✨ 多 CLI 代理工作流编排系统", "✨ Multi-CLI Agent Workflow Orchestrator"))
 
 	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 	loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
 	doneStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
 
-	// Render initial splash.
 	renderSplash := func(statusLine string) {
-		fmt.Fprint(a.Stdout, "\033[H") // move to top
-		output := "\n\n"
-		for _, line := range renderedLogo {
-			output += "  " + line + "\n"
-		}
-		output += "\n"
-		output += "  " + versionBadge + "  " + tagline + "\n"
-		output += "\n"
-		output += "  " + statusLine + "\n"
-		output += "\n"
-		fmt.Fprint(a.Stdout, output)
+		fmt.Fprint(a.Stdout, "\033[H")
+		var buf strings.Builder
+		buf.WriteString("\n\n\n")
+		buf.WriteString(border + "\n")
+		buf.WriteString(titleLine + "\n")
+		buf.WriteString(borderBot + "\n")
+		buf.WriteString("\n")
+		buf.WriteString("  " + versionBadge + "  " + tagline + "\n")
+		buf.WriteString("\n")
+		buf.WriteString("  " + statusLine + "\n")
+		buf.WriteString("\n")
+		fmt.Fprint(a.Stdout, buf.String())
 	}
 
-	// Phase 1: Show splash with loading animation while checking update.
+	// Background update check (24h cache).
 	type updateResult struct {
 		result update.Result
 		err    error
 	}
-	resultCh := make(chan updateResult, 1)
+	ch := make(chan updateResult, 1)
 	go func() {
 		r, err := a.Checker.Check(a.Version, update.Options{CacheTTLHours: 24})
-		resultCh <- updateResult{r, err}
+		ch <- updateResult{r, err}
 	}()
 
 	loadingText := a.Catalog.Msg("正在检查更新…", "Checking for updates…")
 	frame := 0
 	for {
 		select {
-		case res := <-resultCh:
-			// Done checking.
+		case res := <-ch:
 			if res.err == nil && res.result.UpdateAvailable {
-				// Show update available.
 				renderSplash(doneStyle.Render(fmt.Sprintf(
-					a.Catalog.Msg("⬆️  发现新版本 v%s（当前 v%s）", "⬆️  New version v%s available (current v%s)"),
+					a.Catalog.Msg("⬆️  发现新版本 v%s（当前 v%s）— 运行 agentflow update 更新",
+						"⬆️  New version v%s available (current v%s) — run agentflow update"),
 					res.result.Latest, res.result.Current)))
-
-				updatePrompt := lipgloss.NewStyle().
-					Foreground(lipgloss.Color("230")).
-					Background(lipgloss.Color("24")).
-					Padding(0, 1).
-					Render(a.Catalog.Msg("按 Enter 继续 · 运行 agentflow update 更新", "Press Enter to continue · Run agentflow update to upgrade"))
-				fmt.Fprintln(a.Stdout, "  "+updatePrompt)
-				time.Sleep(2 * time.Second)
+				time.Sleep(2500 * time.Millisecond)
 			} else {
 				renderSplash(doneStyle.Render(a.Catalog.Msg("✅ 已是最新版本", "✅ Up to date")))
 				time.Sleep(800 * time.Millisecond)
 			}
 			return
-
 		default:
 			renderSplash(loadingStyle.Render(fmt.Sprintf("%s %s", frames[frame%len(frames)], loadingText)))
 			frame++
