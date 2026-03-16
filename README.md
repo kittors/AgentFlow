@@ -228,6 +228,80 @@ go build -o ./bin/agentflow ./cmd/agentflow
 ./bin/agentflow version
 ```
 
+### Offline install (air-gapped / restricted network)
+
+If you are on a machine without Internet access, you can transfer the binary from another machine that does.
+
+#### Step 1 — Download on a connected machine
+
+Go to [Releases](https://github.com/kittors/AgentFlow/releases) and download the binary that matches the **target** machine's OS and architecture:
+
+| OS | Architecture | File |
+|----|-------------|------|
+| macOS | Apple Silicon (M1/M2/M3/M4) | `agentflow-darwin-arm64` |
+| macOS | Intel | `agentflow-darwin-amd64` |
+| Linux | x86_64 | `agentflow-linux-amd64` |
+| Linux | ARM64 / aarch64 | `agentflow-linux-arm64` |
+| Windows | x86_64 | `agentflow-windows-amd64.exe` |
+
+#### Step 2 — Transfer
+
+Copy the downloaded file to the target machine via USB drive, `scp`, shared drive, or any other method available in your environment.
+
+#### Step 3 — Install
+
+**macOS**
+
+```bash
+# Remove quarantine attribute (if transferred from another Mac or downloaded via browser)
+xattr -d com.apple.quarantine agentflow-darwin-arm64 2>/dev/null
+
+chmod +x agentflow-darwin-arm64
+sudo mv agentflow-darwin-arm64 /usr/local/bin/agentflow
+agentflow version
+```
+
+**Linux**
+
+```bash
+chmod +x agentflow-linux-amd64
+sudo mv agentflow-linux-amd64 /usr/local/bin/agentflow
+agentflow version
+```
+
+> If you don't have `sudo`, move it to a user-writable directory already on `PATH`, for example `~/.local/bin/`:
+>
+> ```bash
+> mkdir -p ~/.local/bin
+> mv agentflow-linux-amd64 ~/.local/bin/agentflow
+> # Make sure ~/.local/bin is in your PATH
+> export PATH="$HOME/.local/bin:$PATH"
+> ```
+
+**Windows**
+
+```powershell
+# 1. Create a directory for AgentFlow (if it does not exist)
+New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\AgentFlow"
+
+# 2. Move the binary
+Move-Item agentflow-windows-amd64.exe "$env:LOCALAPPDATA\AgentFlow\agentflow.exe"
+
+# 3. Add to PATH (current user, persistent)
+$currentPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if ($currentPath -notlike "*AgentFlow*") {
+    [Environment]::SetEnvironmentVariable('Path', "$currentPath;$env:LOCALAPPDATA\AgentFlow", 'User')
+}
+
+# 4. Reload PATH in current session
+$env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ";" + [Environment]::GetEnvironmentVariable('Path', 'Machine')
+
+# 5. Verify
+agentflow version
+```
+
+> After adding to `PATH` you may need to open a **new terminal window** for the change to take effect.
+
 ---
 
 ## Quick Start

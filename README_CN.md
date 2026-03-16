@@ -228,6 +228,80 @@ go build -o ./bin/agentflow ./cmd/agentflow
 ./bin/agentflow version
 ```
 
+### 离线安装（无网络 / 内网环境）
+
+如果目标机器无法访问互联网，可以在另一台联网机器上下载二进制，然后传输过去。
+
+#### 第一步 — 在联网机器上下载
+
+前往 [Releases](https://github.com/kittors/AgentFlow/releases)，下载与**目标机器**操作系统和 CPU 架构相匹配的文件：
+
+| 操作系统 | CPU 架构 | 文件名 |
+|----------|---------|--------|
+| macOS | Apple Silicon (M1/M2/M3/M4) | `agentflow-darwin-arm64` |
+| macOS | Intel | `agentflow-darwin-amd64` |
+| Linux | x86_64 | `agentflow-linux-amd64` |
+| Linux | ARM64 / aarch64 | `agentflow-linux-arm64` |
+| Windows | x86_64 | `agentflow-windows-amd64.exe` |
+
+#### 第二步 — 传输
+
+通过 U 盘、`scp`、共享文件夹或其他可用方式将下载的文件传输到目标机器。
+
+#### 第三步 — 安装
+
+**macOS**
+
+```bash
+# 移除隔离属性（从其他 Mac 传输或通过浏览器下载时可能被标记）
+xattr -d com.apple.quarantine agentflow-darwin-arm64 2>/dev/null
+
+chmod +x agentflow-darwin-arm64
+sudo mv agentflow-darwin-arm64 /usr/local/bin/agentflow
+agentflow version
+```
+
+**Linux**
+
+```bash
+chmod +x agentflow-linux-amd64
+sudo mv agentflow-linux-amd64 /usr/local/bin/agentflow
+agentflow version
+```
+
+> 如果没有 `sudo` 权限，移动到用户可写且已在 `PATH` 中的目录，例如 `~/.local/bin/`：
+>
+> ```bash
+> mkdir -p ~/.local/bin
+> mv agentflow-linux-amd64 ~/.local/bin/agentflow
+> # 确保 ~/.local/bin 在 PATH 中
+> export PATH="$HOME/.local/bin:$PATH"
+> ```
+
+**Windows**
+
+```powershell
+# 1. 创建 AgentFlow 目录（如不存在）
+New-Item -ItemType Directory -Force -Path "$env:LOCALAPPDATA\AgentFlow"
+
+# 2. 移动二进制文件
+Move-Item agentflow-windows-amd64.exe "$env:LOCALAPPDATA\AgentFlow\agentflow.exe"
+
+# 3. 添加到 PATH（当前用户，永久生效）
+$currentPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if ($currentPath -notlike "*AgentFlow*") {
+    [Environment]::SetEnvironmentVariable('Path', "$currentPath;$env:LOCALAPPDATA\AgentFlow", 'User')
+}
+
+# 4. 在当前会话刷新 PATH
+$env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ";" + [Environment]::GetEnvironmentVariable('Path', 'Machine')
+
+# 5. 验证
+agentflow version
+```
+
+> 添加 `PATH` 后可能需要**重新打开终端窗口**才能生效。
+
 ---
 
 ## 快速开始
