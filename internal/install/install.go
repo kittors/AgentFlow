@@ -137,9 +137,44 @@ func (i *Installer) CLIConfigFields(targetName string) []EnvVarConfig {
 	return fields
 }
 
-// WriteCodexConfig writes model and reasoning settings to ~/.codex/config.json.
+// WriteCodexConfig writes model and reasoning settings to ~/.codex/config.toml.
 func (i *Installer) WriteCodexConfig(model, reasoning string) error {
-	configPath := filepath.Join(i.HomeDir, ".codex", "config.json")
+	configPath := filepath.Join(i.HomeDir, ".codex", "config.toml")
+
+	var text string
+	if data, err := os.ReadFile(configPath); err == nil {
+		text = string(data)
+	}
+
+	if model != "" {
+		re := regexp.MustCompile(`(?m)^model\s*=.*$`)
+		if re.MatchString(text) {
+			text = re.ReplaceAllString(text, fmt.Sprintf(`model = "%s"`, model))
+		} else {
+			text = fmt.Sprintf("model = %q\n%s", model, text)
+		}
+	}
+	if reasoning != "" {
+		re := regexp.MustCompile(`(?m)^model_reasoning_effort\s*=.*$`)
+		if re.MatchString(text) {
+			text = re.ReplaceAllString(text, fmt.Sprintf(`model_reasoning_effort = "%s"`, reasoning))
+		} else {
+			text = fmt.Sprintf("model_reasoning_effort = %q\n%s", reasoning, text)
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return err
+	}
+	return config.SafeWrite(configPath, []byte(strings.TrimSpace(text)+"\n"), 0o644)
+}
+
+// WriteClaudeConfig writes the default model setting to ~/.claude.json.
+func (i *Installer) WriteClaudeConfig(model string) error {
+	if model == "" {
+		return nil
+	}
+	configPath := filepath.Join(i.HomeDir, ".claude.json")
 
 	var settings map[string]any
 	if data, err := os.ReadFile(configPath); err == nil {
@@ -149,12 +184,7 @@ func (i *Installer) WriteCodexConfig(model, reasoning string) error {
 		settings = make(map[string]any)
 	}
 
-	if model != "" {
-		settings["model"] = model
-	}
-	if reasoning != "" {
-		settings["reasoning"] = reasoning
-	}
+	settings["model"] = model
 
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
@@ -162,10 +192,7 @@ func (i *Installer) WriteCodexConfig(model, reasoning string) error {
 	}
 	data = append(data, '\n')
 
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(configPath, data, 0o644)
+	return config.SafeWrite(configPath, data, 0o644)
 }
 
 func (i *Installer) Install(targetName, profile string) error {

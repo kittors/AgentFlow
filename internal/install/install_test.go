@@ -302,8 +302,6 @@ func TestInstallCodexBacksUpUserManagedReviewerRole(t *testing.T) {
 	}
 }
 
-
-
 func TestCLIConfigFieldsCodex(t *testing.T) {
 	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
 	fields := installer.CLIConfigFields("codex")
@@ -325,7 +323,7 @@ func TestCLIConfigFieldsCodex(t *testing.T) {
 			if f.Type != "text" {
 				t.Fatalf("expected text type for Base URL, got %q", f.Type)
 			}
-		case "__MODEL__":
+		case "__CODEX_MODEL__":
 			foundModel = true
 			if f.Type != "select" {
 				t.Fatalf("expected select type for Model, got %q", f.Type)
@@ -333,8 +331,8 @@ func TestCLIConfigFieldsCodex(t *testing.T) {
 			if len(f.Options) == 0 {
 				t.Fatal("expected model options for codex")
 			}
-			if f.Default != "o4-mini" {
-				t.Fatalf("expected default model o4-mini, got %q", f.Default)
+			if f.Default != "gpt-5.2" {
+				t.Fatalf("expected default model gpt-5.2, got %q", f.Default)
 			}
 		case "__CODEX_REASONING__":
 			foundReasoning = true
@@ -353,7 +351,7 @@ func TestCLIConfigFieldsCodex(t *testing.T) {
 		t.Fatal("expected OPENAI_BASE_URL field")
 	}
 	if !foundModel {
-		t.Fatal("expected __MODEL__ field")
+		t.Fatal("expected __CODEX_MODEL__ field")
 	}
 	if !foundReasoning {
 		t.Fatal("expected __CODEX_REASONING__ field")
@@ -375,7 +373,7 @@ func TestCLIConfigFieldsClaude(t *testing.T) {
 			foundAPIKey = true
 		case "ANTHROPIC_BASE_URL":
 			foundBaseURL = true
-		case "ANTHROPIC_MODEL":
+		case "__CLAUDE_MODEL__":
 			foundModel = true
 			if f.Type != "select" {
 				t.Fatalf("expected select type for Model, got %q", f.Type)
@@ -392,12 +390,9 @@ func TestCLIConfigFieldsClaude(t *testing.T) {
 		t.Fatal("expected ANTHROPIC_BASE_URL field")
 	}
 	if !foundModel {
-		t.Fatal("expected ANTHROPIC_MODEL field")
+		t.Fatal("expected __CLAUDE_MODEL__ field")
 	}
 }
-
-
-
 
 func TestWriteCodexConfigMergesExisting(t *testing.T) {
 	homeDir := t.TempDir()
@@ -409,21 +404,18 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 		t.Fatalf("WriteCodexConfig returned error: %v", err)
 	}
 
-	configPath := filepath.Join(homeDir, ".codex", "config.json")
+	configPath := filepath.Join(homeDir, ".codex", "config.toml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		t.Fatalf("expected config.json to exist: %v", err)
+		t.Fatalf("expected config.toml to exist: %v", err)
 	}
 
-	var config map[string]any
-	if err := json.Unmarshal(data, &config); err != nil {
-		t.Fatalf("expected valid JSON: %v", err)
+	text := string(data)
+	if !strings.Contains(text, `model = "o4-mini"`) {
+		t.Fatalf("expected model o4-mini, got %v", text)
 	}
-	if config["model"] != "o4-mini" {
-		t.Fatalf("expected model o4-mini, got %v", config["model"])
-	}
-	if config["reasoning"] != "medium" {
-		t.Fatalf("expected reasoning medium, got %v", config["reasoning"])
+	if !strings.Contains(text, `model_reasoning_effort = "medium"`) {
+		t.Fatalf("expected reasoning medium, got %v", text)
 	}
 
 	// Overwrite model only, reasoning should be preserved.
@@ -433,16 +425,14 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 
 	data, err = os.ReadFile(configPath)
 	if err != nil {
-		t.Fatalf("expected config.json to exist: %v", err)
+		t.Fatalf("expected config.toml to exist: %v", err)
 	}
-	if err := json.Unmarshal(data, &config); err != nil {
-		t.Fatalf("expected valid JSON: %v", err)
+	text = string(data)
+	if !strings.Contains(text, `model = "gpt-4o"`) {
+		t.Fatalf("expected model gpt-4o, got %v", text)
 	}
-	if config["model"] != "gpt-4o" {
-		t.Fatalf("expected model gpt-4o, got %v", config["model"])
-	}
-	if config["reasoning"] != "medium" {
-		t.Fatalf("expected reasoning to be preserved as medium, got %v", config["reasoning"])
+	if !strings.Contains(text, `model_reasoning_effort = "medium"`) {
+		t.Fatalf("expected reasoning to be preserved as medium, got %v", text)
 	}
 }
 

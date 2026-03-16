@@ -807,18 +807,23 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 	// Separate normal env vars from special config-file fields.
 	normalEnvVars := make(map[string]string)
 	var codexModel, codexReasoning string
+	var claudeModel string
 	var modelEnvVar, modelValue string
 
 	for key, value := range envVars {
 		switch key {
-		case "__MODEL__":
+		case "__CODEX_MODEL__":
 			codexModel = value
 		case "__CODEX_REASONING__":
 			codexReasoning = value
+		case "__CLAUDE_MODEL__":
+			claudeModel = value
+		case "__MODEL__": // fallback
+			codexModel = value
 		default:
 			normalEnvVars[key] = value
-			// Track model env var for non-codex targets.
-			if key == "ANTHROPIC_MODEL" {
+			// Track model env var for other targets.
+			if key == "GEMINI_MODEL" || key == "DASHSCOPE_MODEL" {
 				modelEnvVar = key
 				modelValue = value
 			}
@@ -840,19 +845,29 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		}
 	}
 
-	// Write Codex config.json if applicable.
+	// Write Codex config.toml if applicable.
 	if codexModel != "" || codexReasoning != "" {
 		if err := a.Installer.WriteCodexConfig(codexModel, codexReasoning); err != nil {
 			return errorPanel(a.Catalog.Msg("Codex 配置写入失败", "Codex config write failed"), err)
 		}
 		allLines = append(allLines, "")
-		allLines = append(allLines, a.Catalog.Msg("已写入 ~/.codex/config.json:", "Written to ~/.codex/config.json:"))
+		allLines = append(allLines, a.Catalog.Msg("已写入 ~/.codex/config.toml:", "Written to ~/.codex/config.toml:"))
 		if codexModel != "" {
 			allLines = append(allLines, fmt.Sprintf("  model: %s", codexModel))
 		}
 		if codexReasoning != "" {
-			allLines = append(allLines, fmt.Sprintf("  reasoning: %s", codexReasoning))
+			allLines = append(allLines, fmt.Sprintf("  model_reasoning_effort: %s", codexReasoning))
 		}
+	}
+
+	// Write Claude settings.json if applicable.
+	if claudeModel != "" {
+		if err := a.Installer.WriteClaudeConfig(claudeModel); err != nil {
+			return errorPanel(a.Catalog.Msg("Claude 配置写入失败", "Claude config write failed"), err)
+		}
+		allLines = append(allLines, "")
+		allLines = append(allLines, a.Catalog.Msg("已写入 ~/.claude.json:", "Written to ~/.claude.json:"))
+		allLines = append(allLines, fmt.Sprintf("  model: %s", claudeModel))
 	}
 
 	// Report model env var if written.
