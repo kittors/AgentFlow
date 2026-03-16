@@ -166,21 +166,20 @@ func (a *App) showSplashScreen() {
 	fmt.Fprint(a.Stdout, esc+"?25l"+esc+"2J"+esc+"H")
 	defer fmt.Fprint(a.Stdout, esc+"?25h")
 
-	// The ASCII art uses raw string concatenation to avoid Go escape issues.
-	line1 := cyan + `     _                    _   ` + blue + ` _____ _               ` + reset
-	line2 := cyan + `    / \   __ _  ___ _ __ | |_ ` + blue + `|  ___| | _____      __` + reset
-	line3 := cyan + "   / _ \\ / _` |/ _ \\ '_ \\| __|" + blue + `|_  | |/ _ \ \ /\ / /` + reset
-	line4 := cyan + `  / ___ \ (_| |  __/ | | | |_ ` + purple + `|  _| | | (_) \ V  V / ` + reset
-	line5 := cyan + ` /_/   \_\__, |\___|_| |_|\__|` + purple + `_|   |_|\___/ \_/\_/  ` + reset
-	line6 := cyan + `         |___/                ` + purple + `                       ` + reset
+	// Each art line = one color, one raw string. No mid-line color split.
+	art := cyan + "     _                    _    _____ _" + reset + "\n" +
+		cyan + `    / \   __ _  ___ _ __ | |_ |  ___| | _____      __` + reset + "\n" +
+		blue + "   / _ \\ / _` |/ _ \\ '_ \\| __|_  | |/ _ \\ \\ /\\ / /" + reset + "\n" +
+		blue + `  / ___ \ (_| |  __/ | | | |_ |  _| | | (_) \ V  V /` + reset + "\n" +
+		purple + `  /_/  \_\__, |\___|_| |_|\__|_|   |_|\___/ \_/\_/` + reset + "\n" +
+		purple + `         |___/` + reset
 
 	ver := bgBlue + fmt.Sprintf(" v%s ", a.Version) + reset
 	tag := gray + a.Catalog.Msg("✨ 多 CLI 代理工作流编排系统", "✨ Multi-CLI Agent Workflow Orchestrator") + reset
 
 	render := func(status string) {
 		fmt.Fprint(a.Stdout, esc+"H")
-		fmt.Fprintf(a.Stdout, "\n\n  %s\n  %s\n  %s\n  %s\n  %s\n  %s\n\n  %s  %s\n\n  %s\n\n",
-			line1, line2, line3, line4, line5, line6, ver, tag, status)
+		fmt.Fprintf(a.Stdout, "\n\n  %s\n\n  %s  %s\n\n  %s\n\n", art, ver, tag, status)
 	}
 
 	// Background update check (24h cache).
