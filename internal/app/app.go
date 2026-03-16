@@ -666,47 +666,50 @@ func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
 	}
 
 	// ── Configuration section (API Key / Base URL / Model) ──
-	target := status.Target
-	configItems := []struct {
-		Label  string
-		EnvVar string
-	}{
-		{Label: "API Key", EnvVar: target.APIKeyEnv},
-		{Label: "Base URL", EnvVar: target.BaseURLEnv},
-		{Label: a.Catalog.Msg("模型", "Model"), EnvVar: target.ModelEnv},
-	}
-
-	hasAnyConfig := false
-	for _, item := range configItems {
-		if item.EnvVar != "" {
-			hasAnyConfig = true
-			break
+	// Only show when CLI is actually installed.
+	if status.CLIInstalled {
+		target := status.Target
+		configItems := []struct {
+			Label  string
+			EnvVar string
+		}{
+			{Label: "API Key", EnvVar: target.APIKeyEnv},
+			{Label: "Base URL", EnvVar: target.BaseURLEnv},
+			{Label: a.Catalog.Msg("模型", "Model"), EnvVar: target.ModelEnv},
 		}
-	}
 
-	if hasAnyConfig {
-		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 配置状态 ───", "─── Configuration ───")))
+		hasAnyConfig := false
 		for _, item := range configItems {
-			if item.EnvVar == "" {
-				continue
+			if item.EnvVar != "" {
+				hasAnyConfig = true
+				break
 			}
-			envVal := a.Installer.GetEnvOrRC(item.EnvVar)
-			if envVal != "" {
-				displayVal := envVal
-				// Strip trailing slash from URLs.
-				if strings.Contains(strings.ToLower(item.Label), "url") {
-					displayVal = strings.TrimRight(displayVal, "/")
+		}
+
+		if hasAnyConfig {
+			lines = append(lines, "")
+			lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 配置状态 ───", "─── Configuration ───")))
+			for _, item := range configItems {
+				if item.EnvVar == "" {
+					continue
 				}
-				// Mask API keys for security.
-				if strings.Contains(strings.ToLower(item.Label), "key") && len(envVal) > 6 {
-					displayVal = envVal[:3] + strings.Repeat("*", len(envVal)-6) + envVal[len(envVal)-3:]
+				envVal := a.Installer.GetEnvOrRC(item.EnvVar)
+				if envVal != "" {
+					displayVal := envVal
+					// Strip trailing slash from URLs.
+					if strings.Contains(strings.ToLower(item.Label), "url") {
+						displayVal = strings.TrimRight(displayVal, "/")
+					}
+					// Mask API keys for security.
+					if strings.Contains(strings.ToLower(item.Label), "key") && len(envVal) > 6 {
+						displayVal = envVal[:3] + strings.Repeat("*", len(envVal)-6) + envVal[len(envVal)-3:]
+					}
+					lines = append(lines, fmt.Sprintf("  %s %s: %s",
+						greenDot, item.Label, valueStyle.Render(displayVal)))
+				} else {
+					lines = append(lines, fmt.Sprintf("  %s %s: %s",
+						grayDot, item.Label, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
 				}
-				lines = append(lines, fmt.Sprintf("  %s %s: %s",
-					greenDot, item.Label, valueStyle.Render(displayVal)))
-			} else {
-				lines = append(lines, fmt.Sprintf("  %s %s: %s",
-					grayDot, item.Label, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
 			}
 		}
 	}
@@ -806,7 +809,7 @@ func (a *App) cliConfigFields(target string) []ui.ConfigField {
 func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 	// Separate normal env vars from special config-file fields.
 	normalEnvVars := make(map[string]string)
-	var codexModel, codexReasoning string
+	var codexAPIKey, codexBaseURL, codexModel, codexReasoning string
 	var claudeModel string
 	var modelEnvVar, modelValue string
 
@@ -820,6 +823,12 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 			claudeModel = value
 		case "__MODEL__": // fallback
 			codexModel = value
+		case "OPENAI_API_KEY":
+			// For Codex, API key goes to auth.json (not shell rc).
+			codexAPIKey = value
+		case "OPENAI_BASE_URL":
+			// For Codex, base URL goes to config.toml model_provider section.
+			codexBaseURL = value
 		default:
 			normalEnvVars[key] = value
 			// Track model env var for other targets.
@@ -832,7 +841,7 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 
 	var allLines []string
 
-	// Write normal env vars to shell rc.
+	// Write normal env vars to shell rc (excludes Codex API Key / Base URL).
 	if len(normalEnvVars) > 0 {
 		lines, err := a.Installer.WriteEnvConfig(normalEnvVars)
 		if err != nil {
@@ -845,18 +854,26 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		}
 	}
 
-	// Write Codex config.toml if applicable.
-	if codexModel != "" || codexReasoning != "" {
-		if err := a.Installer.WriteCodexConfig(codexModel, codexReasoning); err != nil {
+	// Write Codex config (auth.json + config.toml).
+	if codexAPIKey != "" || codexBaseURL != "" || codexModel != "" || codexReasoning != "" {
+		if err := a.Installer.WriteCodexConfig(codexAPIKey, codexBaseURL, codexModel, codexReasoning); err != nil {
 			return errorPanel(a.Catalog.Msg("Codex 配置写入失败", "Codex config write failed"), err)
 		}
 		allLines = append(allLines, "")
+		if codexAPIKey != "" {
+			masked := codexAPIKey[:3] + strings.Repeat("*", len(codexAPIKey)-6) + codexAPIKey[len(codexAPIKey)-3:]
+			allLines = append(allLines, fmt.Sprintf(a.Catalog.Msg("已写入 ~/.codex/auth.json (API Key: %s)", "Written to ~/.codex/auth.json (API Key: %s)"), masked))
+			os.Setenv("OPENAI_API_KEY", codexAPIKey)
+		}
 		allLines = append(allLines, a.Catalog.Msg("已写入 ~/.codex/config.toml:", "Written to ~/.codex/config.toml:"))
 		if codexModel != "" {
 			allLines = append(allLines, fmt.Sprintf("  model: %s", codexModel))
 		}
 		if codexReasoning != "" {
 			allLines = append(allLines, fmt.Sprintf("  model_reasoning_effort: %s", codexReasoning))
+		}
+		if codexBaseURL != "" {
+			allLines = append(allLines, fmt.Sprintf("  model_provider: agentflow (base_url: %s)", codexBaseURL))
 		}
 	}
 

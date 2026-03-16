@@ -137,15 +137,46 @@ func (i *Installer) CLIConfigFields(targetName string) []EnvVarConfig {
 	return fields
 }
 
-// WriteCodexConfig writes model and reasoning settings to ~/.codex/config.toml.
-func (i *Installer) WriteCodexConfig(model, reasoning string) error {
-	configPath := filepath.Join(i.HomeDir, ".codex", "config.toml")
+// WriteCodexConfig writes Codex configuration files to ~/.codex/:
+//   - auth.json — API key authentication token
+//   - config.toml — model, reasoning, model_provider (base URL), and features
+//
+// Any empty parameter is skipped (existing values are preserved).
+func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) error {
+	codexDir := filepath.Join(i.HomeDir, ".codex")
+	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+		return err
+	}
 
+	// ── auth.json ──
+	if apiKey != "" {
+		authPath := filepath.Join(codexDir, "auth.json")
+		var auth map[string]any
+		if data, err := os.ReadFile(authPath); err == nil {
+			_ = json.Unmarshal(data, &auth)
+		}
+		if auth == nil {
+			auth = make(map[string]any)
+		}
+		auth["token"] = apiKey
+		data, err := json.MarshalIndent(auth, "", "  ")
+		if err != nil {
+			return err
+		}
+		data = append(data, '\n')
+		if err := config.SafeWrite(authPath, data, 0o600); err != nil {
+			return err
+		}
+	}
+
+	// ── config.toml ──
+	configPath := filepath.Join(codexDir, "config.toml")
 	var text string
 	if data, err := os.ReadFile(configPath); err == nil {
 		text = string(data)
 	}
 
+	// Model field.
 	if model != "" {
 		re := regexp.MustCompile(`(?m)^model\s*=.*$`)
 		if re.MatchString(text) {
@@ -154,6 +185,7 @@ func (i *Installer) WriteCodexConfig(model, reasoning string) error {
 			text = fmt.Sprintf("model = %q\n%s", model, text)
 		}
 	}
+	// Reasoning effort.
 	if reasoning != "" {
 		re := regexp.MustCompile(`(?m)^model_reasoning_effort\s*=.*$`)
 		if re.MatchString(text) {
@@ -162,10 +194,27 @@ func (i *Installer) WriteCodexConfig(model, reasoning string) error {
 			text = fmt.Sprintf("model_reasoning_effort = %q\n%s", reasoning, text)
 		}
 	}
-
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return err
+	// Custom model provider with base_url (for third-party API proxies).
+	if baseURL != "" {
+		providerName := "agentflow"
+		// Set top-level model_provider.
+		reProvider := regexp.MustCompile(`(?m)^model_provider\s*=.*$`)
+		if reProvider.MatchString(text) {
+			text = reProvider.ReplaceAllString(text, fmt.Sprintf(`model_provider = "%s"`, providerName))
+		} else {
+			text += fmt.Sprintf("\nmodel_provider = %q\n", providerName)
+		}
+		// Append or replace the [model_providers.agentflow] section.
+		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.` + regexp.QuoteMeta(providerName) + `\].*?(?:\n\[|\z)`)
+		providerSection := fmt.Sprintf("[model_providers.%s]\nname = %q\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n",
+			providerName, providerName, baseURL)
+		if sectionRe.MatchString(text) {
+			text = sectionRe.ReplaceAllString(text, providerSection)
+		} else {
+			text = strings.TrimRight(text, "\n") + "\n\n" + providerSection
+		}
 	}
+
 	return config.SafeWrite(configPath, []byte(strings.TrimSpace(text)+"\n"), 0o644)
 }
 

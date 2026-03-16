@@ -399,11 +399,22 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
 	installer.HomeDir = homeDir
 
-	// Write initial config.
-	if err := installer.WriteCodexConfig("o4-mini", "medium"); err != nil {
+	// Write initial config with API key, base URL, model, and reasoning.
+	if err := installer.WriteCodexConfig("sk-test-key", "https://api.example.com/v1", "o4-mini", "medium"); err != nil {
 		t.Fatalf("WriteCodexConfig returned error: %v", err)
 	}
 
+	// Check auth.json.
+	authPath := filepath.Join(homeDir, ".codex", "auth.json")
+	authData, err := os.ReadFile(authPath)
+	if err != nil {
+		t.Fatalf("expected auth.json to exist: %v", err)
+	}
+	if !strings.Contains(string(authData), "sk-test-key") {
+		t.Fatalf("expected API key in auth.json, got %s", string(authData))
+	}
+
+	// Check config.toml.
 	configPath := filepath.Join(homeDir, ".codex", "config.toml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -417,9 +428,15 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 	if !strings.Contains(text, `model_reasoning_effort = "medium"`) {
 		t.Fatalf("expected reasoning medium, got %v", text)
 	}
+	if !strings.Contains(text, `model_provider = "agentflow"`) {
+		t.Fatalf("expected model_provider, got %v", text)
+	}
+	if !strings.Contains(text, `base_url = "https://api.example.com/v1"`) {
+		t.Fatalf("expected base_url in model_providers section, got %v", text)
+	}
 
-	// Overwrite model only, reasoning should be preserved.
-	if err := installer.WriteCodexConfig("gpt-4o", ""); err != nil {
+	// Overwrite model only, other settings should be preserved.
+	if err := installer.WriteCodexConfig("", "", "gpt-4o", ""); err != nil {
 		t.Fatalf("WriteCodexConfig returned error: %v", err)
 	}
 
@@ -433,6 +450,9 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 	}
 	if !strings.Contains(text, `model_reasoning_effort = "medium"`) {
 		t.Fatalf("expected reasoning to be preserved as medium, got %v", text)
+	}
+	if !strings.Contains(text, `model_provider = "agentflow"`) {
+		t.Fatalf("expected model_provider to be preserved, got %v", text)
 	}
 }
 
