@@ -397,6 +397,12 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Description: catalog.Msg("清除 AgentFlow 生成的缓存、临时目录和派生产物，保持环境整洁。", "Remove AgentFlow caches, temporary directories, and derived artifacts to keep the environment tidy."),
 			},
 			{
+				Value:       string(ActionUpdate),
+				Label:       catalog.Msg("检测更新", "Check for updates"),
+				Badge:       catalog.Msg("更新", "UPDATE"),
+				Description: catalog.Msg("检测并安装 AgentFlow 的最新版本，更新成功后可选择重启。", "Check for and install the latest AgentFlow version, with an option to restart after a successful update."),
+			},
+			{
 				Value:       string(ActionExit),
 				Label:       catalog.Msg("退出", "Exit"),
 				Badge:       catalog.Msg("退出", "EXIT"),
@@ -922,6 +928,9 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 		m.screen = flowScreenInstallHub
 	case flowScreenBootstrapActions:
 		m.screen = flowScreenBootstrapTargets
+		// Reset post-install state so selecting a different CLI target starts fresh.
+		m.pendingConfigFields = nil
+		m.bootstrapActionOptions = m.defaultBootstrapActionOptions()
 	case flowScreenProfile:
 		m.screen = flowScreenInstallHub
 	case flowScreenInstallTargets:
@@ -1413,6 +1422,10 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.selectedBootstrapTarget = m.bootstrapOptions[m.bootstrapCursor].Value
+		// Reset bootstrap options to default auto/manual so stale post-install
+		// options (configure/done) from a previous target don't persist.
+		m.pendingConfigFields = nil
+		m.bootstrapActionOptions = m.defaultBootstrapActionOptions()
 		m.screen = flowScreenBootstrapActions
 		m.bootstrapActionCursor = 0
 		if !m.bootstrapAutoSupported(m.selectedBootstrapTarget) && len(m.bootstrapActionOptions) > 1 {
@@ -2959,6 +2972,26 @@ func (m interactiveFlowModel) bootstrapOptionsList() []Option {
 		return nil
 	}
 	return options
+}
+
+// defaultBootstrapActionOptions returns the standard auto/manual action
+// options used before any CLI has been installed. This is used to reset
+// the bootstrap actions after navigating back from a post-install state.
+func (m interactiveFlowModel) defaultBootstrapActionOptions() []Option {
+	return []Option{
+		{
+			Value:       "auto",
+			Label:       m.catalog.Msg("自动安装", "Automatic install"),
+			Badge:       m.catalog.Msg("自动", "AUTO"),
+			Description: m.catalog.Msg("自动检查 nvm / Node，并安装所选 CLI。", "Automatically verify nvm / Node and install the selected CLI."),
+		},
+		{
+			Value:       "manual",
+			Label:       m.catalog.Msg("查看手动安装提示", "Show manual install guidance"),
+			Badge:       m.catalog.Msg("手动", "MANUAL"),
+			Description: m.catalog.Msg("显示适合当前平台的手动安装步骤和命令。", "Show manual installation steps and commands for the current platform."),
+		},
+	}
 }
 
 func (m interactiveFlowModel) installOptionsList() []Option {
