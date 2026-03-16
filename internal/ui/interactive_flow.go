@@ -391,24 +391,6 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 				Description: catalog.Msg("为任意 CLI 安装、查看与卸载 skills（支持从 skills.sh/GitHub 安装）。", "Install, inspect, and uninstall skills for any CLI (supports skills.sh/GitHub sources)."),
 			},
 			{
-				Value:       string(ActionUninstallCLI),
-				Label:       catalog.Msg("卸载 CLI 工具", "Uninstall CLI tools"),
-				Badge:       catalog.Msg("CLI", "CLI"),
-				Description: catalog.Msg("卸载 Codex / Claude / Gemini / Qwen / Kiro 等 CLI 本体，并默认删除配置目录（完整卸载）。", "Uninstall CLI tools like Codex / Claude / Gemini / Qwen / Kiro and purge their config directories by default (full uninstall)."),
-			},
-			{
-				Value:       string(ActionUpdate),
-				Label:       catalog.Msg("更新 AgentFlow", "Update AgentFlow"),
-				Badge:       catalog.Msg("更新", "UPDATE"),
-				Description: catalog.Msg("检查最新 release，并把当前 Go 二进制原地更新到新版本。", "Check the latest release and replace the current Go binary in place."),
-			},
-			{
-				Value:       string(ActionStatus),
-				Label:       catalog.Msg("查看状态", "Show status"),
-				Badge:       catalog.Msg("状态", "STATUS"),
-				Description: catalog.Msg("刷新版本、可执行文件路径和所有支持 CLI 的接入状态。", "Refresh the current version, executable path, and integration status for every supported CLI."),
-			},
-			{
 				Value:       string(ActionClean),
 				Label:       catalog.Msg("清理缓存", "Clean caches"),
 				Badge:       catalog.Msg("清理", "CLEAN"),
