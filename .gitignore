@@ -37,3 +37,4 @@ coverage.xml
 
 # AgentFlow local-only data
 .agentflow/
+bin/

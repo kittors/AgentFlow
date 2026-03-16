@@ -280,8 +280,8 @@ func TestResolveBuiltinTavilyCustom(t *testing.T) {
 	if !ok || len(args) != 1 {
 		t.Fatalf("expected args with script path, got: %v", spec.Config["args"])
 	}
-	if !strings.HasSuffix(args[0].(string), "tavily-mcp-server.js") {
-		t.Fatalf("expected script path ending in tavily-mcp-server.js, got: %v", args[0])
+	if !strings.HasSuffix(args[0].(string), filepath.Join("tavily-custom-mcp", "index.js")) {
+		t.Fatalf("expected script path ending in tavily-custom-mcp/index.js, got: %v", args[0])
 	}
 }
 

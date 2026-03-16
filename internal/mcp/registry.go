@@ -101,7 +101,7 @@ func ResolveBuiltin(name string, options InstallOptions) (BuiltinSpec, error) {
 			if _, ok := env["TAVILY_API_KEY"]; !ok {
 				return BuiltinSpec{}, errors.New("tavily-custom requires --set-env=TAVILY_API_KEY=<key>")
 			}
-			scriptPath := filepath.Join(ScriptDir(), "tavily-mcp-server.js")
+			scriptPath := filepath.Join(ScriptDir(), "tavily-custom-mcp", "index.js")
 			spec.Config["args"] = []any{scriptPath}
 			spec.Config["env"] = env
 		case "filesystem":

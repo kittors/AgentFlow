@@ -1,0 +1,14 @@
+{
+    "name": "tavily-custom-mcp",
+    "version": "1.0.0",
+    "description": "Custom Tavily MCP server with configurable proxy URL",
+    "type": "module",
+    "main": "index.js",
+    "bin": {
+        "tavily-custom-mcp": "index.js"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.12.1",
+        "zod": "^3.24.0"
+    }
+}
