@@ -67,6 +67,55 @@ func (a *App) mcpInstallOptions() []ui.Option {
 	return options
 }
 
+func (a *App) mcpConfigFields(server string) []ui.ConfigField {
+	switch strings.ToLower(strings.TrimSpace(server)) {
+	case "tavily-custom":
+		return []ui.ConfigField{
+			{
+				Label:  a.Catalog.Msg("Tavily 代理 URL", "Tavily Proxy URL"),
+				EnvVar: "TAVILY_API_URL",
+				Type:   "text",
+			},
+			{
+				Label:  "Tavily API Key",
+				EnvVar: "TAVILY_API_KEY",
+				Type:   "text",
+			},
+		}
+	default:
+		return nil
+	}
+}
+
+func (a *App) mcpInstallWithEnvPanel(targetName, server string, env map[string]string) ui.Panel {
+	target, ok := targets.LookupMCP(targetName)
+	if !ok {
+		return ui.Panel{
+			Title: a.Catalog.Msg("MCP 安装", "MCP install"),
+			Lines: []string{a.Catalog.Msg("未知目标。", "Unknown target.")},
+		}
+	}
+
+	options := mcp.InstallOptions{}
+	for k, v := range env {
+		options.Env = append(options.Env, k+"="+v)
+	}
+
+	manager := mcp.NewManager()
+	if err := manager.Install(target, server, options); err != nil {
+		return errorPanel(a.Catalog.Msg("MCP 安装失败", "MCP install failed"), err)
+	}
+
+	lines := []string{
+		fmt.Sprintf(a.Catalog.Msg("目标: %s", "Target: %s"), target.DisplayName),
+		fmt.Sprintf(a.Catalog.Msg("已安装: %s", "Installed: %s"), server),
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("MCP 安装结果", "MCP install result"),
+		Lines: lines,
+	}
+}
+
 func (a *App) mcpRemoveOptions(targetName string) []ui.Option {
 	target, ok := targets.LookupMCP(targetName)
 	if !ok {

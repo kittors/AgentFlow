@@ -24,6 +24,8 @@ type InteractiveCallbacks struct {
 	MCPRemoveOptions       func(target string) []Option
 	MCPList                func(target string) Panel
 	MCPInstall             func(target, server string) Panel
+	MCPInstallWithEnv      func(target, server string, env map[string]string) Panel
+	MCPConfigFields        func(server string) []ConfigField
 	MCPRemove              func(target, server string) Panel
 	SkillTargetOptions     func() []Option
 	SkillGlobalSupported   func(target string) bool
@@ -107,6 +109,7 @@ const (
 	flowActionUninstall
 	flowActionUninstallCLI
 	flowActionWriteEnvConfig
+	flowActionMCPInstallWithEnv
 )
 
 type flowResultMsg struct {
@@ -168,6 +171,7 @@ type interactiveFlowModel struct {
 	installOptions         []Option
 	uninstallOptions       []Option
 	uninstallCLIMode       bool
+	mcpConfigMode          bool // true when config fields are for MCP install (not bootstrap)
 	projectInstallMode     bool
 	updateConfirmOptions   []Option
 	updateConfirmCursor    int
@@ -560,7 +564,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if value.notice != nil {
 				m.installHubStatusPanel = value.notice
 			}
-		case flowActionMCPList, flowActionMCPInstall, flowActionMCPRemove:
+		case flowActionMCPList, flowActionMCPInstall, flowActionMCPRemove, flowActionMCPInstallWithEnv:
 			if value.notice != nil {
 				m.notice = value.notice
 			}
@@ -568,6 +572,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resetDetailFocus()
 			m.mcpInstallOptions = nil
 			m.mcpRemoveOptions = nil
+			m.mcpConfigMode = false
 		case flowActionSkillRefreshSummary:
 			if value.notice != nil {
 				m.notice = value.notice
@@ -942,7 +947,12 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 		m.screen = flowScreenMain
 	case flowScreenBootstrapConfig:
 		// Skip config by pressing Esc.
-		m.screen = flowScreenBootstrapActions
+		if m.mcpConfigMode {
+			m.screen = flowScreenMCPInstall
+			m.mcpConfigMode = false
+		} else {
+			m.screen = flowScreenBootstrapActions
+		}
 		m.configEditing = false
 	}
 	m.notice = nil
@@ -1204,6 +1214,41 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.selectedMCPServer = m.mcpInstallOptions[m.mcpInstallCursor].Value
+		// Check if this server needs config fields (e.g. tavily-custom)
+		if m.callbacks.MCPConfigFields != nil {
+			fields := m.callbacks.MCPConfigFields(m.selectedMCPServer)
+			if len(fields) > 0 {
+				m.configTarget = m.selectedMCPServer
+				m.configFields = make([]configFieldState, len(fields))
+				for idx, f := range fields {
+					fieldType := f.Type
+					if fieldType == "" {
+						fieldType = "text"
+					}
+					state := configFieldState{
+						Label:     f.Label,
+						EnvVar:    f.EnvVar,
+						FieldType: fieldType,
+						Options:   f.Options,
+					}
+					if fieldType == "select" && len(f.Options) > 0 {
+						state.Value = f.Default
+						for i, opt := range f.Options {
+							if opt == f.Default {
+								state.OptionCursor = i
+								break
+							}
+						}
+					}
+					m.configFields[idx] = state
+				}
+				m.configFieldCursor = 0
+				m.configEditing = true
+				m.mcpConfigMode = true
+				m.screen = flowScreenBootstrapConfig
+				return m, nil
+			}
+		}
 		return m.startBusy(flowActionMCPInstall, m.catalog.Msg("正在写入 MCP 配置…", "Writing MCP configuration..."))
 	case flowScreenMCPRemove:
 		if len(m.mcpRemoveOptions) == 0 {
@@ -1553,6 +1598,21 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			if f.Dirty && strings.TrimSpace(f.Value) != "" {
 				envVars[f.EnvVar] = f.Value
 			}
+		}
+		if m.mcpConfigMode {
+			// MCP config mode: install the MCP server with collected env vars.
+			if len(envVars) == 0 {
+				m.screen = flowScreenMCPInstall
+				m.mcpConfigMode = false
+				m.configEditing = false
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("配置跳过", "Configuration skipped"),
+					Lines: []string{m.catalog.Msg("未输入任何配置，已取消安装。", "No configuration entered; install cancelled.")},
+				})
+				return m, nil
+			}
+			m.configEditing = false
+			return m.startBusy(flowActionMCPInstallWithEnv, m.catalog.Msg("正在写入 MCP 配置…", "Writing MCP configuration..."))
 		}
 		if len(envVars) == 0 {
 			// All empty — skip config.
@@ -2011,6 +2071,21 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 			notice := Panel{}
 			if m.callbacks.MCPInstall != nil {
 				notice = m.callbacks.MCPInstall(selectedMCPTarget, selectedMCPServer)
+			}
+			summary := Panel{}
+			if m.callbacks.MCPList != nil {
+				summary = m.callbacks.MCPList(selectedMCPTarget)
+			}
+			return flowResultMsg{
+				action:     action,
+				notice:     panelRef(notice),
+				status:     m.callbacks.Status(),
+				mcpSummary: panelRef(summary),
+			}
+		case flowActionMCPInstallWithEnv:
+			notice := Panel{}
+			if m.callbacks.MCPInstallWithEnv != nil {
+				notice = m.callbacks.MCPInstallWithEnv(selectedMCPTarget, selectedMCPServer, configEnvVars)
 			}
 			summary := Panel{}
 			if m.callbacks.MCPList != nil {
