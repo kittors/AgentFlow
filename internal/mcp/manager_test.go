@@ -252,3 +252,66 @@ func TestResolveBuiltinTavilyDefaultEnv(t *testing.T) {
 		t.Fatalf("expected placeholder, got: %v", env["TAVILY_API_KEY"])
 	}
 }
+
+func TestResolveBuiltinTavilyCustom(t *testing.T) {
+	spec, err := ResolveBuiltin("tavily-custom", InstallOptions{
+		Env: []string{
+			"TAVILY_API_URL=http://104.194.69.137:9874",
+			"TAVILY_API_KEY=tvly-test123",
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolve tavily-custom: %v", err)
+	}
+	if spec.Name != "tavily-custom" {
+		t.Fatalf("unexpected name: %s", spec.Name)
+	}
+	env, ok := spec.Config["env"].(map[string]string)
+	if !ok {
+		t.Fatalf("env missing")
+	}
+	if env["TAVILY_API_URL"] != "http://104.194.69.137:9874" {
+		t.Fatalf("unexpected api url: %v", env["TAVILY_API_URL"])
+	}
+	if env["TAVILY_API_KEY"] != "tvly-test123" {
+		t.Fatalf("unexpected api key: %v", env["TAVILY_API_KEY"])
+	}
+	args, ok := spec.Config["args"].([]any)
+	if !ok || len(args) != 1 {
+		t.Fatalf("expected args with script path, got: %v", spec.Config["args"])
+	}
+	if !strings.HasSuffix(args[0].(string), "tavily-mcp-server.js") {
+		t.Fatalf("expected script path ending in tavily-mcp-server.js, got: %v", args[0])
+	}
+}
+
+func TestResolveBuiltinTavilyCustomMissingURL(t *testing.T) {
+	_, err := ResolveBuiltin("tavily-custom", InstallOptions{
+		Env: []string{"TAVILY_API_KEY=tvly-test123"},
+	})
+	if err == nil {
+		t.Fatal("expected error for missing TAVILY_API_URL")
+	}
+	if !strings.Contains(err.Error(), "TAVILY_API_URL") {
+		t.Fatalf("error should mention TAVILY_API_URL, got: %v", err)
+	}
+}
+
+func TestResolveBuiltinTavilyCustomMissingKey(t *testing.T) {
+	_, err := ResolveBuiltin("tavily-custom", InstallOptions{
+		Env: []string{"TAVILY_API_URL=http://example.com"},
+	})
+	if err == nil {
+		t.Fatal("expected error for missing TAVILY_API_KEY")
+	}
+	if !strings.Contains(err.Error(), "TAVILY_API_KEY") {
+		t.Fatalf("error should mention TAVILY_API_KEY, got: %v", err)
+	}
+}
+
+func TestResolveBuiltinTavilyCustomMissingBoth(t *testing.T) {
+	_, err := ResolveBuiltin("tavily-custom", InstallOptions{})
+	if err == nil {
+		t.Fatal("expected error for missing env vars")
+	}
+}

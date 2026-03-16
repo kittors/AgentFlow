@@ -168,6 +168,12 @@ func (a *App) mcpInstallPanel(targetName, server string) ui.Panel {
 	if strings.EqualFold(server, "context7") {
 		lines = append(lines, a.Catalog.Msg("提示：如需更高额度，可用 CLI 设置 CONTEXT7_API_KEY：agentflow mcp install <target> context7 --set-env=CONTEXT7_API_KEY=...", "Tip: for higher rate limits, set CONTEXT7_API_KEY via CLI: agentflow mcp install <target> context7 --set-env=CONTEXT7_API_KEY=..."))
 	}
+	if strings.EqualFold(server, "tavily-custom") {
+		lines = append(lines, a.Catalog.Msg(
+			"提示：tavily-custom 需要通过 CLI 配置 URL 和 Key：agentflow mcp install <target> tavily-custom --set-env=TAVILY_API_URL=<url> --set-env=TAVILY_API_KEY=<key>",
+			"Tip: tavily-custom requires URL and Key via CLI: agentflow mcp install <target> tavily-custom --set-env=TAVILY_API_URL=<url> --set-env=TAVILY_API_KEY=<key>",
+		))
+	}
 	return ui.Panel{
 		Title: a.Catalog.Msg("MCP 安装结果", "MCP install result"),
 		Lines: lines,

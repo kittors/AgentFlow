@@ -3,7 +3,9 @@ package mcp
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -52,6 +54,15 @@ func BuiltinServers() []BuiltinSpec {
 				"args":    []any{"-y", "tavily-mcp@latest"},
 			},
 		},
+		{
+			Name:        "tavily-custom",
+			Description: "Tavily search via custom proxy (requires TAVILY_API_URL + TAVILY_API_KEY).",
+			Pinned:      true,
+			Config: map[string]any{
+				"command": "node",
+				"args":    []any{},
+			},
+		},
 	}
 }
 
@@ -82,6 +93,17 @@ func ResolveBuiltin(name string, options InstallOptions) (BuiltinSpec, error) {
 				}
 			}
 			spec.Config["env"] = env
+		case "tavily-custom":
+			env := parseEnv(options.Env)
+			if _, ok := env["TAVILY_API_URL"]; !ok {
+				return BuiltinSpec{}, errors.New("tavily-custom requires --set-env=TAVILY_API_URL=<url>")
+			}
+			if _, ok := env["TAVILY_API_KEY"]; !ok {
+				return BuiltinSpec{}, errors.New("tavily-custom requires --set-env=TAVILY_API_KEY=<key>")
+			}
+			scriptPath := filepath.Join(ScriptDir(), "tavily-mcp-server.js")
+			spec.Config["args"] = []any{scriptPath}
+			spec.Config["env"] = env
 		case "filesystem":
 			allow := make([]any, 0, len(options.Allow))
 			for _, entry := range options.Allow {
@@ -102,6 +124,26 @@ func ResolveBuiltin(name string, options InstallOptions) (BuiltinSpec, error) {
 		return spec, nil
 	}
 	return BuiltinSpec{}, fmt.Errorf("unknown server: %s", name)
+}
+
+// ScriptDir returns the path to the AgentFlow built-in scripts directory.
+// It looks alongside the running executable first, then falls back to a
+// development-time location relative to the source tree.
+func ScriptDir() string {
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Join(filepath.Dir(exe), "scripts")
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	// Fallback: locate relative to the source file (development mode).
+	if _, src, _, ok := runtime.Caller(0); ok {
+		dir := filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(src))), "scripts")
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	return "scripts"
 }
 
 func parseEnv(values []string) map[string]string {
