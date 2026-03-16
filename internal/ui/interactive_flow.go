@@ -36,6 +36,7 @@ type InteractiveCallbacks struct {
 	SkillUninstall         func(target, name string) Panel
 	ProjectRulesPanel      func(root, target string) Panel
 	ProjectRulesInstall    func(root, target, profile string) Panel
+	ProjectRulesUninstall  func(root, target string) Panel
 	BootstrapOptions       func() []Option
 	BootstrapAutoSupported func(target string) bool
 	BootstrapDetails       func(target string) Panel
@@ -102,6 +103,7 @@ const (
 	flowActionSkillInstall
 	flowActionSkillUninstall
 	flowActionProjectRulesInstall
+	flowActionProjectRulesUninstall
 	flowActionUpdate
 	flowActionClean
 	flowActionBootstrapAuto
@@ -559,6 +561,12 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.screen = flowScreenSkillProjectActions
 			}
+			m.resetDetailFocus()
+		case flowActionProjectRulesUninstall:
+			if value.notice != nil {
+				m.notice = value.notice
+			}
+			m.screen = flowScreenSkillProjectActions
 			m.resetDetailFocus()
 		case flowActionInstallHubRefresh:
 			if value.notice != nil {
@@ -1330,6 +1338,8 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.focusDetails = false
 			m.detailScroll = 0
 			return m, nil
+		case "uninstall-rules":
+			return m.startBusy(flowActionProjectRulesUninstall, m.catalog.Msg("正在卸载项目规则文件…", "Removing project rule files..."))
 		default:
 			return m, nil
 		}
@@ -2147,6 +2157,21 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 				projectRules: panelRef(projectRules),
 				skillSummary: panelRef(summary),
 			}
+		case flowActionProjectRulesUninstall:
+			notice := Panel{}
+			if m.callbacks.ProjectRulesUninstall != nil {
+				notice = m.callbacks.ProjectRulesUninstall(projectRoot, selectedSkillTarget)
+			}
+			projectRules := Panel{}
+			if m.callbacks.ProjectRulesPanel != nil {
+				projectRules = m.callbacks.ProjectRulesPanel(projectRoot, selectedSkillTarget)
+			}
+			return flowResultMsg{
+				action:       action,
+				notice:       panelRef(notice),
+				status:       m.callbacks.Status(),
+				projectRules: panelRef(projectRules),
+			}
 		case flowActionSkillList:
 			projectRules := Panel{}
 			if m.callbacks.ProjectRulesPanel != nil {
@@ -2598,6 +2623,12 @@ func (m interactiveFlowModel) skillProjectActionsList() []Option {
 			Label:       m.catalog.Msg("写入项目规则文件", "Write project rule files"),
 			Badge:       m.catalog.Msg("写入", "WRITE"),
 			Description: m.catalog.Msg("把 AgentFlow 规则写入当前项目目录（存在用户文件时自动备份）。", "Write AgentFlow rules into this directory (backs up existing user files)."),
+		},
+		{
+			Value:       "uninstall-rules",
+			Label:       m.catalog.Msg("卸载项目规则文件", "Remove project rule files"),
+			Badge:       m.catalog.Msg("删除", "DELETE"),
+			Description: m.catalog.Msg("删除当前项目目录中 AgentFlow 管理的规则文件（不影响用户自定义文件）。", "Remove AgentFlow-managed rule files from this directory (user files are preserved)."),
 		},
 	}
 }

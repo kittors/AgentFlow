@@ -12,6 +12,7 @@ import (
 	"github.com/kittors/AgentFlow/internal/debuglog"
 	"github.com/kittors/AgentFlow/internal/i18n"
 	"github.com/kittors/AgentFlow/internal/install"
+	"github.com/kittors/AgentFlow/internal/projectrules"
 	"github.com/kittors/AgentFlow/internal/targets"
 	"github.com/kittors/AgentFlow/internal/ui"
 	"github.com/kittors/AgentFlow/internal/update"
@@ -123,6 +124,7 @@ func (a *App) runInteractiveMainMenu() int {
 		SkillUninstall:         a.skillUninstallPanel,
 		ProjectRulesPanel:      a.projectRulesPanel,
 		ProjectRulesInstall:    a.projectRulesInstallPanel,
+		ProjectRulesUninstall:  a.projectRulesUninstallPanel,
 		BootstrapOptions:       a.bootstrapTargetOptions,
 		BootstrapAutoSupported: a.bootstrapAutoSupported,
 		BootstrapDetails:       a.bootstrapTargetPanel,
@@ -547,6 +549,36 @@ func (a *App) statusPanel() ui.Panel {
 	lines = append(lines, a.Installer.RuntimeSummaryLines()...)
 	lines = append(lines, "")
 	lines = append(lines, a.Installer.StatusLines()...)
+
+	// Project-level rules status.
+	if wd, wdErr := os.Getwd(); wdErr == nil {
+		rulesManager := projectrules.NewManager()
+		statuses, detectErr := rulesManager.Detect(wd)
+		if detectErr == nil {
+			hasAny := false
+			for _, status := range statuses {
+				if status.Exists {
+					hasAny = true
+					break
+				}
+			}
+			if hasAny {
+				lines = append(lines, "")
+				lines = append(lines, a.Catalog.Msg("项目级规则:", "Project rules:"))
+				for _, status := range statuses {
+					if !status.Exists {
+						continue
+					}
+					state := a.Catalog.Msg("已安装（AgentFlow）", "installed (AgentFlow)")
+					if !status.Managed {
+						state = a.Catalog.Msg("已存在（用户自定义）", "present (user)")
+					}
+					lines = append(lines, fmt.Sprintf("  %s: %s", status.Detected, state))
+				}
+			}
+		}
+	}
+
 	if result, err := a.Checker.Check(a.Version, update.Options{CacheTTLHours: 72}); err == nil && result.UpdateAvailable {
 		lines = append(lines, "")
 		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("可更新到 v%s", "Update available: v%s"), result.Latest))

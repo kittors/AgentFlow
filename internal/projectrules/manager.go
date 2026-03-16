@@ -107,6 +107,41 @@ func (m *Manager) Install(root string, targetNames []string, options InstallOpti
 	return written, nil
 }
 
+// Uninstall removes AgentFlow-managed project rule files from the given root.
+// Only files that contain the AgentFlow marker are removed (user files are left alone).
+func (m *Manager) Uninstall(root string, targetNames []string) ([]string, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+
+	removed := make([]string, 0, len(targetNames))
+	for _, name := range targetNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, ok := Lookup(name); !ok {
+			return nil, fmt.Errorf("unknown target: %s", name)
+		}
+
+		paths := expectedPaths(root, name)
+		for _, path := range paths {
+			if _, statErr := os.Stat(path); statErr != nil {
+				continue // file doesn't exist
+			}
+			if !config.IsAgentFlowFile(path) {
+				continue // not managed by AgentFlow, skip
+			}
+			if err := config.SafeRemove(path); err != nil {
+				return removed, err
+			}
+			removed = append(removed, path)
+		}
+	}
+	return removed, nil
+}
+
 type writeFile struct {
 	RelPath string
 	Content []byte

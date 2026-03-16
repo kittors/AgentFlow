@@ -155,3 +155,43 @@ func (a *App) workspaceInstallRulesPanel(root, targetName, profile string) ui.Pa
 		Lines: lines,
 	}
 }
+
+func (a *App) workspaceUninstallRulesPanel(root, targetName string) ui.Panel {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		if wd, err := os.Getwd(); err == nil {
+			root = wd
+		}
+	}
+	absRoot, err := filepath.Abs(root)
+	if err == nil {
+		root = absRoot
+	}
+
+	manager := projectrules.NewManager()
+	removed, err := manager.Uninstall(root, []string{targetName})
+	if err != nil {
+		return errorPanel(a.Catalog.Msg("项目规则卸载失败", "Project rules uninstall failed"), err)
+	}
+	if len(removed) == 0 {
+		return ui.Panel{
+			Title: a.Catalog.Msg("项目规则卸载结果", "Project rules uninstall result"),
+			Lines: []string{
+				fmt.Sprintf(a.Catalog.Msg("目录: %s", "Workspace: %s"), filepath.ToSlash(root)),
+				a.Catalog.Msg("没有找到 AgentFlow 管理的项目规则文件。", "No AgentFlow-managed project rule files found."),
+			},
+		}
+	}
+	lines := []string{
+		fmt.Sprintf(a.Catalog.Msg("目录: %s", "Workspace: %s"), filepath.ToSlash(root)),
+		a.Catalog.Msg("已删除文件：", "Files removed:"),
+	}
+	for _, path := range removed {
+		rel, _ := filepath.Rel(root, path)
+		lines = append(lines, "  - "+filepath.ToSlash(rel))
+	}
+	return ui.Panel{
+		Title: a.Catalog.Msg("项目规则卸载结果", "Project rules uninstall result"),
+		Lines: lines,
+	}
+}
