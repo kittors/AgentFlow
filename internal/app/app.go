@@ -147,90 +147,72 @@ func (a *App) runInteractiveMainMenu() int {
 	return 0
 }
 
-// showSplashScreen displays a beautiful loading screen with a logo,
-// version info, and a daily background update check before entering the TUI.
+// showSplashScreen displays a loading screen with version info and a daily
+// background update check before entering the TUI.
 func (a *App) showSplashScreen() {
 	// ANSI: hide cursor, clear screen.
 	fmt.Fprint(a.Stdout, "\033[?25l\033[2J\033[H")
-	defer fmt.Fprint(a.Stdout, "\033[?25h") // show cursor
+	defer fmt.Fprint(a.Stdout, "\033[?25h")
 
-	// Styled logo using lipgloss — compact and reliable.
-	border := lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render(
-		"  ╔══════════════════════════════════════════════╗")
-	borderBot := lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render(
-		"  ╚══════════════════════════════════════════════╝")
-
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("81")).
-		Bold(true)
-	accentStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("69")).
-		Bold(true)
-
-	titleLine := lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render("  ║") +
-		"    " + titleStyle.Render("Agent") + accentStyle.Render("Flow") +
-		"  " + lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("~ Multi-CLI Orchestrator") +
-		"    " + lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render("║")
+	// Use lipgloss Border for reliable rendering.
+	logoBox := lipgloss.NewStyle().
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(lipgloss.Color("63")).
+		Padding(0, 3).
+		Render(
+			lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true).Render("Agent") +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Bold(true).Render("Flow"))
 
 	versionBadge := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("230")).
 		Background(lipgloss.Color("63")).
 		Bold(true).
-		Padding(0, 2).
-		Render(fmt.Sprintf("v%s", a.Version))
+		Padding(0, 1).
+		Render(fmt.Sprintf(" v%s ", a.Version))
 
 	tagline := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("109")).
 		Render(a.Catalog.Msg("✨ 多 CLI 代理工作流编排系统", "✨ Multi-CLI Agent Workflow Orchestrator"))
 
 	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
-	doneStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	loadingColor := lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
+	doneColor := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
 
-	renderSplash := func(statusLine string) {
-		fmt.Fprint(a.Stdout, "\033[H")
-		var buf strings.Builder
-		buf.WriteString("\n\n\n")
-		buf.WriteString(border + "\n")
-		buf.WriteString(titleLine + "\n")
-		buf.WriteString(borderBot + "\n")
-		buf.WriteString("\n")
-		buf.WriteString("  " + versionBadge + "  " + tagline + "\n")
-		buf.WriteString("\n")
-		buf.WriteString("  " + statusLine + "\n")
-		buf.WriteString("\n")
-		fmt.Fprint(a.Stdout, buf.String())
+	render := func(status string) {
+		fmt.Fprint(a.Stdout, "\033[H") // cursor home
+		fmt.Fprintf(a.Stdout, "\n\n\n   %s\n\n   %s  %s\n\n   %s\n\n",
+			logoBox, versionBadge, tagline, status)
 	}
 
 	// Background update check (24h cache).
-	type updateResult struct {
-		result update.Result
-		err    error
+	type res struct {
+		r   update.Result
+		err error
 	}
-	ch := make(chan updateResult, 1)
+	ch := make(chan res, 1)
 	go func() {
 		r, err := a.Checker.Check(a.Version, update.Options{CacheTTLHours: 24})
-		ch <- updateResult{r, err}
+		ch <- res{r, err}
 	}()
 
-	loadingText := a.Catalog.Msg("正在检查更新…", "Checking for updates…")
+	txt := a.Catalog.Msg("正在检查更新…", "Checking for updates…")
 	frame := 0
 	for {
 		select {
-		case res := <-ch:
-			if res.err == nil && res.result.UpdateAvailable {
-				renderSplash(doneStyle.Render(fmt.Sprintf(
-					a.Catalog.Msg("⬆️  发现新版本 v%s（当前 v%s）— 运行 agentflow update 更新",
-						"⬆️  New version v%s available (current v%s) — run agentflow update"),
-					res.result.Latest, res.result.Current)))
+		case r := <-ch:
+			if r.err == nil && r.r.UpdateAvailable {
+				render(doneColor.Render(fmt.Sprintf(
+					a.Catalog.Msg("⬆️  发现新版本 v%s — 运行 agentflow update 更新",
+						"⬆️  Update available v%s — run: agentflow update"),
+					r.r.Latest)))
 				time.Sleep(2500 * time.Millisecond)
 			} else {
-				renderSplash(doneStyle.Render(a.Catalog.Msg("✅ 已是最新版本", "✅ Up to date")))
+				render(doneColor.Render(a.Catalog.Msg("✅ 已是最新版本", "✅ Up to date")))
 				time.Sleep(800 * time.Millisecond)
 			}
 			return
 		default:
-			renderSplash(loadingStyle.Render(fmt.Sprintf("%s %s", frames[frame%len(frames)], loadingText)))
+			render(loadingColor.Render(fmt.Sprintf("%s %s", frames[frame%len(frames)], txt)))
 			frame++
 			time.Sleep(80 * time.Millisecond)
 		}
