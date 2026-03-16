@@ -238,7 +238,7 @@ go build -o ./bin/agentflow ./cmd/agentflow
 
 | 操作系统 | CPU 架构 | 文件名 |
 |----------|---------|--------|
-| macOS | Apple Silicon (M1/M2/M3/M4) | `agentflow-darwin-arm64` |
+| macOS | Apple Silicon (M1/M2/M3/M4/M5) | `agentflow-darwin-arm64` |
 | macOS | Intel | `agentflow-darwin-amd64` |
 | Linux | x86_64 | `agentflow-linux-amd64` |
 | Linux | ARM64 / aarch64 | `agentflow-linux-arm64` |
