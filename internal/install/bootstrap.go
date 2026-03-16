@@ -720,3 +720,55 @@ func shellQuote(value string) string {
 	escaped := strings.ReplaceAll(value, `"`, `\"`)
 	return `"` + escaped + `"`
 }
+
+// ReadEnvFromShellRC reads all `export VAR=value` lines from the user's shell
+// rc file and returns them as a map. Commented-out exports are skipped. Quoted
+// values are unquoted. This allows reading config values that were written to
+// the rc file but not yet sourced in the current shell.
+func (i *Installer) ReadEnvFromShellRC() map[string]string {
+	rcFile := i.detectShellRC()
+	data, err := os.ReadFile(rcFile)
+	if err != nil {
+		return nil
+	}
+	result := make(map[string]string)
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue // skip comments
+		}
+		if !strings.HasPrefix(trimmed, "export ") {
+			continue
+		}
+		rest := strings.TrimPrefix(trimmed, "export ")
+		eqIdx := strings.Index(rest, "=")
+		if eqIdx < 0 {
+			continue
+		}
+		key := strings.TrimSpace(rest[:eqIdx])
+		val := strings.TrimSpace(rest[eqIdx+1:])
+		// Unquote value.
+		if len(val) >= 2 && ((val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'')) {
+			val = val[1 : len(val)-1]
+		}
+		if key != "" {
+			result[key] = val
+		}
+	}
+	return result
+}
+
+// GetEnvOrRC returns the value of an env var, first checking the current
+// process environment (os.Getenv), then falling back to reading from the
+// shell rc file. This ensures config values are visible even when the rc
+// file hasn't been sourced yet.
+func (i *Installer) GetEnvOrRC(key string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	rcVars := i.ReadEnvFromShellRC()
+	if rcVars != nil {
+		return rcVars[key]
+	}
+	return ""
+}

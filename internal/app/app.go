@@ -691,9 +691,13 @@ func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
 			if item.EnvVar == "" {
 				continue
 			}
-			envVal := os.Getenv(item.EnvVar)
+			envVal := a.Installer.GetEnvOrRC(item.EnvVar)
 			if envVal != "" {
 				displayVal := envVal
+				// Strip trailing slash from URLs.
+				if strings.Contains(strings.ToLower(item.Label), "url") {
+					displayVal = strings.TrimRight(displayVal, "/")
+				}
 				// Mask API keys for security.
 				if strings.Contains(strings.ToLower(item.Label), "key") && len(envVal) > 6 {
 					displayVal = envVal[:3] + strings.Repeat("*", len(envVal)-6) + envVal[len(envVal)-3:]

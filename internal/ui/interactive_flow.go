@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -862,12 +864,34 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.detailScroll = 0
 		return m.handleEnter()
 	case tea.KeyRunes:
-		if key.String() == " " {
+		ch := key.String()
+		if ch == " " {
 			if m.screen == flowScreenInstallTargets {
 				m.toggleSelected(&m.installOptions, m.installCursor)
 			}
 			if m.screen == flowScreenUninstallTargets {
 				m.toggleSelected(&m.uninstallOptions, m.uninstallCursor)
+			}
+		}
+		if ch == "c" || ch == "C" {
+			// Copy detail panel content to clipboard.
+			screen := m.selectionForCurrentScreen()
+			var textLines []string
+			for _, panel := range screen.panels {
+				if panel.Title != "" {
+					textLines = append(textLines, panel.Title)
+				}
+				textLines = append(textLines, panel.Lines...)
+				textLines = append(textLines, "")
+			}
+			if len(textLines) > 0 {
+				text := strings.Join(textLines, "\n")
+				if copyToClipboard(text) == nil {
+					m.notice = panelRef(Panel{
+						Title: m.catalog.Msg("已复制", "Copied"),
+						Lines: []string{m.catalog.Msg("右侧面板内容已复制到剪贴板。", "Detail panel content copied to clipboard.")},
+					})
+				}
 			}
 		}
 	}
@@ -2983,3 +3007,25 @@ func busyTickCmd() tea.Cmd {
 }
 
 var spinnerFrames = []string{"◐", "◓", "◑", "◒"}
+
+// copyToClipboard copies the given text to the system clipboard.
+// Uses pbcopy on macOS, xclip or xsel on Linux.
+func copyToClipboard(text string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "linux":
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd = exec.Command("xclip", "-selection", "clipboard")
+		} else if _, err := exec.LookPath("xsel"); err == nil {
+			cmd = exec.Command("xsel", "--clipboard", "--input")
+		} else {
+			return fmt.Errorf("no clipboard tool found")
+		}
+	default:
+		return fmt.Errorf("clipboard not supported on %s", runtime.GOOS)
+	}
+	cmd.Stdin = strings.NewReader(text)
+	return cmd.Run()
+}
