@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -104,6 +105,9 @@ func (a *App) runInteractiveMainMenu() int {
 		return code
 	}
 
+	// Show splash screen with loading and daily update check.
+	a.showSplashScreen()
+
 	if err := ui.RunInteractiveFlow(a.Catalog, a.Version, ui.InteractiveCallbacks{
 		Status:                 a.statusPanel,
 		MCPTargetOptions:       a.mcpTargetOptions,
@@ -141,6 +145,110 @@ func (a *App) runInteractiveMainMenu() int {
 		return 1
 	}
 	return 0
+}
+
+// showSplashScreen displays a beautiful loading screen with ASCII art logo,
+// version info, and a daily background update check before entering the TUI.
+func (a *App) showSplashScreen() {
+	// ANSI: hide cursor, clear screen.
+	fmt.Fprint(a.Stdout, "\033[?25l\033[2J\033[H")
+	defer fmt.Fprint(a.Stdout, "\033[?25h") // show cursor
+
+	// ASCII art logo with a cute look.
+	logo := []string{
+		"    _                    _   _____ _               ",
+		"   / \\   __ _  ___ _ __ | |_|  ___| | _____      __",
+		"  / _ \\ / _` |/ _ \\ '_ \\| __| |_  | |/ _ \\ \\ /\\ / /",
+		" / ___ \\ (_| |  __/ | | | |_|  _| | | (_) \\ V  V / ",
+		"/_/   \\_\\__, |\\___|_| |_|\\__|_|   |_|\\___/ \\_/\\_/  ",
+		"        |___/                                       ",
+	}
+
+	// Gradient colors for logo lines (cyan → blue → purple).
+	logoColors := []string{"86", "81", "75", "69", "63", "57"}
+
+	var renderedLogo []string
+	for i, line := range logo {
+		color := logoColors[i%len(logoColors)]
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(color)).
+			Bold(true)
+		renderedLogo = append(renderedLogo, style.Render(line))
+	}
+
+	versionBadge := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("230")).
+		Background(lipgloss.Color("63")).
+		Bold(true).
+		Padding(0, 2).
+		Render(fmt.Sprintf("v%s", a.Version))
+
+	tagline := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("244")).
+		Italic(true).
+		Render(a.Catalog.Msg("✨ 多 CLI 代理工作流编排系统", "✨ Multi-CLI Agent Workflow Orchestrator"))
+
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
+	doneStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+
+	// Render initial splash.
+	renderSplash := func(statusLine string) {
+		fmt.Fprint(a.Stdout, "\033[H") // move to top
+		output := "\n\n"
+		for _, line := range renderedLogo {
+			output += "  " + line + "\n"
+		}
+		output += "\n"
+		output += "  " + versionBadge + "  " + tagline + "\n"
+		output += "\n"
+		output += "  " + statusLine + "\n"
+		output += "\n"
+		fmt.Fprint(a.Stdout, output)
+	}
+
+	// Phase 1: Show splash with loading animation while checking update.
+	type updateResult struct {
+		result update.Result
+		err    error
+	}
+	resultCh := make(chan updateResult, 1)
+	go func() {
+		r, err := a.Checker.Check(a.Version, update.Options{CacheTTLHours: 24})
+		resultCh <- updateResult{r, err}
+	}()
+
+	loadingText := a.Catalog.Msg("正在检查更新…", "Checking for updates…")
+	frame := 0
+	for {
+		select {
+		case res := <-resultCh:
+			// Done checking.
+			if res.err == nil && res.result.UpdateAvailable {
+				// Show update available.
+				renderSplash(doneStyle.Render(fmt.Sprintf(
+					a.Catalog.Msg("⬆️  发现新版本 v%s（当前 v%s）", "⬆️  New version v%s available (current v%s)"),
+					res.result.Latest, res.result.Current)))
+
+				updatePrompt := lipgloss.NewStyle().
+					Foreground(lipgloss.Color("230")).
+					Background(lipgloss.Color("24")).
+					Padding(0, 1).
+					Render(a.Catalog.Msg("按 Enter 继续 · 运行 agentflow update 更新", "Press Enter to continue · Run agentflow update to upgrade"))
+				fmt.Fprintln(a.Stdout, "  "+updatePrompt)
+				time.Sleep(2 * time.Second)
+			} else {
+				renderSplash(doneStyle.Render(a.Catalog.Msg("✅ 已是最新版本", "✅ Up to date")))
+				time.Sleep(800 * time.Millisecond)
+			}
+			return
+
+		default:
+			renderSplash(loadingStyle.Render(fmt.Sprintf("%s %s", frames[frame%len(frames)], loadingText)))
+			frame++
+			time.Sleep(80 * time.Millisecond)
+		}
+	}
 }
 
 func (a *App) ensureInteractiveLanguage() (int, bool) {
