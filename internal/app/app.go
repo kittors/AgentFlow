@@ -669,47 +669,64 @@ func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
 	// Only show when CLI is actually installed.
 	if status.CLIInstalled {
 		target := status.Target
-		configItems := []struct {
-			Label  string
-			EnvVar string
-		}{
-			{Label: "API Key", EnvVar: target.APIKeyEnv},
-			{Label: "Base URL", EnvVar: target.BaseURLEnv},
-			{Label: a.Catalog.Msg("模型", "Model"), EnvVar: target.ModelEnv},
-		}
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 配置状态 ───", "─── Configuration ───")))
 
-		hasAnyConfig := false
-		for _, item := range configItems {
-			if item.EnvVar != "" {
-				hasAnyConfig = true
-				break
+		// API Key: read from env/rc for all targets, also check auth.json for Codex.
+		if target.APIKeyEnv != "" {
+			envVal := a.Installer.GetEnvOrRC(target.APIKeyEnv)
+			if envVal == "" && target.Name == "codex" {
+				envVal = a.Installer.ReadCodexAuthKey()
+			}
+			if envVal != "" {
+				displayVal := envVal
+				if len(envVal) > 6 {
+					displayVal = envVal[:3] + strings.Repeat("*", len(envVal)-6) + envVal[len(envVal)-3:]
+				}
+				lines = append(lines, fmt.Sprintf("  %s API Key: %s",
+					greenDot, valueStyle.Render(displayVal)))
+			} else {
+				lines = append(lines, fmt.Sprintf("  %s API Key: %s",
+					grayDot, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
 			}
 		}
 
-		if hasAnyConfig {
-			lines = append(lines, "")
-			lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 配置状态 ───", "─── Configuration ───")))
-			for _, item := range configItems {
-				if item.EnvVar == "" {
-					continue
-				}
-				envVal := a.Installer.GetEnvOrRC(item.EnvVar)
-				if envVal != "" {
-					displayVal := envVal
-					// Strip trailing slash from URLs.
-					if strings.Contains(strings.ToLower(item.Label), "url") {
-						displayVal = strings.TrimRight(displayVal, "/")
-					}
-					// Mask API keys for security.
-					if strings.Contains(strings.ToLower(item.Label), "key") && len(envVal) > 6 {
-						displayVal = envVal[:3] + strings.Repeat("*", len(envVal)-6) + envVal[len(envVal)-3:]
-					}
-					lines = append(lines, fmt.Sprintf("  %s %s: %s",
-						greenDot, item.Label, valueStyle.Render(displayVal)))
-				} else {
-					lines = append(lines, fmt.Sprintf("  %s %s: %s",
-						grayDot, item.Label, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
-				}
+		// Base URL: read from env/rc, also check config.toml model_provider for Codex.
+		if target.BaseURLEnv != "" {
+			envVal := a.Installer.GetEnvOrRC(target.BaseURLEnv)
+			if envVal == "" && target.Name == "codex" {
+				envVal = a.Installer.ReadCodexConfigField("base_url")
+			}
+			if envVal != "" {
+				lines = append(lines, fmt.Sprintf("  %s Base URL: %s",
+					greenDot, valueStyle.Render(strings.TrimRight(envVal, "/"))))
+			} else {
+				lines = append(lines, fmt.Sprintf("  %s Base URL: %s",
+					grayDot, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+			}
+		}
+
+		// Model: read from config file (config.toml for Codex, .claude.json for Claude).
+		modelLabel := a.Catalog.Msg("模型", "Model")
+		modelVal := a.Installer.ReadCLIConfigModel(target.Name)
+		if modelVal != "" {
+			lines = append(lines, fmt.Sprintf("  %s %s: %s",
+				greenDot, modelLabel, valueStyle.Render(modelVal)))
+		} else {
+			lines = append(lines, fmt.Sprintf("  %s %s: %s",
+				grayDot, modelLabel, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+		}
+
+		// Reasoning level (Codex only).
+		if target.Name == "codex" {
+			reasoningVal := a.Installer.ReadCodexConfigField("model_reasoning_effort")
+			reasoningLabel := a.Catalog.Msg("思考等级", "Thinking Level")
+			if reasoningVal != "" {
+				lines = append(lines, fmt.Sprintf("  %s %s: %s",
+					greenDot, reasoningLabel, valueStyle.Render(reasoningVal)))
+			} else {
+				lines = append(lines, fmt.Sprintf("  %s %s: %s",
+					grayDot, reasoningLabel, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
 			}
 		}
 	}

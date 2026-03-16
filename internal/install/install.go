@@ -244,6 +244,79 @@ func (i *Installer) WriteClaudeConfig(model string) error {
 	return config.SafeWrite(configPath, data, 0o644)
 }
 
+// ReadCodexAuthKey reads the API key token from ~/.codex/auth.json.
+func (i *Installer) ReadCodexAuthKey() string {
+	authPath := filepath.Join(i.HomeDir, ".codex", "auth.json")
+	data, err := os.ReadFile(authPath)
+	if err != nil {
+		return ""
+	}
+	var auth map[string]any
+	if json.Unmarshal(data, &auth) != nil {
+		return ""
+	}
+	if token, ok := auth["token"].(string); ok {
+		return token
+	}
+	return ""
+}
+
+// ReadCodexConfigField reads a top-level TOML field from ~/.codex/config.toml.
+// For "base_url", it also checks the active model_provider section.
+func (i *Installer) ReadCodexConfigField(field string) string {
+	configPath := filepath.Join(i.HomeDir, ".codex", "config.toml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return ""
+	}
+	text := string(data)
+
+	// For base_url, check the model_providers section first.
+	if field == "base_url" {
+		// Find active model_provider name.
+		reProvider := regexp.MustCompile(`(?m)^model_provider\s*=\s*"([^"]*)"`)
+		if m := reProvider.FindStringSubmatch(text); len(m) > 1 {
+			providerName := m[1]
+			// Find base_url inside [model_providers.<name>] section.
+			sectionRe := regexp.MustCompile(`(?ms)\[model_providers\.` + regexp.QuoteMeta(providerName) + `\].*?base_url\s*=\s*"([^"]*)"`)
+			if sm := sectionRe.FindStringSubmatch(text); len(sm) > 1 {
+				return sm[1]
+			}
+		}
+	}
+
+	// Read top-level field.
+	re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(field) + `\s*=\s*"([^"]*)"`)
+	if m := re.FindStringSubmatch(text); len(m) > 1 {
+		return m[1]
+	}
+	return ""
+}
+
+// ReadCLIConfigModel reads the current model from the CLI's config file.
+func (i *Installer) ReadCLIConfigModel(targetName string) string {
+	switch targetName {
+	case "codex":
+		return i.ReadCodexConfigField("model")
+	case "claude":
+		configPath := filepath.Join(i.HomeDir, ".claude.json")
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return ""
+		}
+		var settings map[string]any
+		if json.Unmarshal(data, &settings) != nil {
+			return ""
+		}
+		if model, ok := settings["model"].(string); ok {
+			return model
+		}
+		return ""
+	default:
+		return ""
+	}
+}
+
 func (i *Installer) Install(targetName, profile string) error {
 	target, ok := targets.Lookup(targetName)
 	if !ok {
