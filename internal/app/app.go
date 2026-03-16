@@ -630,27 +630,87 @@ func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
 		return errorPanel(a.Catalog.Msg("CLI 信息", "CLI details"), err)
 	}
 
-	lines := make([]string, 0, 16)
-	switch {
-	case status.CLIInstalled:
+	// Styles for the detail panel.
+	greenDot := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("●")
+	grayDot := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("○")
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230"))
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+
+	lines := make([]string, 0, 24)
+
+	// ── Installation status section ──
+	if status.CLIInstalled {
 		location := status.CLIPath
 		if strings.TrimSpace(status.CLIPathScope) != "" {
 			location = fmt.Sprintf("%s (%s)", status.CLIPath, status.CLIPathScope)
 		}
-		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("CLI 可执行文件: %s", "CLI executable: %s"), location))
-	default:
-		lines = append(lines, a.Catalog.Msg("CLI 可执行文件: 未检测到", "CLI executable: not detected"))
-	}
-
-	lines = append(lines, fmt.Sprintf(a.Catalog.Msg("AgentFlow 目录: %s", "AgentFlow directory: %s"), status.ConfigDir))
-	if status.AgentFlowInstalled {
-		lines = append(lines, a.Catalog.Msg("AgentFlow: 已安装", "AgentFlow: installed"))
+		lines = append(lines, fmt.Sprintf("%s %s: %s", greenDot,
+			labelStyle.Render(a.Catalog.Msg("CLI 状态", "CLI status")),
+			valueStyle.Render(a.Catalog.Msg("已安装", "installed"))))
+		lines = append(lines, fmt.Sprintf("  %s", mutedStyle.Render(location)))
 	} else {
-		lines = append(lines, a.Catalog.Msg("AgentFlow: 未安装", "AgentFlow: not installed"))
+		lines = append(lines, fmt.Sprintf("%s %s: %s", grayDot,
+			labelStyle.Render(a.Catalog.Msg("CLI 状态", "CLI status")),
+			mutedStyle.Render(a.Catalog.Msg("未安装", "not installed"))))
 	}
 
+	if status.AgentFlowInstalled {
+		lines = append(lines, fmt.Sprintf("%s %s: %s", greenDot,
+			labelStyle.Render("AgentFlow"),
+			valueStyle.Render(a.Catalog.Msg("已安装", "installed"))))
+	} else {
+		lines = append(lines, fmt.Sprintf("%s %s: %s", grayDot,
+			labelStyle.Render("AgentFlow"),
+			mutedStyle.Render(a.Catalog.Msg("未安装", "not installed"))))
+	}
+
+	// ── Configuration section (API Key / Base URL / Model) ──
+	target := status.Target
+	configItems := []struct {
+		Label  string
+		EnvVar string
+	}{
+		{Label: "API Key", EnvVar: target.APIKeyEnv},
+		{Label: "Base URL", EnvVar: target.BaseURLEnv},
+		{Label: a.Catalog.Msg("模型", "Model"), EnvVar: target.ModelEnv},
+	}
+
+	hasAnyConfig := false
+	for _, item := range configItems {
+		if item.EnvVar != "" {
+			hasAnyConfig = true
+			break
+		}
+	}
+
+	if hasAnyConfig {
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 配置状态 ───", "─── Configuration ───")))
+		for _, item := range configItems {
+			if item.EnvVar == "" {
+				continue
+			}
+			envVal := os.Getenv(item.EnvVar)
+			if envVal != "" {
+				displayVal := envVal
+				// Mask API keys for security.
+				if strings.Contains(strings.ToLower(item.Label), "key") && len(envVal) > 6 {
+					displayVal = envVal[:3] + strings.Repeat("*", len(envVal)-6) + envVal[len(envVal)-3:]
+				}
+				lines = append(lines, fmt.Sprintf("  %s %s: %s",
+					greenDot, item.Label, valueStyle.Render(displayVal)))
+			} else {
+				lines = append(lines, fmt.Sprintf("  %s %s: %s",
+					grayDot, item.Label, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+			}
+		}
+	}
+
+	// ── Runtime environment ──
 	lines = append(lines, "")
 	lines = append(lines, a.Installer.RuntimeSummaryLines()...)
+
 	if len(status.Notes) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, status.Notes...)
