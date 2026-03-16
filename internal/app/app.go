@@ -147,41 +147,40 @@ func (a *App) runInteractiveMainMenu() int {
 	return 0
 }
 
-// showSplashScreen displays a loading screen with version info and a daily
-// background update check before entering the TUI.
+// showSplashScreen displays a loading screen with ASCII art logo,
+// version info, and a daily update check before entering the TUI.
 func (a *App) showSplashScreen() {
-	// ANSI: hide cursor, clear screen.
-	fmt.Fprint(a.Stdout, "\033[?25l\033[2J\033[H")
-	defer fmt.Fprint(a.Stdout, "\033[?25h")
+	const (
+		esc    = "\033["
+		cyan   = esc + "1;36m"
+		blue   = esc + "1;34m"
+		purple = esc + "1;35m"
+		green  = esc + "1;32m"
+		gray   = esc + "0;90m"
+		white  = esc + "1;37m"
+		bgBlue = esc + "1;97;44m"
+		reset  = esc + "0m"
+	)
 
-	// Use lipgloss Border for reliable rendering.
-	logoBox := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		Padding(0, 3).
-		Render(
-			lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true).Render("Agent") +
-				lipgloss.NewStyle().Foreground(lipgloss.Color("69")).Bold(true).Render("Flow"))
+	// Hide cursor, clear screen.
+	fmt.Fprint(a.Stdout, esc+"?25l"+esc+"2J"+esc+"H")
+	defer fmt.Fprint(a.Stdout, esc+"?25h")
 
-	versionBadge := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("230")).
-		Background(lipgloss.Color("63")).
-		Bold(true).
-		Padding(0, 1).
-		Render(fmt.Sprintf(" v%s ", a.Version))
+	// The ASCII art uses raw string concatenation to avoid Go escape issues.
+	line1 := cyan + `     _                    _   ` + blue + ` _____ _               ` + reset
+	line2 := cyan + `    / \   __ _  ___ _ __ | |_ ` + blue + `|  ___| | _____      __` + reset
+	line3 := cyan + "   / _ \\ / _` |/ _ \\ '_ \\| __|" + blue + `|_  | |/ _ \ \ /\ / /` + reset
+	line4 := cyan + `  / ___ \ (_| |  __/ | | | |_ ` + purple + `|  _| | | (_) \ V  V / ` + reset
+	line5 := cyan + ` /_/   \_\__, |\___|_| |_|\__|` + purple + `_|   |_|\___/ \_/\_/  ` + reset
+	line6 := cyan + `         |___/                ` + purple + `                       ` + reset
 
-	tagline := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("109")).
-		Render(a.Catalog.Msg("✨ 多 CLI 代理工作流编排系统", "✨ Multi-CLI Agent Workflow Orchestrator"))
-
-	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	loadingColor := lipgloss.NewStyle().Foreground(lipgloss.Color("81"))
-	doneColor := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	ver := bgBlue + fmt.Sprintf(" v%s ", a.Version) + reset
+	tag := gray + a.Catalog.Msg("✨ 多 CLI 代理工作流编排系统", "✨ Multi-CLI Agent Workflow Orchestrator") + reset
 
 	render := func(status string) {
-		fmt.Fprint(a.Stdout, "\033[H") // cursor home
-		fmt.Fprintf(a.Stdout, "\n\n\n   %s\n\n   %s  %s\n\n   %s\n\n",
-			logoBox, versionBadge, tagline, status)
+		fmt.Fprint(a.Stdout, esc+"H")
+		fmt.Fprintf(a.Stdout, "\n\n  %s\n  %s\n  %s\n  %s\n  %s\n  %s\n\n  %s  %s\n\n  %s\n\n",
+			line1, line2, line3, line4, line5, line6, ver, tag, status)
 	}
 
 	// Background update check (24h cache).
@@ -195,24 +194,25 @@ func (a *App) showSplashScreen() {
 		ch <- res{r, err}
 	}()
 
+	frames := [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 	txt := a.Catalog.Msg("正在检查更新…", "Checking for updates…")
 	frame := 0
 	for {
 		select {
 		case r := <-ch:
 			if r.err == nil && r.r.UpdateAvailable {
-				render(doneColor.Render(fmt.Sprintf(
+				render(green + fmt.Sprintf(
 					a.Catalog.Msg("⬆️  发现新版本 v%s — 运行 agentflow update 更新",
 						"⬆️  Update available v%s — run: agentflow update"),
-					r.r.Latest)))
+					r.r.Latest) + reset)
 				time.Sleep(2500 * time.Millisecond)
 			} else {
-				render(doneColor.Render(a.Catalog.Msg("✅ 已是最新版本", "✅ Up to date")))
+				render(green + a.Catalog.Msg("✅ 已是最新版本", "✅ Up to date") + reset)
 				time.Sleep(800 * time.Millisecond)
 			}
 			return
 		default:
-			render(loadingColor.Render(fmt.Sprintf("%s %s", frames[frame%len(frames)], txt)))
+			render(white + fmt.Sprintf("%s %s", frames[frame%len(frames)], txt) + reset)
 			frame++
 			time.Sleep(80 * time.Millisecond)
 		}

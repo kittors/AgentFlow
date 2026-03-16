@@ -218,8 +218,17 @@ download_binary() {
 }
 
 printf "\n"
-printf "${BOLD}${CYAN}AgentFlow${RESET}\n"
+BLUE='\033[1;34m'
+PURPLE='\033[1;35m'
+echo -e "${BOLD}${CYAN}     _                    _   ${BLUE} _____ _               ${RESET}"
+echo -e "${BOLD}${CYAN}    / \\   __ _  ___ _ __ | |_ ${BLUE}|  ___| | _____      __${RESET}"
+echo -e "${BOLD}${CYAN}   / _ \\ / _\` |/ _ \\ '_ \\| __|${BLUE}|_  | |/ _ \\ \\ /\\ / /${RESET}"
+echo -e "${BOLD}${CYAN}  / ___ \\ (_| |  __/ | | | |_ ${PURPLE}|  _| | | (_) \\ V  V / ${RESET}"
+echo -e "${BOLD}${CYAN} /_/   \\_\\__, |\\___|_| |_|\\__|${PURPLE}_|   |_|\\___/ \\_/\\_/  ${RESET}"
+echo -e "${BOLD}${CYAN}         |___/                ${PURPLE}                       ${RESET}"
+echo ""
 printf "${DIM}%s${RESET}\n\n" "$(msg "Go Binary Installer" "Go Binary Installer")"
+
 
 step "$(msg "步骤 1/3: 检测下载工具" "Step 1/3: Detect download tools")"
 if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
