@@ -1043,10 +1043,13 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 			f := &m.configFields[m.configFieldCursor]
 			if f.FieldType != "select" {
 				// Insert characters at cursor position.
-				ins := key.String()
-				f.Value = f.Value[:f.CursorPos] + ins + f.Value[f.CursorPos:]
-				f.CursorPos += len(ins)
-				f.Dirty = true
+				// Strip bracket chars from bracketed paste sequences.
+				ins := strings.NewReplacer("[", "", "]", "").Replace(key.String())
+				if ins != "" {
+					f.Value = f.Value[:f.CursorPos] + ins + f.Value[f.CursorPos:]
+					f.CursorPos += len(ins)
+					f.Dirty = true
+				}
 			}
 		}
 		return m, nil
@@ -2367,23 +2370,7 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 				model.hint = m.catalog.Msg("直接输入文本，Enter 确认并继续（留空跳过），Esc 跳过剩余步骤。", "Type to input, Enter to confirm and continue (empty = skip), Esc to skip remaining.")
 			}
 
-			// Build a single option for the current field.
-			var displayValue string
-			if f.FieldType == "select" && len(f.Options) > 0 {
-				current := f.Options[f.OptionCursor]
-				displayValue = fmt.Sprintf("◀ %s ▶  (%d/%d)", current, f.OptionCursor+1, len(f.Options))
-			} else {
-				if f.Value == "" {
-					displayValue = m.catalog.Msg("请输入... ", "type here... ") + "█"
-				} else {
-					// Show cursor at CursorPos within the value.
-					pos := f.CursorPos
-					if pos > len(f.Value) {
-						pos = len(f.Value)
-					}
-					displayValue = f.Value[:pos] + "█" + f.Value[pos:]
-				}
-			}
+			// Left option: just show step name, no value echo.
 			typeIcon := "📝"
 			if f.FieldType == "select" {
 				typeIcon = "🔽"
@@ -2392,16 +2379,18 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 				Value:       f.EnvVar,
 				Label:       fmt.Sprintf("%s %s", typeIcon, fieldLabel),
 				Badge:       fmt.Sprintf("%d/%d", stepNum, totalSteps),
-				Description: displayValue,
+				Description: m.catalog.Msg("在右侧面板输入 →", "Input in the right panel →"),
 			}}
 			model.cursor = 0
 		}
-		// Build detail panel showing wizard progress.
+
+		// Build detail panel with prominent input area.
 		var summaryLines []string
 		summaryLines = append(summaryLines,
 			fmt.Sprintf(m.catalog.Msg("目标: %s", "Target: %s"), m.configTarget),
 			"",
 		)
+
 		for idx, f := range m.configFields {
 			label := f.Label
 			if idx < m.configFieldCursor {
@@ -2410,7 +2399,6 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 				if val == "" {
 					val = m.catalog.Msg("(已跳过)", "(skipped)")
 				} else if f.FieldType == "text" && len(val) > 6 {
-					// Mask API keys for security.
 					if strings.Contains(strings.ToLower(f.Label), "key") {
 						val = val[:3] + "***" + val[len(val)-3:]
 					}
@@ -2418,10 +2406,38 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 				summaryLines = append(summaryLines,
 					fmt.Sprintf("  ✅ %s: %s", label, val))
 			} else if idx == m.configFieldCursor {
-				summaryLines = append(summaryLines,
-					fmt.Sprintf("  👉 %s: %s",
-						label,
-						m.catalog.Msg("输入中…", "entering…")))
+				// Current field — show prominent input.
+				summaryLines = append(summaryLines, "")
+				if f.FieldType == "select" && len(f.Options) > 0 {
+					current := f.Options[f.OptionCursor]
+					summaryLines = append(summaryLines,
+						fmt.Sprintf("  🔽 %s:", label),
+						fmt.Sprintf("     ◀ %s ▶  (%d/%d)", current, f.OptionCursor+1, len(f.Options)),
+					)
+				} else {
+					summaryLines = append(summaryLines,
+						fmt.Sprintf("  ✏️  %s:", label))
+
+					// Prominent input box.
+					var inputDisplay string
+					if f.Value == "" {
+						inputDisplay = m.catalog.Msg("请在此输入…", "type here…")
+					} else {
+						// Show value with cursor.
+						pos := f.CursorPos
+						if pos > len(f.Value) {
+							pos = len(f.Value)
+						}
+						inputDisplay = f.Value[:pos] + "█" + f.Value[pos:]
+					}
+					// Styled input line: ┃ value █ ┃
+					summaryLines = append(summaryLines,
+						"  ┌──────────────────────────────────────┐",
+						fmt.Sprintf("  │ %s", inputDisplay),
+						"  └──────────────────────────────────────┘",
+					)
+				}
+				summaryLines = append(summaryLines, "")
 			} else {
 				summaryLines = append(summaryLines,
 					fmt.Sprintf("  ○  %s: %s",
