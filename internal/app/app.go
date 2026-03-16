@@ -1,10 +1,12 @@
 package app
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -200,15 +202,86 @@ func (a *App) showSplashScreen() {
 		select {
 		case r := <-ch:
 			if r.err == nil && r.r.UpdateAvailable {
+				// Show update info and ask user.
+				yellow := esc + "1;33m"
 				render(green + fmt.Sprintf(
-					a.Catalog.Msg("⬆️  发现新版本 v%s — 运行 agentflow update 更新",
-						"⬆️  Update available v%s — run: agentflow update"),
-					r.r.Latest) + reset)
-				time.Sleep(2500 * time.Millisecond)
-			} else {
-				render(green + a.Catalog.Msg("✅ 已是最新版本", "✅ Up to date") + reset)
-				time.Sleep(800 * time.Millisecond)
+					a.Catalog.Msg("⬆️  发现新版本 v%s（当前 v%s）",
+						"⬆️  New version v%s available (current v%s)"),
+					r.r.Latest, a.Version) + reset + "\n\n  " +
+					yellow + a.Catalog.Msg("是否立即更新？[Y/n] ", "Update now? [Y/n] ") + reset)
+
+				// Show cursor for input.
+				fmt.Fprint(a.Stdout, esc+"?25h")
+
+				// Read user choice with timeout.
+				answerCh := make(chan string, 1)
+				go func() {
+					reader := bufio.NewReader(os.Stdin)
+					line, _ := reader.ReadString('\n')
+					answerCh <- strings.TrimSpace(strings.ToLower(line))
+				}()
+
+				var answer string
+				select {
+				case answer = <-answerCh:
+				case <-time.After(10 * time.Second):
+					answer = "n" // timeout → skip
+				}
+
+				if answer == "" || answer == "y" || answer == "yes" {
+					// User chose to update. Hide cursor again.
+					fmt.Fprint(a.Stdout, esc+"?25l")
+
+					// Show downloading spinner.
+					doneCh := make(chan struct{})
+					var updateErr error
+					go func() {
+						_, updateErr = a.Checker.SelfUpdate(a.Version)
+						close(doneCh)
+					}()
+
+					dlTxt := a.Catalog.Msg("正在下载更新…", "Downloading update…")
+					dlFrame := 0
+				downloadLoop:
+					for {
+						select {
+						case <-doneCh:
+							break downloadLoop
+						default:
+							render(white + fmt.Sprintf("%s %s", frames[dlFrame%len(frames)], dlTxt) + reset)
+							dlFrame++
+							time.Sleep(80 * time.Millisecond)
+						}
+					}
+
+					if updateErr != nil {
+						red := esc + "0;31m"
+						render(red + fmt.Sprintf(
+							a.Catalog.Msg("❌ 更新失败: %v", "❌ Update failed: %v"),
+							updateErr) + reset)
+						time.Sleep(2 * time.Second)
+						return
+					}
+
+					render(green + a.Catalog.Msg("✅ 更新完成，正在重启…", "✅ Updated! Restarting…") + reset)
+					time.Sleep(500 * time.Millisecond)
+
+					// Restart: exec the new binary in place.
+					exe, err := os.Executable()
+					if err == nil {
+						syscall.Exec(exe, os.Args, os.Environ())
+					}
+					// If exec failed, tell user to restart manually.
+					render(green + a.Catalog.Msg("✅ 更新完成！请重新运行 agentflow。",
+						"✅ Updated! Please restart agentflow.") + reset)
+					time.Sleep(2 * time.Second)
+					os.Exit(0)
+				}
+				// User chose N — continue to TUI.
+				return
 			}
+			render(green + a.Catalog.Msg("✅ 已是最新版本", "✅ Up to date") + reset)
+			time.Sleep(800 * time.Millisecond)
 			return
 		default:
 			render(white + fmt.Sprintf("%s %s", frames[frame%len(frames)], txt) + reset)
