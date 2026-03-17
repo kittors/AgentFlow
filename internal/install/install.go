@@ -195,27 +195,35 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 		}
 	}
 	// Custom base_url for third-party API proxies.
+	// Uses model_provider + [model_providers.agentflow] WITHOUT env_key,
+	// so Codex reads the API key from auth.json (cross-platform, no env var needed).
+	// Reference: cc-switch (https://github.com/farion1231/cc-switch) codex_config.rs
 	if baseURL != "" {
-		// Codex CLI v0.115+ reads openai_base_url from config.toml and
-		// API key from auth.json. No model_provider or env var needed.
-		reBaseURL := regexp.MustCompile(`(?m)^openai_base_url\s*=.*$`)
-		if reBaseURL.MatchString(text) {
-			text = reBaseURL.ReplaceAllString(text, fmt.Sprintf(`openai_base_url = "%s"`, baseURL))
-		} else {
-			text = fmt.Sprintf("openai_base_url = %q\n%s", baseURL, text)
-		}
+		// Remove any legacy openai_base_url (older AgentFlow versions used this).
+		reOldBaseURL := regexp.MustCompile(`(?m)^openai_base_url\s*=.*\n`)
+		text = reOldBaseURL.ReplaceAllString(text, "")
 
-		// Remove any leftover model_provider / [model_providers.*] from
-		// older AgentFlow versions that used the custom provider approach.
-		reProvider := regexp.MustCompile(`(?m)^model_provider\s*=.*\n`)
-		text = reProvider.ReplaceAllString(text, "")
-		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.agentflow\].*?(?:\n\[|\z)`)
+		providerName := "agentflow"
+		// Set top-level model_provider.
+		reProvider := regexp.MustCompile(`(?m)^model_provider\s*=.*$`)
+		if reProvider.MatchString(text) {
+			text = reProvider.ReplaceAllString(text, fmt.Sprintf(`model_provider = "%s"`, providerName))
+		} else {
+			text = insertTopLevel(text, fmt.Sprintf("model_provider = %q", providerName))
+		}
+		// Append or replace the [model_providers.agentflow] section.
+		// NOTE: no env_key — Codex will read the API key from auth.json.
+		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.` + regexp.QuoteMeta(providerName) + `\].*?(?:\n\[|\z)`)
+		providerSection := fmt.Sprintf("[model_providers.%s]\nname = %q\nbase_url = %q\nwire_api = \"responses\"\n",
+			providerName, providerName, baseURL)
 		if loc := sectionRe.FindStringIndex(text); loc != nil {
 			end := loc[1]
 			if end > 0 && text[end-1] == '[' {
 				end--
 			}
-			text = text[:loc[0]] + text[end:]
+			text = text[:loc[0]] + providerSection + text[end:]
+		} else {
+			text = strings.TrimRight(text, "\n") + "\n\n" + providerSection
 		}
 	}
 
@@ -341,10 +349,10 @@ func (i *Installer) ReadCodexConfigField(field string) string {
 	}
 	text := string(data)
 
-	// For base_url, check the top-level openai_base_url field first (Codex v0.115+),
-	// then fall back to the model_providers section.
+	// For base_url, check the model_providers section first (current approach),
+	// then fall back to legacy openai_base_url top-level field.
 	if field == "base_url" {
-		// Check openai_base_url (preferred, Codex v0.115+).
+		// Check legacy openai_base_url (older AgentFlow versions).
 		reTopLevel := regexp.MustCompile(`(?m)^openai_base_url\s*=\s*"([^"]*)"`)
 		if m := reTopLevel.FindStringSubmatch(text); len(m) > 1 {
 			return m[1]

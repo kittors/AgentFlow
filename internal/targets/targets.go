@@ -42,11 +42,11 @@ var All = map[string]Target{
 		DocsURL:               "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
-		// Codex CLI v0.115+ deprecated the OPENAI_BASE_URL env var in favour
-		// of the openai_base_url field in config.toml.  We use an internal
-		// marker so the interactive UI still shows a Base URL input, but
-		// the value is routed to WriteCodexConfig (config.toml) instead of
-		// being written to the shell RC as an environment variable.
+		// Codex uses model_provider + [model_providers.agentflow] for custom
+		// base URLs. We use an internal marker so the interactive UI still
+		// shows a Base URL input, but the value is routed to WriteCodexConfig
+		// (config.toml model_providers section) instead of being written to
+		// the shell RC as an environment variable.
 		APIKeyEnv:     "OPENAI_API_KEY",
 		BaseURLEnv:    "__CODEX_BASE_URL__",
 		ModelEnv:      "__CODEX_MODEL__",

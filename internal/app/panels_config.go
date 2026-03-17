@@ -107,10 +107,10 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 			codexModel = value
 		case "OPENAI_API_KEY":
 			// API key goes to auth.json only. Codex reads it from there
-			// when using openai_base_url (no env var needed).
+			// via model_provider (no env_key, no env var needed).
 			codexAPIKey = value
 		case "__CODEX_BASE_URL__":
-			// Codex CLI v0.115+ uses openai_base_url in config.toml; no longer an env var.
+			// Base URL goes to [model_providers.agentflow].base_url in config.toml.
 			codexBaseURL = value
 		default:
 			normalEnvVars[key] = value
@@ -146,7 +146,6 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		if codexAPIKey != "" {
 			masked := codexAPIKey[:3] + strings.Repeat("*", len(codexAPIKey)-6) + codexAPIKey[len(codexAPIKey)-3:]
 			allLines = append(allLines, fmt.Sprintf(a.Catalog.Msg("已写入 ~/.codex/auth.json (API Key: %s)", "Written to ~/.codex/auth.json (API Key: %s)"), masked))
-			os.Setenv("OPENAI_API_KEY", codexAPIKey)
 		}
 		allLines = append(allLines, a.Catalog.Msg("已写入 ~/.codex/config.toml:", "Written to ~/.codex/config.toml:"))
 		if codexModel != "" {

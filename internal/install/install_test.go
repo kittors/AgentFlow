@@ -453,11 +453,17 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 	if !strings.Contains(text, `model_reasoning_effort = "medium"`) {
 		t.Fatalf("expected reasoning medium, got %v", text)
 	}
-	if strings.Contains(text, `model_provider`) {
-		t.Fatalf("expected no model_provider (removed), got %v", text)
+	if !strings.Contains(text, `model_provider = "agentflow"`) {
+		t.Fatalf("expected model_provider, got %v", text)
 	}
-	if !strings.Contains(text, `openai_base_url = "https://api.example.com/v1"`) {
-		t.Fatalf("expected openai_base_url top-level field, got %v", text)
+	if !strings.Contains(text, `base_url = "https://api.example.com/v1"`) {
+		t.Fatalf("expected base_url in model_providers section, got %v", text)
+	}
+	if strings.Contains(text, `openai_base_url`) {
+		t.Fatalf("expected no legacy openai_base_url, got %v", text)
+	}
+	if strings.Contains(text, `env_key`) {
+		t.Fatalf("expected no env_key in model_providers section, got %v", text)
 	}
 
 	// Overwrite model only, other settings should be preserved.
@@ -476,8 +482,11 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 	if !strings.Contains(text, `model_reasoning_effort = "medium"`) {
 		t.Fatalf("expected reasoning to be preserved as medium, got %v", text)
 	}
-	if !strings.Contains(text, `openai_base_url = "https://api.example.com/v1"`) {
-		t.Fatalf("expected openai_base_url to be preserved, got %v", text)
+	if !strings.Contains(text, `model_provider = "agentflow"`) {
+		t.Fatalf("expected model_provider to be preserved, got %v", text)
+	}
+	if !strings.Contains(text, `base_url = "https://api.example.com/v1"`) {
+		t.Fatalf("expected base_url to be preserved, got %v", text)
 	}
 }
 
