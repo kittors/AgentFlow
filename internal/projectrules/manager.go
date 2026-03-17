@@ -286,7 +286,7 @@ func buildWrites(target Target, profile, lang string) ([]writeFile, error) {
 	switch target.Name {
 	case "codex", "claude":
 		filename := rulesFilenameForCLITarget(target.Name)
-		rulesContent, err := buildGlobalRulesContent(target.Name, profile, lang)
+		rulesContent, err := buildProjectEntryRulesContent(target.Name, profile, lang)
 		if err != nil {
 			return nil, err
 		}
@@ -314,6 +314,14 @@ func buildWrites(target Target, profile, lang string) ([]writeFile, error) {
 	default:
 		return nil, fmt.Errorf("unsupported target: %s", target.Name)
 	}
+}
+
+func buildProjectEntryRulesContent(targetName, profile, lang string) (string, error) {
+	rendered, err := buildGlobalRulesContent(targetName, profile, lang)
+	if err != nil {
+		return "", err
+	}
+	return config.RewriteEmbeddedModuleLinks(rendered, filepath.Join(config.GlobalRulesDir, config.PluginDirName)), nil
 }
 
 func rulesFilenameForCLITarget(name string) string {

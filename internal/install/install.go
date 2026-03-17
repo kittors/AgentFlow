@@ -648,11 +648,25 @@ func (i *Installer) deployRulesFile(target targets.Target, profile, lang string)
 		}
 	}
 
-	rendered, err := i.buildRulesContent(target.Name, profile, lang)
+	moduleDir := filepath.Join(i.HomeDir, config.GlobalRulesDir, config.PluginDirName)
+	moduleLinkBase, err := filepath.Rel(filepath.Dir(rulesPath), moduleDir)
+	if err != nil {
+		return err
+	}
+
+	rendered, err := i.buildEntryRulesContent(target.Name, profile, lang, moduleLinkBase)
 	if err != nil {
 		return err
 	}
 	return config.SafeWrite(rulesPath, []byte(rendered), 0o644)
+}
+
+func (i *Installer) buildEntryRulesContent(targetName, profile, lang, moduleLinkBase string) (string, error) {
+	rendered, err := i.buildRulesContent(targetName, profile, lang)
+	if err != nil {
+		return "", err
+	}
+	return config.RewriteEmbeddedModuleLinks(rendered, moduleLinkBase), nil
 }
 
 func (i *Installer) buildRulesContent(targetName, profile, lang string) (string, error) {

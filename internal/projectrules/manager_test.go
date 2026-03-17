@@ -11,7 +11,7 @@ func TestManagerInstallWritesExpectedFiles(t *testing.T) {
 	root := t.TempDir()
 
 	manager := NewManager()
-	written, err := manager.Install(root, []string{"codex", "claude"}, InstallOptions{Profile: "lite"})
+	written, err := manager.Install(root, []string{"codex", "claude"}, InstallOptions{Profile: "standard"})
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
@@ -36,6 +36,9 @@ func TestManagerInstallWritesExpectedFiles(t *testing.T) {
 		}
 		if !strings.Contains(content, "先路由再行动") {
 			t.Fatalf("expected core AgentFlow rules in %s", path)
+		}
+		if !strings.Contains(content, "](.agentflow/agentflow/core/common.md)") {
+			t.Fatalf("expected project entry links to point to .agentflow/agentflow/ in %s", path)
 		}
 	}
 

@@ -37,6 +37,22 @@ func TestBuildRulesContentUsesProfileAndTargetPlaceholders(t *testing.T) {
 	}
 }
 
+func TestBuildEntryRulesContentRewritesModuleLinksForCLIEntry(t *testing.T) {
+	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
+
+	content, err := installer.buildEntryRulesContent("codex", "standard", config.DefaultLang, "../.agentflow/agentflow")
+	if err != nil {
+		t.Fatalf("buildEntryRulesContent returned error: %v", err)
+	}
+
+	if !strings.Contains(content, "](../.agentflow/agentflow/core/common.md)") {
+		t.Fatalf("expected rewritten CLI module link, got %q", content)
+	}
+	if strings.Contains(content, "](agentflow/core/common.md)") {
+		t.Fatal("expected original embedded module link to be rewritten for CLI entry")
+	}
+}
+
 func TestInstallAndUninstallCodex(t *testing.T) {
 	homeDir := t.TempDir()
 	codexDir := filepath.Join(homeDir, ".codex")
@@ -75,6 +91,9 @@ func TestInstallAndUninstallCodex(t *testing.T) {
 	}
 	if !strings.Contains(agentsStr, "先路由再行动") {
 		t.Fatal("expected CLI AGENTS.md to contain core AgentFlow rules")
+	}
+	if !strings.Contains(agentsStr, "](../.agentflow/agentflow/core/common.md)") {
+		t.Fatal("expected CLI AGENTS.md links to point to ../.agentflow/agentflow/")
 	}
 
 	// Full rules should be in ~/.agentflow/AGENTS.md (global dir).
