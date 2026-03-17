@@ -381,6 +381,37 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.notice = nil
 			return m, nil
 		case ActionAgentFlow:
+			// Dynamically filter: hide "uninstall" if nothing is installed.
+			hasInstalled := false
+			if m.callbacks.UninstallOptions != nil && len(m.callbacks.UninstallOptions()) > 0 {
+				hasInstalled = true
+			}
+			if !hasInstalled && m.callbacks.UninstallProjectOptions != nil && len(m.callbacks.UninstallProjectOptions()) > 0 {
+				hasInstalled = true
+			}
+			options := []Option{
+				{
+					Value:       "install-global",
+					Label:       m.catalog.Msg("全局安装", "Global install"),
+					Badge:       m.catalog.Msg("全局", "GLOBAL"),
+					Description: m.catalog.Msg("安装 AgentFlow 规则到全局用户配置目录（~/.codex, ~/.claude），所有项目共享。", "Install AgentFlow rules to global user config dirs, shared across all projects."),
+				},
+				{
+					Value:       "install-project",
+					Label:       m.catalog.Msg("项目级安装", "Project install"),
+					Badge:       m.catalog.Msg("项目", "PROJECT"),
+					Description: m.catalog.Msg("安装 AgentFlow 规则到当前项目目录，仅对当前项目生效。", "Install AgentFlow rules to the current project directory."),
+				},
+			}
+			if hasInstalled {
+				options = append(options, Option{
+					Value:       "uninstall",
+					Label:       m.catalog.Msg("卸载 AgentFlow", "Uninstall AgentFlow"),
+					Badge:       m.catalog.Msg("卸载", "REMOVE"),
+					Description: m.catalog.Msg("卸载已安装的 AgentFlow 规则（全局/项目级）。", "Remove installed AgentFlow rules (global/project-level)."),
+				})
+			}
+			m.agentflowOptions = options
 			m.screen = flowScreenAgentFlow
 			m.agentflowCursor = 0
 			m.notice = nil
