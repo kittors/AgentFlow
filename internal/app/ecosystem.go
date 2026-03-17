@@ -285,6 +285,34 @@ func (a *App) mcpRemovePanel(targetName, server string) ui.Panel {
 	}
 }
 
+func (a *App) mcpBatchRemovePanel(targetName string, servers []string) ui.Panel {
+	target, ok := targets.LookupMCP(targetName)
+	if !ok {
+		return ui.Panel{
+			Title: a.Catalog.Msg("MCP 移除", "MCP remove"),
+			Lines: []string{a.Catalog.Msg("未知目标。", "Unknown target.")},
+		}
+	}
+
+	lines := make([]string, 0, len(servers)+2)
+	lines = append(lines, fmt.Sprintf(a.Catalog.Msg("目标: %s", "Target: %s"), target.DisplayName))
+	removed := 0
+	for _, server := range servers {
+		manager := mcp.NewManager()
+		if err := manager.Remove(target, server); err != nil {
+			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), server, err))
+		} else {
+			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), server))
+			removed++
+		}
+	}
+	title := fmt.Sprintf(a.Catalog.Msg("MCP 移除结果 (%d/%d)", "MCP remove result (%d/%d)"), removed, len(servers))
+	return ui.Panel{
+		Title: title,
+		Lines: lines,
+	}
+}
+
 func (a *App) skillTargetOptions() []ui.Option {
 	homeDir, _ := os.UserHomeDir()
 	names := projectrules.SortedNames()

@@ -120,6 +120,7 @@ func (a *App) runInteractiveMainMenu() int {
 		MCPBatchInstall:         a.mcpBatchInstallPanel,
 		MCPConfigFields:         a.mcpConfigFields,
 		MCPRemove:               a.mcpRemovePanel,
+		MCPBatchRemove:          a.mcpBatchRemovePanel,
 		SkillTargetOptions:      a.skillTargetOptions,
 		SkillGlobalSupported:    a.skillGlobalSupported,
 		SkillInstallOptions:     a.skillInstallOptions,

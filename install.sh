@@ -210,11 +210,16 @@ download_binary() {
 
     info "$(msg "下载 ${ASSET_NAME} ..." "Downloading ${ASSET_NAME} ...")"
     if command -v curl >/dev/null 2>&1; then
-        curl -fL -o "${binary_path}" "${download_url}" || err "$(msg "下载失败" "Download failed")"
+        curl -fSL --progress-bar -o "${binary_path}" "${download_url}" || err "$(msg "下载失败" "Download failed")"
     else
         wget -qO "${binary_path}" "${download_url}" || err "$(msg "下载失败" "Download failed")"
     fi
     chmod +x "${binary_path}"
+
+    # macOS Gatekeeper: clear quarantine attribute to prevent Killed:9
+    if [ "$(uname -s)" = "Darwin" ]; then
+        xattr -d com.apple.quarantine "${binary_path}" 2>/dev/null || true
+    fi
 }
 
 printf "\n${BOLD}${CYAN}AgentFlow Installer${RESET}\n\n"
@@ -237,7 +242,7 @@ step "$(msg "步骤 3/3: 验证安装" "Step 3/3: Verify installation")"
 PATH="${INSTALL_DIR}:$PATH"
 if [ -x "${INSTALL_DIR}/agentflow" ]; then
     ok "$(msg "agentflow 命令已就绪" "agentflow command is ready")"
-    "${INSTALL_DIR}/agentflow" version || true
+    "${INSTALL_DIR}/agentflow" help >/dev/null 2>&1 || true
     print_shell_refresh_notice
 else
     warn "$(msg "agentflow 还未进入当前 PATH，请重开终端后再试。" "agentflow is not yet on your current PATH; reopen the terminal and try again.")"
