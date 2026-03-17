@@ -606,9 +606,9 @@ func (m selectionModel) currentSummary() string {
 	}
 
 	if strings.TrimSpace(current.Description) == "" {
-		return fmt.Sprintf(m.catalog.Msg("当前动作: %s", "Current action: %s"), current.Label)
+		return current.Label
 	}
-	return fmt.Sprintf(m.catalog.Msg("当前动作: %s | %s", "Current action: %s | %s"), current.Label, current.Description)
+	return fmt.Sprintf("%s | %s", current.Label, current.Description)
 }
 
 func (m selectionModel) visibleRange(visibleRows int) (int, int) {
