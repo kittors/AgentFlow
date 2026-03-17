@@ -509,19 +509,25 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.notice = nil
 			return m, nil
 		case "install-project":
-			// Project install: select targets → select profile → install
+			// Project install: select target → select profile → install project rules
 			m.projectInstallMode = true
-			if m.callbacks.UninstallProjectOptions != nil {
-				m.skillTargets = cloneOptions(m.callbacks.UninstallProjectOptions())
-			}
 			if m.callbacks.SkillTargetOptions != nil {
 				m.skillTargets = cloneOptions(m.callbacks.SkillTargetOptions())
 			}
-			m.installOptions = m.installOptionsList()
-			m.screen = flowScreenInstallTargets
-			m.installCursor = 0
+			if len(m.skillTargets) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("项目级安装", "Project install"),
+					Lines: []string{m.catalog.Msg("未检测到可管理的目标。", "No manageable targets detected.")},
+				})
+				return m, nil
+			}
+			m.screen = flowScreenSkillTargets
+			m.skillTargetCursor = 0
+			m.selectedSkillTarget = m.skillTargets[0].Value
 			m.notice = nil
-			return m, nil
+			m.focusDetails = false
+			m.detailScroll = 0
+			return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 		case "uninstall":
 			m.uninstallCLIMode = false
 			if m.callbacks.UninstallOptions != nil {
