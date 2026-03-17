@@ -901,40 +901,66 @@ func (a *App) cliDetailPanel(targetName string) ui.Panel {
 		}
 	}
 
-	// ── Installed MCP ──
-	mcpList := a.mcpListPanel(targetName)
-	if len(mcpList.Lines) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 MCP ───", "─── Installed MCP ───")))
-		for _, line := range mcpList.Lines {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || strings.HasPrefix(trimmed, "─") || strings.HasPrefix(trimmed, "=") {
-				continue
+	// ── Installed MCP & Skills (only when CLI is installed) ──
+	if status.CLIInstalled {
+		mcpList := a.mcpListPanel(targetName)
+		if len(mcpList.Lines) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 MCP ───", "─── Installed MCP ───")))
+			for _, line := range mcpList.Lines {
+				trimmed := strings.TrimSpace(line)
+				if trimmed == "" || strings.HasPrefix(trimmed, "─") || strings.HasPrefix(trimmed, "=") {
+					continue
+				}
+				lines = append(lines, fmt.Sprintf("  %s %s", valueStyle.Render("✔"), trimmed))
 			}
-			lines = append(lines, fmt.Sprintf("  %s %s", valueStyle.Render("✔"), trimmed))
+		} else {
+			lines = append(lines, "")
+			lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 MCP ───", "─── Installed MCP ───")))
+			lines = append(lines, fmt.Sprintf("  %s %s", grayDot, mutedStyle.Render(a.Catalog.Msg("暂无", "none"))))
 		}
-	} else {
-		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 MCP ───", "─── Installed MCP ───")))
-		lines = append(lines, fmt.Sprintf("  %s %s", grayDot, mutedStyle.Render(a.Catalog.Msg("暂无", "none"))))
-	}
 
-	// ── Installed Skills ──
-	skillList := a.skillListPanel(targetName)
-	if len(skillList.Lines) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 Skill ───", "─── Installed Skills ───")))
-		for _, line := range skillList.Lines {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || strings.HasPrefix(trimmed, "─") || strings.HasPrefix(trimmed, "=") {
-				continue
+		skillList := a.skillListPanel(targetName)
+		if len(skillList.Lines) > 0 {
+			lines = append(lines, "")
+			lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 Skill ───", "─── Installed Skills ───")))
+			for _, line := range skillList.Lines {
+				trimmed := strings.TrimSpace(line)
+				if trimmed == "" || strings.HasPrefix(trimmed, "─") || strings.HasPrefix(trimmed, "=") {
+					continue
+				}
+				lines = append(lines, fmt.Sprintf("  %s %s", blueStyle.Render("✔"), trimmed))
 			}
-			lines = append(lines, fmt.Sprintf("  %s %s", blueStyle.Render("✔"), trimmed))
+		} else {
+			lines = append(lines, "")
+			lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 Skill ───", "─── Installed Skills ───")))
+			lines = append(lines, fmt.Sprintf("  %s %s", grayDot, mutedStyle.Render(a.Catalog.Msg("暂无", "none"))))
 		}
 	} else {
+		// CLI not installed: show a brief tool introduction.
 		lines = append(lines, "")
-		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 Skill ───", "─── Installed Skills ───")))
-		lines = append(lines, fmt.Sprintf("  %s %s", grayDot, mutedStyle.Render(a.Catalog.Msg("暂无", "none"))))
+		target := status.Target
+		switch target.Name {
+		case "codex":
+			lines = append(lines, mutedStyle.Render(a.Catalog.Msg(
+				"Codex CLI 是 OpenAI 推出的终端 AI 编码助手，支持代码生成、调试和重构。",
+				"Codex CLI is OpenAI's terminal AI coding assistant for code generation, debugging, and refactoring.")))
+		case "claude":
+			lines = append(lines, mutedStyle.Render(a.Catalog.Msg(
+				"Claude Code 是 Anthropic 推出的终端 AI 编码助手，支持代码理解、生成和项目导航。",
+				"Claude Code is Anthropic's terminal AI coding assistant for code understanding, generation, and project navigation.")))
+		default:
+			lines = append(lines, mutedStyle.Render(a.Catalog.Msg(
+				"该 CLI 尚未安装，可通过 Enter 进入安装。",
+				"This CLI is not installed. Press Enter to install.")))
+		}
+		if target.NPMPackage != "" {
+			lines = append(lines, mutedStyle.Render(fmt.Sprintf("  npm: %s", target.NPMPackage)))
+		}
+		if target.DocsURL != "" {
+			lines = append(lines, mutedStyle.Render(fmt.Sprintf("  %s: %s",
+				a.Catalog.Msg("文档", "Docs"), target.DocsURL)))
+		}
 	}
 
 	// ── Version ──
