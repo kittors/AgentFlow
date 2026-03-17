@@ -94,7 +94,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if value.notice != nil {
 				m.installHubStatusPanel = value.notice
 			}
-		case flowActionMCPList, flowActionMCPInstall, flowActionMCPRemove, flowActionMCPInstallWithEnv:
+		case flowActionMCPList, flowActionMCPRemove:
 			if value.notice != nil {
 				m.notice = value.notice
 			}
@@ -102,6 +102,17 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.resetDetailFocus()
 			m.mcpInstallOptions = nil
 			m.mcpRemoveOptions = nil
+			m.mcpConfigMode = false
+		case flowActionMCPInstall, flowActionMCPInstallWithEnv:
+			if value.notice != nil {
+				m.notice = value.notice
+			}
+			// Stay on the install screen and refresh options to show ✓ marks.
+			if m.callbacks.MCPInstallOptions != nil {
+				m.mcpInstallOptions = m.annotateRecommendedMCPOptions(
+					m.selectedMCPTarget, m.callbacks.MCPInstallOptions(),
+				)
+			}
 			m.mcpConfigMode = false
 		case flowActionMCPBatchInstall:
 			if value.notice != nil {

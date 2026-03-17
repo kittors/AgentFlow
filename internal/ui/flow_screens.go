@@ -73,11 +73,10 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.cursor = m.mcpActionCursor
 		model.panels = m.mcpActionPanels()
 	case flowScreenMCPInstall:
-		model.subtitle = fmt.Sprintf(m.catalog.Msg("为 %s 安装推荐 MCP。Space 多选，Enter 安装。Esc 返回。", "Install recommended MCP for %s. Space to multi-select, Enter to install. Esc to go back."), m.selectedMCPTarget)
-		model.hint = m.catalog.Msg("Space 选择多个 MCP，Enter 安装所选项，Esc 返回。", "Use Space to select multiple MCPs, Enter to install selected, Esc to go back.")
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("为 %s 安装推荐 MCP。Esc 返回。", "Install recommended MCP for %s. Esc to go back."), m.selectedMCPTarget)
+		model.hint = m.catalog.Msg("↑/↓ 选择 MCP，Enter 安装，Esc 返回。", "Use ↑/↓ to choose an MCP server, Enter to install, Esc to go back.")
 		model.options = cloneOptions(m.mcpInstallOptions)
 		model.cursor = m.mcpInstallCursor
-		model.multi = true
 		model.panels = m.mcpInstallPanels()
 	case flowScreenMCPList:
 		model.subtitle = fmt.Sprintf(m.catalog.Msg("已安装的 MCP 列表 (%s)。Esc 返回。", "Installed MCP list (%s). Esc to go back."), m.selectedMCPTarget)

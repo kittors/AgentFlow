@@ -609,76 +609,43 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		if len(m.mcpInstallOptions) == 0 {
 			return m, nil
 		}
-		// Multi-select mode: collect all selected servers.
-		selected := selectedValues(m.mcpInstallOptions)
-		if len(selected) == 0 {
-			return m, nil
-		}
-
-		// Separate tavily-custom from others (needs special config).
-		var normalServers []string
-		hasTavilyCustom := false
-		for _, srv := range selected {
-			if strings.EqualFold(srv, "tavily-custom") {
-				hasTavilyCustom = true
-			} else {
-				normalServers = append(normalServers, srv)
-			}
-		}
-
-		// Install normal servers first (batch).
-		if len(normalServers) > 0 {
-			m.pendingMCPInstalls = normalServers
-			if hasTavilyCustom {
-				// After batch install completes, we'll redirect to tavily-custom config.
-				// For now, just install the normal ones; tavily-custom special handling
-				// will be done when the batch result comes back.
-				m.selectedMCPServer = "tavily-custom"
-			}
-			return m.startBusy(flowActionMCPBatchInstall, m.catalog.Msg("正在写入 MCP 配置…", "Writing MCP configuration..."))
-		}
-
-		// Only tavily-custom is selected — go to config screen.
-		if hasTavilyCustom {
-			m.selectedMCPServer = "tavily-custom"
-			if m.callbacks.MCPConfigFields != nil {
-				fields := m.callbacks.MCPConfigFields("tavily-custom")
-				if len(fields) > 0 {
-					m.configTarget = "tavily-custom"
-					m.configFields = make([]configFieldState, len(fields))
-					for idx, f := range fields {
-						fieldType := f.Type
-						if fieldType == "" {
-							fieldType = "text"
-						}
-						state := configFieldState{
-							Label:     f.Label,
-							EnvVar:    f.EnvVar,
-							FieldType: fieldType,
-							Options:   f.Options,
-						}
-						if fieldType == "select" && len(f.Options) > 0 {
-							state.Value = f.Default
-							for i, opt := range f.Options {
-								if opt == f.Default {
-									state.OptionCursor = i
-									break
-								}
+		m.selectedMCPServer = m.mcpInstallOptions[m.mcpInstallCursor].Value
+		// Check if this server needs config fields (e.g. tavily-custom)
+		if m.callbacks.MCPConfigFields != nil {
+			fields := m.callbacks.MCPConfigFields(m.selectedMCPServer)
+			if len(fields) > 0 {
+				m.configTarget = m.selectedMCPServer
+				m.configFields = make([]configFieldState, len(fields))
+				for idx, f := range fields {
+					fieldType := f.Type
+					if fieldType == "" {
+						fieldType = "text"
+					}
+					state := configFieldState{
+						Label:     f.Label,
+						EnvVar:    f.EnvVar,
+						FieldType: fieldType,
+						Options:   f.Options,
+					}
+					if fieldType == "select" && len(f.Options) > 0 {
+						state.Value = f.Default
+						for i, opt := range f.Options {
+							if opt == f.Default {
+								state.OptionCursor = i
+								break
 							}
 						}
-						m.configFields[idx] = state
 					}
-					m.configFieldCursor = 0
-					m.configEditing = true
-					m.mcpConfigMode = true
-					m.screen = flowScreenBootstrapConfig
-					return m, nil
+					m.configFields[idx] = state
 				}
+				m.configFieldCursor = 0
+				m.configEditing = true
+				m.mcpConfigMode = true
+				m.screen = flowScreenBootstrapConfig
+				return m, nil
 			}
-			return m.startBusy(flowActionMCPInstall, m.catalog.Msg("正在写入 MCP 配置…", "Writing MCP configuration..."))
 		}
-
-		return m, nil
+		return m.startBusy(flowActionMCPInstall, m.catalog.Msg("正在写入 MCP 配置…", "Writing MCP configuration…"))
 	case flowScreenMCPRemove:
 		if len(m.mcpRemoveOptions) == 0 {
 			return m, nil
