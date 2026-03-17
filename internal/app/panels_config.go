@@ -106,9 +106,10 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		case "__MODEL__": // fallback
 			codexModel = value
 		case "OPENAI_API_KEY":
-			// API key goes to auth.json only. Codex reads it from there
-			// via model_provider (no env_key, no env var needed).
+			// API key goes to BOTH shell RC (env var for Codex's env_key
+			// mechanism) AND auth.json (backup / compatibility).
 			codexAPIKey = value
+			normalEnvVars[key] = value
 		case "__CODEX_BASE_URL__":
 			// Base URL goes to [model_providers.agentflow].base_url in config.toml.
 			codexBaseURL = value

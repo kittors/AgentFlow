@@ -42,11 +42,11 @@ var All = map[string]Target{
 		DocsURL:               "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
-		// Codex uses model_provider + [model_providers.agentflow] for custom
-		// base URLs. We use an internal marker so the interactive UI still
-		// shows a Base URL input, but the value is routed to WriteCodexConfig
-		// (config.toml model_providers section) instead of being written to
-		// the shell RC as an environment variable.
+		// Codex uses model_provider + [model_providers.agentflow] with
+		// env_key = "OPENAI_API_KEY" for custom base URLs. The API key
+		// is written to shell RC as OPENAI_API_KEY env var. We use an
+		// internal marker for BaseURLEnv so the UI shows a Base URL
+		// input, but the value goes to WriteCodexConfig (config.toml).
 		APIKeyEnv:     "OPENAI_API_KEY",
 		BaseURLEnv:    "__CODEX_BASE_URL__",
 		ModelEnv:      "__CODEX_MODEL__",

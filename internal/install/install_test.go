@@ -462,8 +462,8 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 	if strings.Contains(text, `openai_base_url`) {
 		t.Fatalf("expected no legacy openai_base_url, got %v", text)
 	}
-	if strings.Contains(text, `env_key`) {
-		t.Fatalf("expected no env_key in model_providers section, got %v", text)
+	if !strings.Contains(text, `env_key = "OPENAI_API_KEY"`) {
+		t.Fatalf("expected env_key in model_providers section, got %v", text)
 	}
 
 	// Overwrite model only, other settings should be preserved.

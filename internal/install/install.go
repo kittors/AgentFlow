@@ -195,9 +195,10 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 		}
 	}
 	// Custom base_url for third-party API proxies.
-	// Uses model_provider + [model_providers.agentflow] WITHOUT env_key,
-	// so Codex reads the API key from auth.json (cross-platform, no env var needed).
-	// Reference: cc-switch (https://github.com/farion1231/cc-switch) codex_config.rs
+	// Uses model_provider + [model_providers.agentflow] WITH env_key = "OPENAI_API_KEY".
+	// Codex reads the API key from the OPENAI_API_KEY env var (written to shell RC
+	// by writeEnvConfigPanel). cc-switch uses a local proxy to inject API keys,
+	// but AgentFlow connects directly, so env_key is required.
 	if baseURL != "" {
 		// Remove any legacy openai_base_url (older AgentFlow versions used this).
 		reOldBaseURL := regexp.MustCompile(`(?m)^openai_base_url\s*=.*\n`)
@@ -212,9 +213,8 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 			text = insertTopLevel(text, fmt.Sprintf("model_provider = %q", providerName))
 		}
 		// Append or replace the [model_providers.agentflow] section.
-		// NOTE: no env_key — Codex will read the API key from auth.json.
 		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.` + regexp.QuoteMeta(providerName) + `\].*?(?:\n\[|\z)`)
-		providerSection := fmt.Sprintf("[model_providers.%s]\nname = %q\nbase_url = %q\nwire_api = \"responses\"\n",
+		providerSection := fmt.Sprintf("[model_providers.%s]\nname = %q\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n",
 			providerName, providerName, baseURL)
 		if loc := sectionRe.FindStringIndex(text); loc != nil {
 			end := loc[1]
