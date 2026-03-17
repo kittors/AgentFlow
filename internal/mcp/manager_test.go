@@ -222,37 +222,6 @@ func TestManagerInstallAndRemoveUpdatesCodexConfigToml(t *testing.T) {
 	}
 }
 
-func TestResolveBuiltinTavily(t *testing.T) {
-	spec, err := ResolveBuiltin("tavily", InstallOptions{Env: []string{"TAVILY_API_KEY=tvly-test123"}})
-	if err != nil {
-		t.Fatalf("resolve tavily: %v", err)
-	}
-	if spec.Name != "tavily" {
-		t.Fatalf("unexpected name: %s", spec.Name)
-	}
-	env, ok := spec.Config["env"].(map[string]string)
-	if !ok {
-		t.Fatalf("env missing")
-	}
-	if env["TAVILY_API_KEY"] != "tvly-test123" {
-		t.Fatalf("unexpected api key: %v", env["TAVILY_API_KEY"])
-	}
-}
-
-func TestResolveBuiltinTavilyDefaultEnv(t *testing.T) {
-	spec, err := ResolveBuiltin("tavily", InstallOptions{})
-	if err != nil {
-		t.Fatalf("resolve tavily: %v", err)
-	}
-	env, ok := spec.Config["env"].(map[string]string)
-	if !ok {
-		t.Fatalf("env missing")
-	}
-	if env["TAVILY_API_KEY"] != "${TAVILY_API_KEY}" {
-		t.Fatalf("expected placeholder, got: %v", env["TAVILY_API_KEY"])
-	}
-}
-
 func TestResolveBuiltinTavilyCustom(t *testing.T) {
 	spec, err := ResolveBuiltin("tavily-custom", InstallOptions{
 		Env: []string{

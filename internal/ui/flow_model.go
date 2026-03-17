@@ -16,6 +16,7 @@ type InteractiveCallbacks struct {
 	MCPList                 func(target string) Panel
 	MCPInstall              func(target, server string) Panel
 	MCPInstallWithEnv       func(target, server string, env map[string]string) Panel
+	MCPBatchInstall         func(target string, servers []string) Panel
 	MCPConfigFields         func(server string) []ConfigField
 	MCPRemove               func(target, server string) Panel
 	SkillTargetOptions      func() []Option
@@ -66,6 +67,7 @@ const (
 	flowScreenMCPTargets
 	flowScreenMCPActions
 	flowScreenMCPInstall
+	flowScreenMCPList
 	flowScreenMCPRemove
 	flowScreenSkillTargets
 	flowScreenSkillScope
@@ -110,6 +112,7 @@ const (
 	flowActionUninstallCLI
 	flowActionWriteEnvConfig
 	flowActionMCPInstallWithEnv
+	flowActionMCPBatchInstall
 )
 
 type flowResultMsg struct {
@@ -215,6 +218,8 @@ type interactiveFlowModel struct {
 	selectedProfile         string
 	selectedMCPTarget       string
 	selectedMCPServer       string
+	pendingMCPInstalls      []string // servers to batch-install (excluding tavily-custom)
+	mcpListOptions          []Option // installed MCPs shown as options in list view
 	selectedSkillTarget     string
 	selectedSkillScope      string
 	selectedProjectProfile  string

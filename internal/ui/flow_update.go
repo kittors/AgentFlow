@@ -103,6 +103,51 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mcpInstallOptions = nil
 			m.mcpRemoveOptions = nil
 			m.mcpConfigMode = false
+		case flowActionMCPBatchInstall:
+			if value.notice != nil {
+				m.notice = value.notice
+			}
+			m.mcpInstallOptions = nil
+			m.mcpRemoveOptions = nil
+			m.pendingMCPInstalls = nil
+			// If tavily-custom was also selected, redirect to config screen.
+			if strings.EqualFold(m.selectedMCPServer, "tavily-custom") && m.callbacks.MCPConfigFields != nil {
+				fields := m.callbacks.MCPConfigFields("tavily-custom")
+				if len(fields) > 0 {
+					m.configTarget = "tavily-custom"
+					m.configFields = make([]configFieldState, len(fields))
+					for idx, f := range fields {
+						fieldType := f.Type
+						if fieldType == "" {
+							fieldType = "text"
+						}
+						state := configFieldState{
+							Label:     f.Label,
+							EnvVar:    f.EnvVar,
+							FieldType: fieldType,
+							Options:   f.Options,
+						}
+						if fieldType == "select" && len(f.Options) > 0 {
+							state.Value = f.Default
+							for i, opt := range f.Options {
+								if opt == f.Default {
+									state.OptionCursor = i
+									break
+								}
+							}
+						}
+						m.configFields[idx] = state
+					}
+					m.configFieldCursor = 0
+					m.configEditing = true
+					m.mcpConfigMode = true
+					m.screen = flowScreenBootstrapConfig
+					break
+				}
+			}
+			m.screen = flowScreenMCPActions
+			m.resetDetailFocus()
+			m.mcpConfigMode = false
 		case flowActionSkillRefreshSummary:
 			if value.notice != nil {
 				m.notice = value.notice

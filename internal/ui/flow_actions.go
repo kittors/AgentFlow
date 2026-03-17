@@ -36,6 +36,7 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 	projectRoot := m.projectRoot
 	selectedMCPTarget := m.selectedMCPTarget
 	selectedMCPServer := m.selectedMCPServer
+	pendingMCPInstalls := append([]string{}, m.pendingMCPInstalls...)
 	selectedSkillTarget := m.selectedSkillTarget
 	selectedSkillValue := m.selectedSkillValue
 	selectedProjectProfile := m.selectedProjectProfile
@@ -125,6 +126,21 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 			notice := Panel{}
 			if m.callbacks.MCPRemove != nil {
 				notice = m.callbacks.MCPRemove(selectedMCPTarget, selectedMCPServer)
+			}
+			summary := Panel{}
+			if m.callbacks.MCPList != nil {
+				summary = m.callbacks.MCPList(selectedMCPTarget)
+			}
+			return flowResultMsg{
+				action:     action,
+				notice:     panelRef(notice),
+				status:     m.callbacks.Status(),
+				mcpSummary: panelRef(summary),
+			}
+		case flowActionMCPBatchInstall:
+			notice := Panel{}
+			if m.callbacks.MCPBatchInstall != nil && len(pendingMCPInstalls) > 0 {
+				notice = m.callbacks.MCPBatchInstall(selectedMCPTarget, pendingMCPInstalls)
 			}
 			summary := Panel{}
 			if m.callbacks.MCPList != nil {

@@ -69,15 +69,22 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 	case flowScreenMCPActions:
 		model.subtitle = fmt.Sprintf(m.catalog.Msg("MCP 管理目标: %s。Esc 返回目标列表。", "MCP target: %s. Press Esc to go back."), m.selectedMCPTarget)
 		model.hint = m.catalog.Msg("↑/↓ 选择操作，Enter 执行，Esc 返回。", "Use ↑/↓ to choose an action, Enter to run, Esc to go back.")
-		model.options = cloneOptions(m.mcpActions)
+		model.options = cloneOptions(m.dynamicMCPActions())
 		model.cursor = m.mcpActionCursor
 		model.panels = m.mcpActionPanels()
 	case flowScreenMCPInstall:
-		model.subtitle = fmt.Sprintf(m.catalog.Msg("为 %s 安装推荐 MCP。Esc 返回操作列表。", "Install recommended MCP for %s. Press Esc to go back."), m.selectedMCPTarget)
-		model.hint = m.catalog.Msg("↑/↓ 选择 MCP，Enter 安装，Esc 返回。", "Use ↑/↓ to choose an MCP server, Enter to install, Esc to go back.")
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("为 %s 安装推荐 MCP。Space 多选，Enter 安装。Esc 返回。", "Install recommended MCP for %s. Space to multi-select, Enter to install. Esc to go back."), m.selectedMCPTarget)
+		model.hint = m.catalog.Msg("Space 选择多个 MCP，Enter 安装所选项，Esc 返回。", "Use Space to select multiple MCPs, Enter to install selected, Esc to go back.")
 		model.options = cloneOptions(m.mcpInstallOptions)
 		model.cursor = m.mcpInstallCursor
+		model.multi = true
 		model.panels = m.mcpInstallPanels()
+	case flowScreenMCPList:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("已安装的 MCP 列表 (%s)。Esc 返回。", "Installed MCP list (%s). Esc to go back."), m.selectedMCPTarget)
+		model.hint = m.catalog.Msg("↑/↓ 浏览已安装 MCP，Esc 返回。", "Use ↑/↓ to browse installed MCPs, Esc to go back.")
+		model.options = cloneOptions(m.mcpListOptions)
+		model.cursor = 0
+		model.panels = m.mcpActionPanels()
 	case flowScreenMCPRemove:
 		model.subtitle = fmt.Sprintf(m.catalog.Msg("从 %s 移除 MCP。Esc 返回操作列表。", "Remove MCP from %s. Press Esc to go back."), m.selectedMCPTarget)
 		model.hint = m.catalog.Msg("↑/↓ 选择 MCP，Enter 移除，Esc 返回。", "Use ↑/↓ to choose an MCP server, Enter to remove, Esc to go back.")
@@ -411,6 +418,26 @@ func (m interactiveFlowModel) mcpTargetPanels() []Panel {
 	}
 	panels = append(panels, m.status)
 	return panels
+}
+
+// dynamicMCPActions returns the mcpActions list, but hides "list" when no MCPs
+// are installed for the current target.
+func (m interactiveFlowModel) dynamicMCPActions() []Option {
+	hasMCPs := false
+	if m.callbacks.MCPRemoveOptions != nil {
+		hasMCPs = len(m.callbacks.MCPRemoveOptions(m.selectedMCPTarget)) > 0
+	}
+	if hasMCPs {
+		return m.mcpActions
+	}
+	// Filter out "list" action.
+	filtered := make([]Option, 0, len(m.mcpActions))
+	for _, opt := range m.mcpActions {
+		if opt.Value != "list" {
+			filtered = append(filtered, opt)
+		}
+	}
+	return filtered
 }
 
 func (m interactiveFlowModel) mcpActionPanels() []Panel {

@@ -117,6 +117,7 @@ func (a *App) runInteractiveMainMenu() int {
 		MCPList:                 a.mcpListPanel,
 		MCPInstall:              a.mcpInstallPanel,
 		MCPInstallWithEnv:       a.mcpInstallWithEnvPanel,
+		MCPBatchInstall:         a.mcpBatchInstallPanel,
 		MCPConfigFields:         a.mcpConfigFields,
 		MCPRemove:               a.mcpRemovePanel,
 		SkillTargetOptions:      a.skillTargetOptions,
