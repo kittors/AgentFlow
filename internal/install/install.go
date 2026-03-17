@@ -253,6 +253,82 @@ func (i *Installer) WriteClaudeConfig(model string) error {
 	return config.SafeWrite(configPath, data, 0o644)
 }
 
+// cleanCodexBootstrapConfig removes AgentFlow-written config from Codex CLI files.
+// This cleans auth.json (API key) and config.toml fields (model, reasoning, base_url,
+// model_provider) that were written by AgentFlow's bootstrap config step.
+// Best-effort: errors are silently ignored so uninstall always succeeds.
+func (i *Installer) cleanCodexBootstrapConfig() {
+	codexDir := filepath.Join(i.HomeDir, ".codex")
+
+	// Clean auth.json — remove the token field.
+	authPath := filepath.Join(codexDir, "auth.json")
+	if data, err := os.ReadFile(authPath); err == nil {
+		var auth map[string]any
+		if json.Unmarshal(data, &auth) == nil && auth != nil {
+			delete(auth, "token")
+			if len(auth) == 0 {
+				_ = config.SafeRemove(authPath)
+			} else {
+				if out, err := json.MarshalIndent(auth, "", "  "); err == nil {
+					_ = config.SafeWrite(authPath, append(out, '\n'), 0o600)
+				}
+			}
+		}
+	}
+
+	// Clean config.toml — remove AgentFlow-written fields.
+	configPath := filepath.Join(codexDir, "config.toml")
+	if data, err := os.ReadFile(configPath); err == nil {
+		text := string(data)
+
+		// Remove top-level fields written by AgentFlow.
+		for _, field := range []string{"model", "model_reasoning_effort", "openai_base_url", "model_provider"} {
+			re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(field) + `\s*=.*\n`)
+			text = re.ReplaceAllString(text, "")
+		}
+
+		// Remove [model_providers.agentflow] section entirely.
+		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.agentflow\].*?(?:\n\[|\z)`)
+		if loc := sectionRe.FindStringIndex(text); loc != nil {
+			end := loc[1]
+			// If the match ends with a new section header "[", keep it.
+			if end > 0 && text[end-1] == '[' {
+				end--
+			}
+			text = text[:loc[0]] + text[end:]
+		}
+
+		text = collapseBlankLines(text)
+		cleaned := strings.TrimSpace(text)
+		if cleaned == "" {
+			_ = config.SafeRemove(configPath)
+		} else {
+			_ = config.SafeWrite(configPath, []byte(cleaned+"\n"), 0o644)
+		}
+	}
+}
+
+// cleanClaudeBootstrapConfig removes AgentFlow-written config from Claude CLI files.
+// This cleans the "model" field from ~/.claude.json.
+// Best-effort: errors are silently ignored so uninstall always succeeds.
+func (i *Installer) cleanClaudeBootstrapConfig() {
+	configPath := filepath.Join(i.HomeDir, ".claude.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return
+	}
+	var settings map[string]any
+	if json.Unmarshal(data, &settings) != nil || settings == nil {
+		return
+	}
+	delete(settings, "model")
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = config.SafeWrite(configPath, append(out, '\n'), 0o644)
+}
+
 // ReadCodexAuthKey reads the API key token from ~/.codex/auth.json.
 func (i *Installer) ReadCodexAuthKey() string {
 	authPath := filepath.Join(i.HomeDir, ".codex", "auth.json")
@@ -416,17 +492,25 @@ func (i *Installer) Uninstall(targetName string) error {
 		if err := i.cleanCodexAgents(cliDir); err != nil {
 			return err
 		}
+		// Clean AgentFlow-written CLI config (auth.json, config.toml fields).
+		i.cleanCodexBootstrapConfig()
 	}
 	if target.Name == "claude" {
 		if err := i.cleanClaudeHooks(filepath.Join(cliDir, "settings.json")); err != nil {
 			return err
 		}
+		// Clean AgentFlow-written Claude config (.claude.json model).
+		i.cleanClaudeBootstrapConfig()
 	}
 	if target.Name == "kiro" {
 		if err := i.cleanKiroAgent(cliDir); err != nil {
 			return err
 		}
 	}
+
+	// Clean AgentFlow env vars from shell RC (affects all targets).
+	_ = i.CleanEnvConfig()
+
 	return nil
 }
 
