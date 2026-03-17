@@ -44,22 +44,20 @@ func (m *Manager) Detect(root string) ([]Status, error) {
 			continue
 		}
 
-		paths := expectedPaths(root, name)
-		for _, path := range paths {
-			exists := false
-			if info, statErr := os.Stat(path); statErr == nil && !info.IsDir() {
-				exists = true
-			}
-			managed := exists && config.IsAgentFlowFile(path)
-			results = append(results, Status{
-				Target:   target.Name,
-				Path:     path,
-				Exists:   exists,
-				Managed:  managed,
-				Kind:     target.Kind,
-				Detected: filepath.ToSlash(strings.TrimPrefix(path, root+string(filepath.Separator))),
-			})
+		path := targetRulesPath(root, name)
+		exists := false
+		if info, statErr := os.Stat(path); statErr == nil && !info.IsDir() {
+			exists = true
 		}
+		managed := exists && config.IsAgentFlowFile(path)
+		results = append(results, Status{
+			Target:   target.Name,
+			Path:     path,
+			Exists:   exists,
+			Managed:  managed,
+			Kind:     target.Kind,
+			Detected: filepath.ToSlash(strings.TrimPrefix(path, root+string(filepath.Separator))),
+		})
 	}
 	return results, nil
 }
@@ -133,7 +131,9 @@ func (m *Manager) Install(root string, targetNames []string, options InstallOpti
 			if err := config.SafeWrite(dst, finalContent, file.Mode); err != nil {
 				return nil, err
 			}
-			written = append(written, dst)
+			if !containsPath(written, dst) {
+				written = append(written, dst)
+			}
 		}
 	}
 	return written, nil
@@ -180,48 +180,50 @@ func (m *Manager) Uninstall(root string, targetNames []string) ([]string, error)
 			return nil, fmt.Errorf("unknown target: %s", name)
 		}
 
-		paths := expectedPaths(root, name)
-		for _, path := range paths {
-			existing, err := os.ReadFile(path)
-			if err != nil {
-				continue // file doesn't exist
-			}
+		path := targetRulesPath(root, name)
+		existing, err := os.ReadFile(path)
+		if err != nil {
+			continue // file doesn't exist
+		}
 
-			re := regexp.MustCompile(`(?s)<!-- ` + regexp.QuoteMeta(config.AgentFlowMarker) + `.*?<!-- /` + regexp.QuoteMeta(config.AgentFlowMarker) + `.*?-->\n?`)
-			if fileIsSkill := strings.HasSuffix(path, filepath.FromSlash(".agents/skills/agentflow/SKILL.md")); fileIsSkill {
+		re := regexp.MustCompile(`(?s)<!-- ` + regexp.QuoteMeta(config.AgentFlowMarker) + `.*?<!-- /` + regexp.QuoteMeta(config.AgentFlowMarker) + `.*?-->\n?`)
+		if re.Match(existing) {
+			newContent := []byte(re.ReplaceAllString(string(existing), ""))
+			if strings.TrimSpace(string(newContent)) == "" {
 				if err := config.SafeRemove(path); err != nil {
 					return removed, err
 				}
-				removed = append(removed, path)
-			} else if re.Match(existing) {
-				newContent := []byte(re.ReplaceAllString(string(existing), ""))
-				if strings.TrimSpace(string(newContent)) == "" {
-					if err := config.SafeRemove(path); err != nil {
-						return removed, err
-					}
-				} else {
-					if err := config.SafeWrite(path, newContent, 0o644); err != nil {
-						return removed, err
-					}
-				}
-				removed = append(removed, path)
-			} else if config.IsAgentFlowFile(path) {
-				if err := config.SafeRemove(path); err != nil {
+			} else {
+				if err := config.SafeWrite(path, newContent, 0o644); err != nil {
 					return removed, err
 				}
-				removed = append(removed, path)
 			}
+			removed = append(removed, path)
+		} else if config.IsAgentFlowFile(path) {
+			if err := config.SafeRemove(path); err != nil {
+				return removed, err
+			}
+			removed = append(removed, path)
 		}
 	}
 
-	// Clean project-local rules and modules deployed by project-level install.
-	localRulesPath := filepath.Join(root, config.GlobalRulesDir, config.GlobalRulesFile)
-	if config.IsAgentFlowFile(localRulesPath) {
-		_ = config.SafeRemove(localRulesPath)
-	}
-	_ = config.SafeRemove(filepath.Join(root, config.GlobalRulesDir, config.PluginDirName))
+	if !hasManagedProjectTargets(root) {
+		skillPath := sharedSkillPath(root)
+		if config.IsAgentFlowFile(skillPath) {
+			if err := config.SafeRemove(skillPath); err != nil {
+				return removed, err
+			}
+			removed = append(removed, skillPath)
+		}
 
-	cleanEmptyParents(root, filepath.Join(root, ".agents", "skills", "agentflow", "SKILL.md"))
+		localRulesPath := filepath.Join(root, config.GlobalRulesDir, config.GlobalRulesFile)
+		if config.IsAgentFlowFile(localRulesPath) {
+			_ = config.SafeRemove(localRulesPath)
+		}
+		_ = config.SafeRemove(filepath.Join(root, config.GlobalRulesDir, config.PluginDirName))
+		cleanEmptyParents(root, sharedSkillPath(root))
+	}
+
 	return removed, nil
 }
 
@@ -244,15 +246,37 @@ type writeFile struct {
 	Inject  bool
 }
 
-func expectedPaths(root, targetName string) []string {
-	paths := []string{filepath.Join(root, ".agents", "skills", "agentflow", "SKILL.md")}
+func targetRulesPath(root, targetName string) string {
 	switch targetName {
 	case "codex":
-		paths = append(paths, filepath.Join(root, "AGENTS.md"))
+		return filepath.Join(root, "AGENTS.md")
 	case "claude":
-		paths = append(paths, filepath.Join(root, "CLAUDE.md"))
+		return filepath.Join(root, "CLAUDE.md")
+	default:
+		return filepath.Join(root, "AGENTS.md")
 	}
-	return paths
+}
+
+func sharedSkillPath(root string) string {
+	return filepath.Join(root, ".agents", "skills", "agentflow", "SKILL.md")
+}
+
+func hasManagedProjectTargets(root string) bool {
+	for _, name := range Names() {
+		if config.IsAgentFlowFile(targetRulesPath(root, name)) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsPath(paths []string, candidate string) bool {
+	for _, path := range paths {
+		if path == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func buildWrites(target Target, profile, lang string) ([]writeFile, error) {
@@ -262,18 +286,10 @@ func buildWrites(target Target, profile, lang string) ([]writeFile, error) {
 	switch target.Name {
 	case "codex", "claude":
 		filename := rulesFilenameForCLITarget(target.Name)
-		// Use project-relative paths so IDE agents can read them within the workspace.
-		globalRulesPath := filepath.ToSlash(filepath.Join(config.GlobalRulesDir, config.GlobalRulesFile))
-		globalModulesPath := filepath.ToSlash(filepath.Join(config.GlobalRulesDir, config.PluginDirName))
-		refContent := fmt.Sprintf(
-			"<!-- %s v1.0.0 -->\n\n"+
-				"> **[AgentFlow 工作流规则]**\n"+
-				"> 核心规则文件: `%s`\n"+
-				"> 在执行任何操作前，请先读取上述文件获取完整的 AgentFlow 路由、安全、输出格式和执行模式规则。\n"+
-				"> 模块文件位于 `%s/` 目录下，按规则中的模块加载表按需读取。\n\n"+
-				"<!-- /%s -->\n",
-			config.AgentFlowMarker, globalRulesPath, globalModulesPath, config.AgentFlowMarker,
-		)
+		rulesContent, err := buildGlobalRulesContent(target.Name, profile, lang)
+		if err != nil {
+			return nil, err
+		}
 
 		skillContent, err := readLangAsset(lang, "agentflow/_SKILL.md", "SKILL.md")
 		if err != nil {
@@ -284,7 +300,7 @@ func buildWrites(target Target, profile, lang string) ([]writeFile, error) {
 		return []writeFile{
 			{
 				RelPath: filename,
-				Content: []byte(refContent),
+				Content: []byte(rulesContent),
 				Mode:    0o644,
 				Inject:  true,
 			},

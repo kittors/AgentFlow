@@ -61,7 +61,7 @@ func TestInstallAndUninstallCodex(t *testing.T) {
 		t.Fatalf("Install returned error: %v", err)
 	}
 
-	// CLI AGENTS.md should now be a lightweight reference pointing to ~/.agentflow/.
+	// CLI AGENTS.md should now contain the full compiled AgentFlow rules.
 	agentsContent, err := os.ReadFile(rulesFile)
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
@@ -70,8 +70,11 @@ func TestInstallAndUninstallCodex(t *testing.T) {
 	if !strings.Contains(agentsStr, "AGENTFLOW_ROUTER:") {
 		t.Fatal("expected AGENTFLOW_ROUTER marker in CLI AGENTS.md")
 	}
-	if !strings.Contains(agentsStr, ".agentflow/AGENTS.md") {
-		t.Fatal("expected reference to ~/.agentflow/AGENTS.md in CLI AGENTS.md")
+	if strings.Contains(agentsStr, ".agentflow/AGENTS.md") {
+		t.Fatal("expected CLI AGENTS.md to embed full rules instead of a .agentflow reference")
+	}
+	if !strings.Contains(agentsStr, "先路由再行动") {
+		t.Fatal("expected CLI AGENTS.md to contain core AgentFlow rules")
 	}
 
 	// Full rules should be in ~/.agentflow/AGENTS.md (global dir).
@@ -235,6 +238,36 @@ func TestInstallAndUninstallClaudeHooks(t *testing.T) {
 	}
 	if strings.Contains(text, "agentflow-kb-sync") || strings.Contains(text, "agentflow-session-save") {
 		t.Fatal("expected AgentFlow Claude hooks to be removed on uninstall")
+	}
+}
+
+func TestInstallClaudeWritesFullRulesEntryFile(t *testing.T) {
+	homeDir := t.TempDir()
+	claudeDir := filepath.Join(homeDir, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		t.Fatalf("mkdir claude dir: %v", err)
+	}
+
+	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
+	installer.HomeDir = homeDir
+
+	if err := installer.Install("claude", "standard", config.DefaultLang); err != nil {
+		t.Fatalf("Install returned error: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(claudeDir, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("read CLAUDE.md: %v", err)
+	}
+	text := string(content)
+	if strings.Contains(text, ".agentflow/AGENTS.md") {
+		t.Fatal("expected CLAUDE.md to embed full rules instead of a .agentflow reference")
+	}
+	if !strings.Contains(text, "Claude Code") {
+		t.Fatal("expected target-specific placeholders to be rendered in CLAUDE.md")
+	}
+	if !strings.Contains(text, "先路由再行动") {
+		t.Fatal("expected CLAUDE.md to include core AgentFlow rules")
 	}
 }
 

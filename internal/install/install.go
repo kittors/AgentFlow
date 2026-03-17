@@ -426,8 +426,8 @@ func (i *Installer) Install(targetName, profile, lang string) error {
 		return fmt.Errorf(i.Catalog.Msg("无法创建目标目录: %s", "failed to create target directory: %s"), cliDir)
 	}
 
-	// Write lightweight reference to CLI dir (not full rules).
-	if err := i.deployRulesFile(target, profile); err != nil {
+	// Write full compiled rules to the CLI entry file.
+	if err := i.deployRulesFile(target, profile, lang); err != nil {
 		return err
 	}
 	// Module dir is now in ~/.agentflow/agentflow/, skip CLI-local deploy.
@@ -640,7 +640,7 @@ func (i *Installer) StatusLines() []string {
 	return lines
 }
 
-func (i *Installer) deployRulesFile(target targets.Target, profile string) error {
+func (i *Installer) deployRulesFile(target targets.Target, profile, lang string) error {
 	rulesPath := filepath.Join(i.HomeDir, target.Dir, target.RulesFile)
 	if _, err := os.Stat(rulesPath); err == nil && !config.IsAgentFlowFile(rulesPath) {
 		if _, err := config.BackupUserFile(rulesPath); err != nil {
@@ -648,19 +648,11 @@ func (i *Installer) deployRulesFile(target targets.Target, profile string) error
 		}
 	}
 
-	// Write lightweight reference pointing to ~/.agentflow/AGENTS.md
-	globalRulesPath := filepath.Join("~", config.GlobalRulesDir, config.GlobalRulesFile)
-	globalModulesPath := filepath.Join("~", config.GlobalRulesDir, config.PluginDirName)
-	refContent := fmt.Sprintf(
-		"<!-- %s v1.0.0 -->\n\n"+
-			"> **[AgentFlow 工作流规则]**\n"+
-			"> 核心规则文件: `%s`\n"+
-			"> 在执行任何操作前，请先读取上述文件获取完整的 AgentFlow 路由、安全、输出格式和执行模式规则。\n"+
-			"> 模块文件位于 `%s/` 目录下，按规则中的模块加载表按需读取。\n\n"+
-			"<!-- /%s -->\n",
-		config.AgentFlowMarker, filepath.ToSlash(globalRulesPath), filepath.ToSlash(globalModulesPath), config.AgentFlowMarker,
-	)
-	return config.SafeWrite(rulesPath, []byte(refContent), 0o644)
+	rendered, err := i.buildRulesContent(target.Name, profile, lang)
+	if err != nil {
+		return err
+	}
+	return config.SafeWrite(rulesPath, []byte(rendered), 0o644)
 }
 
 func (i *Installer) buildRulesContent(targetName, profile, lang string) (string, error) {

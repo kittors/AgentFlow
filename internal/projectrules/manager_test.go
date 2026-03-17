@@ -20,6 +20,7 @@ func TestManagerInstallWritesExpectedFiles(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		filepath.Join(root, "AGENTS.md"),
 		filepath.Join(root, "CLAUDE.md"),
 	} {
 		data, err := os.ReadFile(path)
@@ -29,13 +30,12 @@ func TestManagerInstallWritesExpectedFiles(t *testing.T) {
 		if !strings.Contains(string(data), "AGENTFLOW_ROUTER:") {
 			t.Fatalf("expected AgentFlow marker in %s", path)
 		}
-		// Paths should reference project-local .agentflow/ (not ~/.agentflow/).
 		content := string(data)
-		if strings.Contains(content, "~/.agentflow/") {
-			t.Fatalf("expected project-relative path, got global ~/.agentflow/ reference in %s", path)
+		if strings.Contains(content, ".agentflow/AGENTS.md") {
+			t.Fatalf("expected full embedded rules instead of .agentflow/AGENTS.md reference in %s", path)
 		}
-		if !strings.Contains(content, ".agentflow/AGENTS.md") {
-			t.Fatalf("expected reference to .agentflow/AGENTS.md in %s", path)
+		if !strings.Contains(content, "先路由再行动") {
+			t.Fatalf("expected core AgentFlow rules in %s", path)
 		}
 	}
 
@@ -124,5 +124,71 @@ func TestManagerUninstallDeletesEmpty(t *testing.T) {
 	// Should be deleted
 	if _, err := os.Stat(targetPath); err == nil {
 		t.Fatalf("expected AGENTS.md to be deleted because it became empty")
+	}
+}
+
+func TestManagerDetectDoesNotMisattributeSharedSkill(t *testing.T) {
+	root := t.TempDir()
+
+	manager := NewManager()
+	if _, err := manager.Install(root, []string{"codex"}, InstallOptions{Profile: "lite"}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	statuses, err := manager.Detect(root)
+	if err != nil {
+		t.Fatalf("detect: %v", err)
+	}
+
+	states := make(map[string]Status, len(statuses))
+	for _, status := range statuses {
+		states[status.Target] = status
+	}
+
+	codexStatus, ok := states["codex"]
+	if !ok || !codexStatus.Managed {
+		t.Fatalf("expected codex to be detected as managed, got %#v", codexStatus)
+	}
+
+	claudeStatus, ok := states["claude"]
+	if !ok {
+		t.Fatalf("expected claude status entry, got %#v", statuses)
+	}
+	if claudeStatus.Exists || claudeStatus.Managed {
+		t.Fatalf("expected claude to remain absent when only codex is installed, got %#v", claudeStatus)
+	}
+}
+
+func TestManagerUninstallKeepsSharedSkillWhileOtherTargetRemains(t *testing.T) {
+	root := t.TempDir()
+
+	manager := NewManager()
+	if _, err := manager.Install(root, []string{"codex", "claude"}, InstallOptions{Profile: "lite"}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	skillPath := filepath.Join(root, ".agents", "skills", "agentflow", "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Fatalf("expected shared skill to exist: %v", err)
+	}
+
+	removed, err := manager.Uninstall(root, []string{"codex"})
+	if err != nil {
+		t.Fatalf("uninstall codex: %v", err)
+	}
+	for _, path := range removed {
+		if path == skillPath {
+			t.Fatalf("expected shared skill to be preserved while claude remains, removed=%#v", removed)
+		}
+	}
+
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Fatalf("expected shared skill to remain after uninstalling codex: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "CLAUDE.md")); err != nil {
+		t.Fatalf("expected claude rules file to remain: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".agentflow", "agentflow")); err != nil {
+		t.Fatalf("expected project-local module dir to remain while claude is still installed: %v", err)
 	}
 }
