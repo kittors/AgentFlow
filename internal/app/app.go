@@ -1262,6 +1262,18 @@ func (a *App) uninstallCLITargetsPanel(targetNames []string) ui.Panel {
 			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
 			continue
 		}
+
+		// Clear process-level env vars so that re-installing in the same
+		// session doesn't show stale API keys / Base URLs.
+		if target, ok := targets.Lookup(name); ok {
+			if target.APIKeyEnv != "" && !strings.HasPrefix(target.APIKeyEnv, "__") {
+				os.Unsetenv(target.APIKeyEnv)
+			}
+			if target.BaseURLEnv != "" && !strings.HasPrefix(target.BaseURLEnv, "__") {
+				os.Unsetenv(target.BaseURLEnv)
+			}
+		}
+
 		success++
 		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), name))
 	}
