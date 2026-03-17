@@ -233,6 +233,15 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 			cursor = len(m.mcpRemoveOptions) - 1
 		}
 		m.mcpRemoveCursor = cursor
+	case flowScreenMCPList:
+		if len(m.mcpListOptions) == 0 {
+			m.mcpListCursor = 0
+			break
+		}
+		if cursor > len(m.mcpListOptions)-1 {
+			cursor = len(m.mcpListOptions) - 1
+		}
+		m.mcpListCursor = cursor
 	case flowScreenSkillTargets:
 		if len(m.skillTargets) == 0 {
 			m.skillTargetCursor = 0

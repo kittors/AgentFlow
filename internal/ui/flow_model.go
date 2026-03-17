@@ -202,6 +202,7 @@ type interactiveFlowModel struct {
 	mcpActionCursor          int
 	mcpInstallCursor         int
 	mcpRemoveCursor          int
+	mcpListCursor            int
 	skillTargetCursor        int
 	skillScopeCursor         int
 	skillProjectActionCursor int

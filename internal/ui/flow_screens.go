@@ -82,8 +82,28 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.subtitle = fmt.Sprintf(m.catalog.Msg("已安装的 MCP 列表 (%s)。Esc 返回。", "Installed MCP list (%s). Esc to go back."), m.selectedMCPTarget)
 		model.hint = m.catalog.Msg("↑/↓ 浏览已安装 MCP，Esc 返回。", "Use ↑/↓ to browse installed MCPs, Esc to go back.")
 		model.options = cloneOptions(m.mcpListOptions)
-		model.cursor = 0
-		model.panels = m.mcpActionPanels()
+		model.cursor = m.mcpListCursor
+		// Show the description of the currently selected MCP as the panel.
+		panels := make([]Panel, 0, 2)
+		if m.notice != nil {
+			panels = append(panels, *m.notice)
+		}
+		if len(m.mcpListOptions) > 0 {
+			idx := m.mcpListCursor
+			if idx >= len(m.mcpListOptions) {
+				idx = len(m.mcpListOptions) - 1
+			}
+			opt := m.mcpListOptions[idx]
+			desc := opt.Description
+			if desc == "" {
+				desc = m.catalog.Msg("该 MCP 已配置。", "This MCP is configured.")
+			}
+			panels = append(panels, Panel{
+				Title: opt.Value,
+				Lines: []string{desc},
+			})
+		}
+		model.panels = panels
 	case flowScreenMCPRemove:
 		model.subtitle = fmt.Sprintf(m.catalog.Msg("从 %s 移除 MCP。Esc 返回操作列表。", "Remove MCP from %s. Press Esc to go back."), m.selectedMCPTarget)
 		model.hint = m.catalog.Msg("↑/↓ 选择 MCP，Enter 移除，Esc 返回。", "Use ↑/↓ to choose an MCP server, Enter to remove, Esc to go back.")

@@ -545,16 +545,27 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		}
 		switch actions[m.mcpActionCursor].Value {
 		case "list":
-			// Build list options from installed MCPs.
+			// Build list options from installed MCPs with their original descriptions.
 			if m.callbacks.MCPRemoveOptions != nil {
 				installed := m.callbacks.MCPRemoveOptions(m.selectedMCPTarget)
+				// Build description map from install options for clean descriptions.
+				descMap := map[string]string{}
+				if m.callbacks.MCPInstallOptions != nil {
+					for _, opt := range m.callbacks.MCPInstallOptions() {
+						descMap[strings.ToLower(opt.Value)] = opt.Description
+					}
+				}
 				m.mcpListOptions = make([]Option, 0, len(installed))
 				for _, opt := range installed {
+					desc := descMap[strings.ToLower(opt.Value)]
+					if desc == "" {
+						desc = m.catalog.Msg("已配置。", "Configured.")
+					}
 					m.mcpListOptions = append(m.mcpListOptions, Option{
 						Value:       opt.Value,
 						Label:       opt.Value,
-						Badge:       "MCP",
-						Description: opt.Description,
+						Badge:       "✓",
+						Description: desc,
 					})
 				}
 			}
@@ -566,6 +577,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.screen = flowScreenMCPList
+			m.mcpListCursor = 0
 			m.notice = nil
 			m.focusDetails = false
 			m.detailScroll = 0
