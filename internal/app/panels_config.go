@@ -92,7 +92,7 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 	// Separate normal env vars from special config-file fields.
 	normalEnvVars := make(map[string]string)
 	var codexAPIKey, codexBaseURL, codexModel, codexReasoning string
-	var claudeModel string
+	var claudeAPIKey, claudeBaseURL, claudeModel string
 	var modelEnvVar, modelValue string
 
 	for key, value := range envVars {
@@ -113,6 +113,10 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		case "__CODEX_BASE_URL__":
 			// Base URL goes to [model_providers.agentflow].base_url in config.toml.
 			codexBaseURL = value
+		case "ANTHROPIC_API_KEY":
+			claudeAPIKey = value
+		case "ANTHROPIC_BASE_URL":
+			claudeBaseURL = value
 		default:
 			normalEnvVars[key] = value
 			// Track model env var for other targets.
@@ -121,6 +125,10 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 				modelValue = value
 			}
 		}
+	}
+
+	for key, value := range a.buildClaudeEnvVars(claudeAPIKey, claudeBaseURL) {
+		normalEnvVars[key] = value
 	}
 
 	var allLines []string
@@ -184,6 +192,34 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		Title: a.Catalog.Msg("配置写入成功", "Configuration saved"),
 		Lines: allLines,
 	}
+}
+
+func (a *App) buildClaudeEnvVars(apiKey, baseURL string) map[string]string {
+	result := make(map[string]string)
+	apiKey = strings.TrimSpace(apiKey)
+	baseURL = strings.TrimSpace(baseURL)
+
+	if baseURL != "" {
+		token := apiKey
+		if token == "" {
+			token = a.Installer.GetEnvOrRC("ANTHROPIC_AUTH_TOKEN")
+		}
+		if token == "" {
+			token = a.Installer.GetEnvOrRC("ANTHROPIC_API_KEY")
+		}
+		if token != "" {
+			result["ANTHROPIC_AUTH_TOKEN"] = token
+		}
+		result["ANTHROPIC_BASE_URL"] = baseURL
+		result["ANTHROPIC_API_KEY"] = ""
+		return result
+	}
+
+	if apiKey != "" {
+		result["ANTHROPIC_API_KEY"] = apiKey
+		result["ANTHROPIC_AUTH_TOKEN"] = ""
+	}
+	return result
 }
 
 func (a *App) installTargetsPanel(profile string, targets []string) ui.Panel {

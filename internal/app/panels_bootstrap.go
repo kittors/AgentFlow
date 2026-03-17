@@ -26,6 +26,31 @@ func (a *App) cleanPanel() ui.Panel {
 	}
 }
 
+func (a *App) authDisplayValue(targetName, apiKeyEnv, baseURLEnv string) (string, string) {
+	label := "API Key"
+	baseURL := ""
+	if baseURLEnv != "" {
+		baseURL = a.Installer.GetEnvOrRC(baseURLEnv)
+	}
+
+	switch targetName {
+	case "codex":
+		if value := a.Installer.GetEnvOrRC(apiKeyEnv); value != "" {
+			return label, value
+		}
+		return label, a.Installer.ReadCodexAuthKey()
+	case "claude":
+		if baseURL != "" {
+			if value := a.Installer.GetEnvOrRC("ANTHROPIC_AUTH_TOKEN"); value != "" {
+				return "Auth Token", value
+			}
+		}
+		return label, a.Installer.GetEnvOrRC(apiKeyEnv)
+	default:
+		return label, a.Installer.GetEnvOrRC(apiKeyEnv)
+	}
+}
+
 func (a *App) statusPanel() ui.Panel {
 	done := debuglog.Timed("statusPanel")
 	defer done()
@@ -196,20 +221,17 @@ func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
 
 		// API Key: read from env/rc for all targets, also check auth.json for Codex.
 		if target.APIKeyEnv != "" {
-			envVal := a.Installer.GetEnvOrRC(target.APIKeyEnv)
-			if envVal == "" && target.Name == "codex" {
-				envVal = a.Installer.ReadCodexAuthKey()
-			}
+			label, envVal := a.authDisplayValue(target.Name, target.APIKeyEnv, target.BaseURLEnv)
 			if envVal != "" {
 				displayVal := envVal
 				if len(envVal) > 6 {
 					displayVal = envVal[:3] + strings.Repeat("*", len(envVal)-6) + envVal[len(envVal)-3:]
 				}
-				lines = append(lines, fmt.Sprintf("  %s API Key: %s",
-					greenDot, valueStyle.Render(displayVal)))
+				lines = append(lines, fmt.Sprintf("  %s %s: %s",
+					greenDot, label, valueStyle.Render(displayVal)))
 			} else {
-				lines = append(lines, fmt.Sprintf("  %s API Key: %s",
-					grayDot, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+				lines = append(lines, fmt.Sprintf("  %s %s: %s",
+					grayDot, label, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
 			}
 		}
 
@@ -328,18 +350,15 @@ func (a *App) cliDetailPanel(targetName string) ui.Panel {
 		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 配置状态 ───", "─── Configuration ───")))
 
 		if target.APIKeyEnv != "" {
-			envVal := a.Installer.GetEnvOrRC(target.APIKeyEnv)
-			if envVal == "" && target.Name == "codex" {
-				envVal = a.Installer.ReadCodexAuthKey()
-			}
+			label, envVal := a.authDisplayValue(target.Name, target.APIKeyEnv, target.BaseURLEnv)
 			if envVal != "" {
 				displayVal := envVal
 				if len(envVal) > 6 {
 					displayVal = envVal[:3] + strings.Repeat("*", len(envVal)-6) + envVal[len(envVal)-3:]
 				}
-				lines = append(lines, fmt.Sprintf("  %s API Key: %s", greenDot, valueStyle.Render(displayVal)))
+				lines = append(lines, fmt.Sprintf("  %s %s: %s", greenDot, label, valueStyle.Render(displayVal)))
 			} else {
-				lines = append(lines, fmt.Sprintf("  %s API Key: %s", grayDot, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+				lines = append(lines, fmt.Sprintf("  %s %s: %s", grayDot, label, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
 			}
 		}
 

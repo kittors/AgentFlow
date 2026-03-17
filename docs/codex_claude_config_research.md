@@ -105,7 +105,8 @@ Claude Code **不支持**通过 `ANTHROPIC_MODEL` 环境变量设置默认模型
 
 | 变量 | 用途 |
 |------|------|
-| `ANTHROPIC_API_KEY` | API 认证密钥 |
+| `ANTHROPIC_API_KEY` | 直连 Anthropic API 时使用的认证密钥 |
+| `ANTHROPIC_AUTH_TOKEN` | 自定义网关 / 代理模式下的 Bearer Token |
 | `ANTHROPIC_BASE_URL` | 自定义 API 端点（网关/代理） |
 
 ---
@@ -115,6 +116,7 @@ Claude Code **不支持**通过 `ANTHROPIC_MODEL` 环境变量设置默认模型
 | CLI | API Key | Base URL | 模型 | 其他 |
 |-----|---------|----------|------|------|
 | **Codex** | `auth.json` → `token` | `config.toml` → `[model_providers.agentflow].base_url` | `config.toml` → `model` | `config.toml` → `model_reasoning_effort` |
-| **Claude** | `ANTHROPIC_API_KEY` (env) | `ANTHROPIC_BASE_URL` (env) | `~/.claude.json` → `model` | — |
+| **Claude（直连）** | `ANTHROPIC_API_KEY` (env) | — | `~/.claude.json` → `model` | — |
+| **Claude（网关）** | `ANTHROPIC_AUTH_TOKEN` (env) | `ANTHROPIC_BASE_URL` (env) | `~/.claude.json` → `model` | — |
 
-> **设计原则**：Codex 使用 `auth.json` + `model_provider` 机制（无 `env_key`），完全通过文件配置，跨平台兼容。Claude 使用环境变量写入 shell rc 文件（`.zshrc` / `.bashrc`）。
+> **设计原则**：Codex 使用 `auth.json` + `model_provider` 机制（无 `env_key`），完全通过文件配置，跨平台兼容。Claude 使用环境变量写入 shell rc 文件（`.zshrc` / `.bashrc`）；当配置 `ANTHROPIC_BASE_URL` 时，应切换到 `ANTHROPIC_AUTH_TOKEN`，避免与 `ANTHROPIC_API_KEY` 冲突。
