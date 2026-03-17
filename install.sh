@@ -216,9 +216,10 @@ download_binary() {
     fi
     chmod +x "${binary_path}"
 
-    # macOS Gatekeeper: clear quarantine attribute to prevent Killed:9
+    # macOS Gatekeeper: ad-hoc sign the binary and clear quarantine to prevent Killed:9
     if [ "$(uname -s)" = "Darwin" ]; then
-        xattr -d com.apple.quarantine "${binary_path}" 2>/dev/null || true
+        xattr -cr "${binary_path}" 2>/dev/null || true
+        codesign --force --sign - "${binary_path}" 2>/dev/null || true
     fi
 }
 
