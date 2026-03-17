@@ -140,6 +140,9 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.screen == flowScreenUninstallTargets {
 			m.toggleSelected(&m.uninstallOptions, m.uninstallCursor)
 		}
+		if m.screen == flowScreenMCPRemove {
+			m.toggleSelected(&m.mcpRemoveOptions, m.mcpRemoveCursor)
+		}
 		return m, nil
 	case tea.KeyEsc:
 		m.focusDetails = false
@@ -157,6 +160,9 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			if m.screen == flowScreenUninstallTargets {
 				m.toggleSelected(&m.uninstallOptions, m.uninstallCursor)
+			}
+			if m.screen == flowScreenMCPRemove {
+				m.toggleSelected(&m.mcpRemoveOptions, m.mcpRemoveCursor)
 			}
 		}
 		if ch == "c" || ch == "C" {
@@ -250,7 +256,12 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 	case flowScreenBootstrapConfig:
 		// Skip config by pressing Esc.
 		if m.mcpConfigMode {
-			m.screen = flowScreenMCPInstall
+			if m.mcpReconfigMode {
+				m.screen = flowScreenMCPList
+				m.mcpReconfigMode = false
+			} else {
+				m.screen = flowScreenMCPInstall
+			}
 			m.mcpConfigMode = false
 		} else {
 			m.screen = flowScreenBootstrapActions
@@ -662,8 +673,71 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		if len(m.mcpRemoveOptions) == 0 {
 			return m, nil
 		}
-		m.selectedMCPServer = m.mcpRemoveOptions[m.mcpRemoveCursor].Value
-		return m.startBusy(flowActionMCPRemove, m.catalog.Msg("正在移除 MCP 配置…", "Removing MCP configuration..."))
+		// Collect all selected servers for batch removal.
+		selected := selectedValues(m.mcpRemoveOptions)
+		if len(selected) == 0 {
+			m.notice = panelRef(Panel{
+				Title: m.catalog.Msg("移除提示", "Remove hint"),
+				Lines: []string{m.catalog.Msg("请至少选择一个 MCP server。", "Choose at least one MCP server.")},
+			})
+			return m, nil
+		}
+		m.selectedMCPServer = selected[0] // keep for compatibility
+		if len(selected) == 1 {
+			return m.startBusy(flowActionMCPRemove, m.catalog.Msg("正在移除 MCP 配置…", "Removing MCP configuration..."))
+		}
+		return m.startBusy(flowActionMCPBatchRemove, m.catalog.Msg("正在批量移除 MCP 配置…", "Removing MCP configurations..."))
+	case flowScreenMCPList:
+		if len(m.mcpListOptions) == 0 {
+			return m, nil
+		}
+		selectedServer := m.mcpListOptions[m.mcpListCursor].Value
+		// Check if this server has config fields (e.g. tavily-custom) for reconfiguration.
+		if m.callbacks.MCPConfigFields != nil {
+			fields := m.callbacks.MCPConfigFields(selectedServer)
+			if len(fields) > 0 {
+				m.selectedMCPServer = selectedServer
+				m.configTarget = selectedServer
+				m.configFields = make([]configFieldState, len(fields))
+				for idx, f := range fields {
+					fieldType := f.Type
+					if fieldType == "" {
+						fieldType = "text"
+					}
+					state := configFieldState{
+						Label:     f.Label,
+						EnvVar:    f.EnvVar,
+						FieldType: fieldType,
+						Options:   f.Options,
+					}
+					if fieldType == "select" && len(f.Options) > 0 {
+						state.Value = f.Default
+						for i, opt := range f.Options {
+							if opt == f.Default {
+								state.OptionCursor = i
+								break
+							}
+						}
+					}
+					m.configFields[idx] = state
+				}
+				m.configFieldCursor = 0
+				m.configEditing = true
+				m.mcpConfigMode = true
+				m.mcpReconfigMode = true
+				m.screen = flowScreenBootstrapConfig
+				return m, nil
+			}
+		}
+		// No config fields: just show a notice.
+		if m.mcpListCursor < len(m.mcpListOptions) {
+			opt := m.mcpListOptions[m.mcpListCursor]
+			m.notice = panelRef(Panel{
+				Title: opt.Value,
+				Lines: []string{m.catalog.Msg("该 MCP 不需要额外配置。", "This MCP does not require additional configuration.")},
+			})
+		}
+		return m, nil
 	case flowScreenSkillTargets:
 		if len(m.skillTargets) == 0 {
 			return m, nil

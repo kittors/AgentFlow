@@ -80,7 +80,7 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.panels = m.mcpInstallPanels()
 	case flowScreenMCPList:
 		model.subtitle = fmt.Sprintf(m.catalog.Msg("已安装的 MCP 列表 (%s)。Esc 返回。", "Installed MCP list (%s). Esc to go back."), m.selectedMCPTarget)
-		model.hint = m.catalog.Msg("↑/↓ 浏览已安装 MCP，Esc 返回。", "Use ↑/↓ to browse installed MCPs, Esc to go back.")
+		model.hint = m.catalog.Msg("↑/↓ 浏览已安装 MCP，Enter 重新配置（如有），Esc 返回。", "Use ↑/↓ to browse installed MCPs, Enter to reconfigure (if applicable), Esc to go back.")
 		model.options = cloneOptions(m.mcpListOptions)
 		model.cursor = m.mcpListCursor
 		// Show the description of the currently selected MCP as the panel.
@@ -106,9 +106,10 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 		model.panels = panels
 	case flowScreenMCPRemove:
 		model.subtitle = fmt.Sprintf(m.catalog.Msg("从 %s 移除 MCP。Esc 返回操作列表。", "Remove MCP from %s. Press Esc to go back."), m.selectedMCPTarget)
-		model.hint = m.catalog.Msg("↑/↓ 选择 MCP，Enter 移除，Esc 返回。", "Use ↑/↓ to choose an MCP server, Enter to remove, Esc to go back.")
+		model.hint = m.catalog.Msg("Space 选择多个 MCP，Enter 移除，Esc 返回。", "Use Space to select multiple MCPs, Enter to remove, Esc to go back.")
 		model.options = cloneOptions(m.mcpRemoveOptions)
 		model.cursor = m.mcpRemoveCursor
+		model.multi = true
 		model.panels = m.mcpRemovePanels()
 	case flowScreenSkillTargets:
 		model.subtitle = fmt.Sprintf(m.catalog.Msg("当前目录: %s。选择要管理 Skill 的目标（CLI/IDE）。Esc 返回主菜单。", "Current directory: %s. Choose which target (CLI/IDE) to manage skills for. Press Esc to return."), m.projectRoot)
@@ -507,7 +508,7 @@ func (m interactiveFlowModel) mcpRemovePanels() []Panel {
 	panels = append(panels, Panel{
 		Title: m.catalog.Msg("移除说明", "Remove guide"),
 		Lines: []string{
-			m.catalog.Msg("选择要移除的 MCP server 并按 Enter。", "Select the MCP server to remove and press Enter."),
+			m.catalog.Msg("用 Space 选择要移除的 MCP server，然后按 Enter。", "Use Space to select MCP servers to remove, then press Enter."),
 		},
 	})
 	return panels

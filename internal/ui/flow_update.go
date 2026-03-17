@@ -94,7 +94,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if value.notice != nil {
 				m.installHubStatusPanel = value.notice
 			}
-		case flowActionMCPList, flowActionMCPRemove:
+		case flowActionMCPList, flowActionMCPRemove, flowActionMCPBatchRemove:
 			if value.notice != nil {
 				m.notice = value.notice
 			}
@@ -107,13 +107,44 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if value.notice != nil {
 				m.notice = value.notice
 			}
-			// Stay on the install screen and refresh options to show ✓ marks.
-			if m.callbacks.MCPInstallOptions != nil {
-				m.mcpInstallOptions = m.annotateRecommendedMCPOptions(
-					m.selectedMCPTarget, m.callbacks.MCPInstallOptions(),
-				)
+			if m.mcpReconfigMode {
+				// After reconfiguring from MCP list, return to the list view.
+				m.mcpReconfigMode = false
+				m.mcpConfigMode = false
+				// Refresh list options.
+				if m.callbacks.MCPRemoveOptions != nil {
+					installed := m.callbacks.MCPRemoveOptions(m.selectedMCPTarget)
+					descMap := map[string]string{}
+					if m.callbacks.MCPInstallOptions != nil {
+						for _, opt := range m.callbacks.MCPInstallOptions() {
+							descMap[strings.ToLower(opt.Value)] = opt.Description
+						}
+					}
+					m.mcpListOptions = make([]Option, 0, len(installed))
+					for _, opt := range installed {
+						desc := descMap[strings.ToLower(opt.Value)]
+						if desc == "" {
+							desc = m.catalog.Msg("已配置。", "Configured.")
+						}
+						m.mcpListOptions = append(m.mcpListOptions, Option{
+							Value:       opt.Value,
+							Label:       opt.Value,
+							Badge:       "✓",
+							Description: desc,
+						})
+					}
+				}
+				m.screen = flowScreenMCPList
+			} else {
+				// Stay on the install screen and refresh options to show ✓ marks.
+				if m.callbacks.MCPInstallOptions != nil {
+					m.mcpInstallOptions = m.annotateRecommendedMCPOptions(
+						m.selectedMCPTarget, m.callbacks.MCPInstallOptions(),
+					)
+				}
+				m.mcpConfigMode = false
+				m.screen = flowScreenMCPInstall
 			}
-			m.mcpConfigMode = false
 		case flowActionMCPBatchInstall:
 			if value.notice != nil {
 				m.notice = value.notice

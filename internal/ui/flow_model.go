@@ -19,6 +19,7 @@ type InteractiveCallbacks struct {
 	MCPBatchInstall         func(target string, servers []string) Panel
 	MCPConfigFields         func(server string) []ConfigField
 	MCPRemove               func(target, server string) Panel
+	MCPBatchRemove          func(target string, servers []string) Panel
 	SkillTargetOptions      func() []Option
 	SkillGlobalSupported    func(target string) bool
 	SkillInstallOptions     func(target string) []Option
@@ -113,6 +114,7 @@ const (
 	flowActionWriteEnvConfig
 	flowActionMCPInstallWithEnv
 	flowActionMCPBatchInstall
+	flowActionMCPBatchRemove
 )
 
 type flowResultMsg struct {
@@ -184,6 +186,7 @@ type interactiveFlowModel struct {
 	uninstallCLIMode       bool
 	enteredFromCLI         bool // true when BootstrapActions was entered from CLI screen (not BootstrapTargets)
 	mcpConfigMode          bool // true when config fields are for MCP install (not bootstrap)
+	mcpReconfigMode        bool // true when config is for re-configuring an existing MCP from list view
 	projectInstallMode     bool
 	updateConfirmOptions   []Option
 	updateConfirmCursor    int

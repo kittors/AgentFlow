@@ -137,6 +137,34 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 				status:     m.callbacks.Status(),
 				mcpSummary: panelRef(summary),
 			}
+		case flowActionMCPBatchRemove:
+			// Collect selected servers from remove options.
+			removeServers := selectedValues(m.mcpRemoveOptions)
+			notice := Panel{}
+			if m.callbacks.MCPBatchRemove != nil && len(removeServers) > 0 {
+				notice = m.callbacks.MCPBatchRemove(selectedMCPTarget, removeServers)
+			} else if m.callbacks.MCPRemove != nil {
+				// Fallback: remove one by one.
+				var lines []string
+				for _, srv := range removeServers {
+					result := m.callbacks.MCPRemove(selectedMCPTarget, srv)
+					lines = append(lines, result.Lines...)
+				}
+				notice = Panel{
+					Title: m.catalog.Msg("MCP 移除结果", "MCP removal result"),
+					Lines: lines,
+				}
+			}
+			summary := Panel{}
+			if m.callbacks.MCPList != nil {
+				summary = m.callbacks.MCPList(selectedMCPTarget)
+			}
+			return flowResultMsg{
+				action:     action,
+				notice:     panelRef(notice),
+				status:     m.callbacks.Status(),
+				mcpSummary: panelRef(summary),
+			}
 		case flowActionMCPBatchInstall:
 			notice := Panel{}
 			if m.callbacks.MCPBatchInstall != nil && len(pendingMCPInstalls) > 0 {
