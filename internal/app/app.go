@@ -13,6 +13,7 @@ import (
 	"github.com/kittors/AgentFlow/internal/debuglog"
 	"github.com/kittors/AgentFlow/internal/i18n"
 	"github.com/kittors/AgentFlow/internal/install"
+	"github.com/kittors/AgentFlow/internal/mcp"
 	"github.com/kittors/AgentFlow/internal/projectrules"
 	"github.com/kittors/AgentFlow/internal/targets"
 	"github.com/kittors/AgentFlow/internal/ui"
@@ -1204,10 +1205,25 @@ func (a *App) uninstallTargetsPanel(targets []string) ui.Panel {
 	}
 }
 
-func (a *App) uninstallCLITargetsPanel(targets []string) ui.Panel {
+func (a *App) uninstallCLITargetsPanel(targetNames []string) ui.Panel {
 	success := 0
-	lines := make([]string, 0, len(targets)+1)
-	for _, name := range targets {
+	lines := make([]string, 0, len(targetNames)+1)
+	for _, name := range targetNames {
+		// Clean up MCP servers BEFORE removing the config dir,
+		// because MCP configs may live outside the config dir
+		// (e.g. ~/.claude.json for Claude Code).
+		if mcpTarget, ok := targets.LookupMCP(name); ok {
+			mcpMgr := mcp.NewManager()
+			if mcpServers, err := mcpMgr.List(mcpTarget); err == nil {
+				for _, srv := range mcpServers {
+					_ = mcpMgr.Remove(mcpTarget, srv)
+				}
+				if len(mcpServers) > 0 {
+					lines = append(lines, fmt.Sprintf(a.Catalog.Msg("已清理 %d 个 MCP 服务器配置。", "Cleaned up %d MCP server configs."), len(mcpServers)))
+				}
+			}
+		}
+
 		if err := a.Installer.Uninstall(name); err != nil {
 			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
 			continue
@@ -1224,7 +1240,7 @@ func (a *App) uninstallCLITargetsPanel(targets []string) ui.Panel {
 		lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[完成] %s", "[done] %s"), name))
 	}
 	lines = append([]string{
-		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个 CLI 卸载。", "Completed CLI uninstall for %d/%d targets."), success, len(targets)),
+		fmt.Sprintf(a.Catalog.Msg("已完成 %d/%d 个 CLI 卸载。", "Completed CLI uninstall for %d/%d targets."), success, len(targetNames)),
 	}, lines...)
 	if success == 0 {
 		return ui.Panel{
