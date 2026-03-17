@@ -569,6 +569,25 @@ func (m interactiveFlowModel) defaultBootstrapActionOptions() []Option {
 	}
 }
 
+// installedCLIActionOptions returns action options for a CLI that is already
+// installed: reconfigure and uninstall.
+func (m interactiveFlowModel) installedCLIActionOptions() []Option {
+	return []Option{
+		{
+			Value:       "reconfigure",
+			Label:       m.catalog.Msg("重新配置", "Reconfigure"),
+			Badge:       m.catalog.Msg("配置", "CONFIG"),
+			Description: m.catalog.Msg("重新设置 API Key、Base URL、默认模型、思考等级等配置项。", "Re-configure API Key, Base URL, default model, thinking level, and other settings."),
+		},
+		{
+			Value:       "uninstall-single-cli",
+			Label:       m.catalog.Msg("卸载此 CLI", "Uninstall this CLI"),
+			Badge:       m.catalog.Msg("卸载", "REMOVE"),
+			Description: m.catalog.Msg("卸载当前 CLI 工具及其配置目录。", "Uninstall this CLI tool and its configuration directory."),
+		},
+	}
+}
+
 func (m interactiveFlowModel) installOptionsList() []Option {
 	if m.callbacks.InstallOptions == nil {
 		return nil

@@ -121,8 +121,8 @@ func TestFlowBootstrapBranchNavigatesAndReturnsSingleLevel(t *testing.T) {
 
 	next, _ = model.handleBack()
 	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenBootstrapTargets {
-		t.Fatalf("expected Esc to return to bootstrap targets (which is now CLI screen), got %v", model.screen)
+	if model.screen != flowScreenCLI {
+		t.Fatalf("expected Esc to return to CLI screen, got %v", model.screen)
 	}
 }
 

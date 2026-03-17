@@ -109,6 +109,7 @@ func (a *App) runInteractiveMainMenu() int {
 	if err := ui.RunInteractiveFlow(a.Catalog, a.Version, ui.InteractiveCallbacks{
 		Status:                  a.statusPanel,
 		CLIDetailPanel:          a.cliDetailPanel,
+		CLIInstalled:            a.cliInstalled,
 		MCPTargetOptions:        a.mcpTargetOptions,
 		MCPInstallOptions:       a.mcpInstallOptions,
 		MCPRemoveOptions:        a.mcpRemoveOptions,
@@ -787,6 +788,15 @@ func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
 		Title: fmt.Sprintf(a.Catalog.Msg("%s 安装信息", "%s install details"), status.Target.DisplayName),
 		Lines: lines,
 	}
+}
+
+// cliInstalled returns true if the given CLI target is installed.
+func (a *App) cliInstalled(targetName string) bool {
+	status, err := a.Installer.DetectTargetStatus(targetName)
+	if err != nil {
+		return false
+	}
+	return status.CLIInstalled
 }
 
 // cliDetailPanel returns a rich detail panel for a CLI, showing installation status,

@@ -226,7 +226,13 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 	case flowScreenBootstrapTargets:
 		m.screen = flowScreenCLI
 	case flowScreenBootstrapActions:
-		m.screen = flowScreenBootstrapTargets
+		if m.enteredFromCLI {
+			// Return to CLI list when we entered from CLI screen.
+			m.screen = flowScreenCLI
+			m.enteredFromCLI = false
+		} else {
+			m.screen = flowScreenBootstrapTargets
+		}
 		// Reset post-install state so selecting a different CLI target starts fresh.
 		m.pendingConfigFields = nil
 		m.bootstrapActionOptions = m.defaultBootstrapActionOptions()
@@ -454,15 +460,29 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		}
 		m.selectedBootstrapTarget = m.cliOptions[m.cliCursor].Value
 		m.screen = flowScreenBootstrapActions
-		m.bootstrapActionOptions = m.defaultBootstrapActionOptions()
-		m.bootstrapActionCursor = 0
-		// Pre-select "manual" if auto install is not supported for this target.
-		if m.callbacks.BootstrapAutoSupported != nil && !m.callbacks.BootstrapAutoSupported(m.selectedBootstrapTarget) {
-			m.bootstrapActionCursor = 1
-		}
+		m.enteredFromCLI = true
 		m.notice = nil
 		m.focusDetails = false
 		m.detailScroll = 0
+
+		// Check if CLI is already installed → show configure/uninstall instead of install.
+		cliInstalled := false
+		if m.callbacks.CLIInstalled != nil {
+			cliInstalled = m.callbacks.CLIInstalled(m.selectedBootstrapTarget)
+		}
+
+		if cliInstalled {
+			// CLI is installed: show "Configure" and "Uninstall CLI".
+			m.bootstrapActionOptions = m.installedCLIActionOptions()
+			m.bootstrapActionCursor = 0
+		} else {
+			// CLI is not installed: show "Auto install" / "Manual install".
+			m.bootstrapActionOptions = m.defaultBootstrapActionOptions()
+			m.bootstrapActionCursor = 0
+			if m.callbacks.BootstrapAutoSupported != nil && !m.callbacks.BootstrapAutoSupported(m.selectedBootstrapTarget) {
+				m.bootstrapActionCursor = 1
+			}
+		}
 		m.refreshBootstrapDetail()
 		return m, nil
 	case flowScreenAgentFlow:
@@ -847,6 +867,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.pendingConfigFields = nil
 		m.bootstrapActionOptions = m.defaultBootstrapActionOptions()
 		m.screen = flowScreenBootstrapActions
+		m.enteredFromCLI = false
 		m.bootstrapActionCursor = 0
 		if !m.bootstrapAutoSupported(m.selectedBootstrapTarget) && len(m.bootstrapActionOptions) > 1 {
 			m.bootstrapActionCursor = 1
@@ -905,6 +926,54 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.pendingConfigFields = nil
 			m.screen = flowScreenMain
 			return m, nil
+		case "reconfigure":
+			// Load config fields for this CLI and enter config wizard.
+			if m.callbacks.CLIConfigFields != nil {
+				fields := m.callbacks.CLIConfigFields(m.selectedBootstrapTarget)
+				if len(fields) > 0 {
+					m.configTarget = m.selectedBootstrapTarget
+					m.configFields = make([]configFieldState, len(fields))
+					for idx, f := range fields {
+						fieldType := f.Type
+						if fieldType == "" {
+							fieldType = "text"
+						}
+						state := configFieldState{
+							Label:     f.Label,
+							EnvVar:    f.EnvVar,
+							FieldType: fieldType,
+							Options:   f.Options,
+						}
+						if fieldType == "select" && len(f.Options) > 0 {
+							state.Value = f.Default
+							for i, opt := range f.Options {
+								if opt == f.Default {
+									state.OptionCursor = i
+									break
+								}
+							}
+						}
+						m.configFields[idx] = state
+					}
+					m.configFieldCursor = 0
+					m.configEditing = true
+					m.mcpConfigMode = false
+					m.screen = flowScreenBootstrapConfig
+					return m, nil
+				}
+			}
+			m.notice = panelRef(Panel{
+				Title: m.catalog.Msg("配置提示", "Configuration note"),
+				Lines: []string{m.catalog.Msg("该 CLI 没有可配置的选项。", "This CLI has no configurable options.")},
+			})
+			return m, nil
+		case "uninstall-single-cli":
+			// Uninstall single CLI.
+			m.uninstallCLIMode = true
+			m.uninstallOptions = []Option{
+				{Value: m.selectedBootstrapTarget, Selected: true},
+			}
+			return m.startBusy(flowActionUninstallCLI, m.catalog.Msg("正在卸载所选 CLI…", "Uninstalling selected CLI..."))
 		}
 	case flowScreenProfile:
 		m.selectedProfile = m.profileOptions[m.profileCursor].Value

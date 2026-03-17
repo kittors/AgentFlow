@@ -9,6 +9,7 @@ import (
 type InteractiveCallbacks struct {
 	Status                  func() Panel
 	CLIDetailPanel          func(target string) Panel
+	CLIInstalled            func(target string) bool
 	MCPTargetOptions        func() []Option
 	MCPInstallOptions       func() []Option
 	MCPRemoveOptions        func(target string) []Option
@@ -178,6 +179,7 @@ type interactiveFlowModel struct {
 	installOptions         []Option
 	uninstallOptions       []Option
 	uninstallCLIMode       bool
+	enteredFromCLI         bool // true when BootstrapActions was entered from CLI screen (not BootstrapTargets)
 	mcpConfigMode          bool // true when config fields are for MCP install (not bootstrap)
 	projectInstallMode     bool
 	updateConfirmOptions   []Option
