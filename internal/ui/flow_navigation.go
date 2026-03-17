@@ -504,6 +504,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 		case "install-global":
 			// Global install: select profile → select targets → install
 			m.projectInstallMode = false
+			m.installOptions = m.installOptionsList()
 			m.screen = flowScreenProfile
 			m.profileCursor = 2 // default to "full"
 			m.notice = nil

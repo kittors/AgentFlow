@@ -260,27 +260,13 @@ func (i *Installer) WriteClaudeConfig(model string) error {
 }
 
 // cleanCodexBootstrapConfig removes AgentFlow-written config from Codex CLI files.
-// This cleans auth.json (API key) and config.toml fields (model, reasoning, base_url,
-// model_provider) that were written by AgentFlow's bootstrap config step.
+// This cleans config.toml fields (model, reasoning, base_url, model_provider)
+// that were written by AgentFlow's bootstrap config step.
+// NOTE: auth.json is intentionally NOT cleaned — the API key is the user's
+// authentication credential and must be preserved across AgentFlow uninstalls.
 // Best-effort: errors are silently ignored so uninstall always succeeds.
 func (i *Installer) cleanCodexBootstrapConfig() {
 	codexDir := filepath.Join(i.HomeDir, ".codex")
-
-	// Clean auth.json — remove the token field.
-	authPath := filepath.Join(codexDir, "auth.json")
-	if data, err := os.ReadFile(authPath); err == nil {
-		var auth map[string]any
-		if json.Unmarshal(data, &auth) == nil && auth != nil {
-			delete(auth, "token")
-			if len(auth) == 0 {
-				_ = config.SafeRemove(authPath)
-			} else {
-				if out, err := json.MarshalIndent(auth, "", "  "); err == nil {
-					_ = config.SafeWrite(authPath, append(out, '\n'), 0o600)
-				}
-			}
-		}
-	}
 
 	// Clean config.toml — remove AgentFlow-written fields.
 	configPath := filepath.Join(codexDir, "config.toml")

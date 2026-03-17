@@ -79,7 +79,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.projectInstallMode {
 				m.projectInstallMode = false
-				m.screen = flowScreenInstallHub
+				m.screen = flowScreenAgentFlow
 			} else {
 				m.screen = flowScreenSkillProjectActions
 			}
