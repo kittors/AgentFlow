@@ -211,7 +211,7 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 		if reProvider.MatchString(text) {
 			text = reProvider.ReplaceAllString(text, fmt.Sprintf(`model_provider = "%s"`, providerName))
 		} else {
-			text += fmt.Sprintf("\nmodel_provider = %q\n", providerName)
+			text = insertTopLevel(text, fmt.Sprintf("model_provider = %q", providerName))
 		}
 		// Append or replace the [model_providers.agentflow] section.
 		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.` + regexp.QuoteMeta(providerName) + `\].*?(?:\n\[|\z)`)
@@ -278,6 +278,10 @@ func (i *Installer) cleanCodexBootstrapConfig() {
 			re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(field) + `\s*=.*\n`)
 			text = re.ReplaceAllString(text, "")
 		}
+
+		// Remove AgentFlow comment lines (e.g. inside [features]).
+		reComment := regexp.MustCompile(`(?m)^#[^\n]*AGENTFLOW[^\n]*\n`)
+		text = reComment.ReplaceAllString(text, "")
 
 		// Remove [model_providers.agentflow] section entirely.
 		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.agentflow\].*?(?:\n\[|\z)`)
@@ -1202,6 +1206,20 @@ func removeFeatureMultiAgent(text string) string {
 		return text[:start] + text[end:]
 	}
 	return text[:start] + cleaned + text[end:]
+}
+
+// insertTopLevel inserts a top-level TOML key=value line before the first
+// section header "[". This prevents the field from landing inside an
+// existing section like [features] when appended to the end of the file.
+func insertTopLevel(text, line string) string {
+	// Find the first section header.
+	idx := strings.Index(text, "\n[")
+	if idx >= 0 {
+		// Insert before the newline that starts the section.
+		return text[:idx] + "\n" + line + text[idx:]
+	}
+	// No sections: just append.
+	return strings.TrimRight(text, "\n") + "\n" + line + "\n"
 }
 
 func collapseBlankLines(text string) string {
