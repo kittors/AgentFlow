@@ -42,10 +42,13 @@ var All = map[string]Target{
 		DocsURL:               "https://help.openai.com/en/articles/11096431-openai-codex-ci-getting-started",
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
-		// Codex models and config settings. We use the custom provider feature to support aliases if needed.
-		// BaseURLEnv and APIKeyEnv can still use the native OPENAI_ ones, or custom ones if we configure `config.toml` properly. We will map to CUSTOM ones via `config.toml`.
+		// Codex CLI v0.115+ deprecated the OPENAI_BASE_URL env var in favour
+		// of the openai_base_url field in config.toml.  We use an internal
+		// marker so the interactive UI still shows a Base URL input, but
+		// the value is routed to WriteCodexConfig (config.toml) instead of
+		// being written to the shell RC as an environment variable.
 		APIKeyEnv:     "OPENAI_API_KEY",
-		BaseURLEnv:    "OPENAI_BASE_URL",
+		BaseURLEnv:    "__CODEX_BASE_URL__",
 		ModelEnv:      "__CODEX_MODEL__",
 		HasConfigFile: true,
 		Models: []ModelOption{

@@ -915,8 +915,8 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		case "OPENAI_API_KEY":
 			// For Codex, API key goes to auth.json (not shell rc).
 			codexAPIKey = value
-		case "OPENAI_BASE_URL":
-			// For Codex, base URL goes to config.toml model_provider section.
+		case "__CODEX_BASE_URL__":
+			// Codex CLI v0.115+ uses openai_base_url in config.toml; no longer an env var.
 			codexBaseURL = value
 		default:
 			normalEnvVars[key] = value

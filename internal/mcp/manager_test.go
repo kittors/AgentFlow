@@ -283,6 +283,9 @@ func TestResolveBuiltinTavilyCustom(t *testing.T) {
 	if !strings.HasSuffix(args[0].(string), filepath.Join("tavily-custom-mcp", "index.js")) {
 		t.Fatalf("expected script path ending in tavily-custom-mcp/index.js, got: %v", args[0])
 	}
+	if !filepath.IsAbs(args[0].(string)) {
+		t.Fatalf("expected absolute script path, got: %v", args[0])
+	}
 }
 
 func TestResolveBuiltinTavilyCustomMissingURL(t *testing.T) {

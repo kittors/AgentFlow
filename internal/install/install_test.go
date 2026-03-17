@@ -343,7 +343,7 @@ func TestCLIConfigFieldsCodex(t *testing.T) {
 			if f.Type != "text" {
 				t.Fatalf("expected text type for API Key, got %q", f.Type)
 			}
-		case "OPENAI_BASE_URL":
+		case "__CODEX_BASE_URL__":
 			foundBaseURL = true
 			if f.Type != "text" {
 				t.Fatalf("expected text type for Base URL, got %q", f.Type)
@@ -373,7 +373,7 @@ func TestCLIConfigFieldsCodex(t *testing.T) {
 		t.Fatal("expected OPENAI_API_KEY field")
 	}
 	if !foundBaseURL {
-		t.Fatal("expected OPENAI_BASE_URL field")
+		t.Fatal("expected __CODEX_BASE_URL__ field")
 	}
 	if !foundModel {
 		t.Fatal("expected __CODEX_MODEL__ field")
@@ -459,6 +459,9 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 	if !strings.Contains(text, `base_url = "https://api.example.com/v1"`) {
 		t.Fatalf("expected base_url in model_providers section, got %v", text)
 	}
+	if !strings.Contains(text, `openai_base_url = "https://api.example.com/v1"`) {
+		t.Fatalf("expected openai_base_url top-level field, got %v", text)
+	}
 
 	// Overwrite model only, other settings should be preserved.
 	if err := installer.WriteCodexConfig("", "", "gpt-4o", ""); err != nil {
@@ -493,8 +496,8 @@ func TestWriteEnvConfigWritesToShellRC(t *testing.T) {
 	}
 
 	envVars := map[string]string{
-		"OPENAI_API_KEY":  "sk-test-key",
-		"OPENAI_BASE_URL": "https://api.example.com/v1",
+		"OPENAI_API_KEY":     "sk-test-key",
+		"ANTHROPIC_BASE_URL": "https://api.example.com/v1",
 	}
 
 	lines, err := installer.WriteEnvConfig(envVars)
@@ -514,8 +517,8 @@ func TestWriteEnvConfigWritesToShellRC(t *testing.T) {
 	if !strings.Contains(text, "OPENAI_API_KEY") {
 		t.Fatal("expected OPENAI_API_KEY in .zshrc")
 	}
-	if !strings.Contains(text, "OPENAI_BASE_URL") {
-		t.Fatal("expected OPENAI_BASE_URL in .zshrc")
+	if !strings.Contains(text, "ANTHROPIC_BASE_URL") {
+		t.Fatal("expected ANTHROPIC_BASE_URL in .zshrc")
 	}
 	if !strings.Contains(text, "sk-test-key") {
 		t.Fatal("expected API key value in .zshrc")

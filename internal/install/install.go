@@ -196,6 +196,15 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 	}
 	// Custom model provider with base_url (for third-party API proxies).
 	if baseURL != "" {
+		// Codex CLI v0.115+ reads openai_base_url from config.toml instead
+		// of the deprecated OPENAI_BASE_URL env var.
+		reBaseURL := regexp.MustCompile(`(?m)^openai_base_url\s*=.*$`)
+		if reBaseURL.MatchString(text) {
+			text = reBaseURL.ReplaceAllString(text, fmt.Sprintf(`openai_base_url = "%s"`, baseURL))
+		} else {
+			text = fmt.Sprintf("openai_base_url = %q\n%s", baseURL, text)
+		}
+
 		providerName := "agentflow"
 		// Set top-level model_provider.
 		reProvider := regexp.MustCompile(`(?m)^model_provider\s*=.*$`)
@@ -271,8 +280,14 @@ func (i *Installer) ReadCodexConfigField(field string) string {
 	}
 	text := string(data)
 
-	// For base_url, check the model_providers section first.
+	// For base_url, check the top-level openai_base_url field first (Codex v0.115+),
+	// then fall back to the model_providers section.
 	if field == "base_url" {
+		// Check openai_base_url (preferred, Codex v0.115+).
+		reTopLevel := regexp.MustCompile(`(?m)^openai_base_url\s*=\s*"([^"]*)"`)
+		if m := reTopLevel.FindStringSubmatch(text); len(m) > 1 {
+			return m[1]
+		}
 		// Find active model_provider name.
 		reProvider := regexp.MustCompile(`(?m)^model_provider\s*=\s*"([^"]*)"`)
 		if m := reProvider.FindStringSubmatch(text); len(m) > 1 {

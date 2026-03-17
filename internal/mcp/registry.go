@@ -143,6 +143,11 @@ func ScriptDir() string {
 			return dir
 		}
 	}
+	// Ensure absolute path as fallback so MCP configs always contain
+	// a fully-qualified script path that CLIs can locate.
+	if abs, err := filepath.Abs("scripts"); err == nil {
+		return abs
+	}
 	return "scripts"
 }
 
