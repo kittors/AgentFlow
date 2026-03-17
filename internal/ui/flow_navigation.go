@@ -531,16 +531,27 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 		case "uninstall":
 			m.uninstallCLIMode = false
+			// Combine global + project-level uninstall targets.
+			var options []Option
 			if m.callbacks.UninstallOptions != nil {
-				m.uninstallOptions = cloneOptions(m.callbacks.UninstallOptions())
+				for _, opt := range m.callbacks.UninstallOptions() {
+					opt.Badge = m.catalog.Msg("全局", "GLOBAL")
+					options = append(options, opt)
+				}
 			}
-			if len(m.uninstallOptions) == 0 {
+			if m.callbacks.UninstallProjectOptions != nil {
+				for _, opt := range m.callbacks.UninstallProjectOptions() {
+					options = append(options, opt)
+				}
+			}
+			if len(options) == 0 {
 				m.notice = panelRef(Panel{
 					Title: m.catalog.Msg("卸载结果", "Uninstall result"),
-					Lines: []string{m.catalog.Msg("未检测到已安装的 AgentFlow。", "No AgentFlow installations found.")},
+					Lines: []string{m.catalog.Msg("未检测到已安装的 AgentFlow（全局或项目级）。", "No AgentFlow installations found (global or project-level).")},
 				})
 				return m, nil
 			}
+			m.uninstallOptions = options
 			m.screen = flowScreenUninstallTargets
 			m.notice = nil
 			return m, nil
