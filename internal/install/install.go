@@ -217,8 +217,14 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.` + regexp.QuoteMeta(providerName) + `\].*?(?:\n\[|\z)`)
 		providerSection := fmt.Sprintf("[model_providers.%s]\nname = %q\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n",
 			providerName, providerName, baseURL)
-		if sectionRe.MatchString(text) {
-			text = sectionRe.ReplaceAllString(text, providerSection)
+		if loc := sectionRe.FindStringIndex(text); loc != nil {
+			end := loc[1]
+			// If the match ends with a new section header "[", keep it
+			// so the next TOML section is not corrupted.
+			if end > 0 && text[end-1] == '[' {
+				end--
+			}
+			text = text[:loc[0]] + providerSection + text[end:]
 		} else {
 			text = strings.TrimRight(text, "\n") + "\n\n" + providerSection
 		}
