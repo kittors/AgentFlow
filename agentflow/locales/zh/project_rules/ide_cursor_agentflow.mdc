@@ -1,0 +1,11 @@
+<!-- AGENTFLOW_ROUTER: v1.0.0 -->
+# AgentFlow (Project Rules)
+---
+description: AgentFlow workflow router (project-level)
+globs: ["**/*"]
+---
+
+- 在开始修改任何代码/文件前，先按 AgentFlow 的 5 维度规则进行路由（R0-R4）。
+- 对 R2/R3/R4：先做需求评分与风险检查；需要确认的场景先停下来等确认（非交互模式按规则自动执行）。
+- 进入开发前先做方案设计（DESIGN），并把 proposal/tasks 写入 `.agentflow/kb/plan/`（如果项目启用 AgentFlow KB）。
+- 代码改动后优先跑最小验证，再跑全量测试；必要时同步知识库与会话摘要。

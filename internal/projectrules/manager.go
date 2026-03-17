@@ -2,6 +2,7 @@ package projectrules
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +15,7 @@ import (
 
 type InstallOptions struct {
 	Profile string
+	Lang    string
 }
 
 type Status struct {
@@ -76,6 +78,16 @@ func (m *Manager) Install(root string, targetNames []string, options InstallOpti
 		return nil, fmt.Errorf("invalid profile: %s", profile)
 	}
 
+	lang := strings.TrimSpace(options.Lang)
+	if lang == "" {
+		lang = config.DefaultLang
+	}
+
+	// Ensure ~/.agentflow/ has the latest rules before writing project references.
+	if err := m.ensureGlobalRules(targetNames, profile, lang); err != nil {
+		return nil, err
+	}
+
 	written := make([]string, 0, len(targetNames))
 	for _, name := range targetNames {
 		name = strings.TrimSpace(name)
@@ -87,7 +99,7 @@ func (m *Manager) Install(root string, targetNames []string, options InstallOpti
 			return nil, fmt.Errorf("unknown target: %s", name)
 		}
 
-		files, err := buildWrites(target, profile)
+		files, err := buildWrites(target, profile, lang)
 		if err != nil {
 			return nil, err
 		}
@@ -120,6 +132,41 @@ func (m *Manager) Install(root string, targetNames []string, options InstallOpti
 		}
 	}
 	return written, nil
+}
+
+// ensureGlobalRules deploys the full rules + modules to ~/.agentflow/
+// using the install package. This ensures project-level installs work
+// independently of whether a global install was ever performed.
+func (m *Manager) ensureGlobalRules(targetNames []string, profile, lang string) error {
+	// Use an Installer with defaults to deploy global rules.
+	// We import install indirectly to avoid circular deps — use the same
+	// logic the Installer uses: build rules content + deploy module dir.
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	globalDir := filepath.Join(homeDir, config.GlobalRulesDir)
+	if err := os.MkdirAll(globalDir, 0o755); err != nil {
+		return err
+	}
+
+	// Pick the first target name for template rendering.
+	targetName := "codex"
+	if len(targetNames) > 0 {
+		targetName = targetNames[0]
+	}
+
+	rendered, err := buildGlobalRulesContent(targetName, profile, lang)
+	if err != nil {
+		return err
+	}
+	rulesPath := filepath.Join(globalDir, config.GlobalRulesFile)
+	if err := config.SafeWrite(rulesPath, []byte(rendered), 0o644); err != nil {
+		return err
+	}
+
+	return deployModuleDirTo(filepath.Join(globalDir, config.PluginDirName), lang)
 }
 
 // Uninstall removes AgentFlow-managed project rule files from the given root.
@@ -207,16 +254,26 @@ func expectedPaths(root, targetName string) []string {
 	return paths
 }
 
-func buildWrites(target Target, profile string) ([]writeFile, error) {
+func buildWrites(target Target, profile, lang string) ([]writeFile, error) {
 	if profile == "" {
 		profile = targets.DefaultProfile
 	}
 	switch target.Name {
 	case "codex", "claude":
 		filename := rulesFilenameForCLITarget(target.Name)
-		refContent := fmt.Sprintf("<!-- %s v1.0.0 -->\n\n> **[AgentFlow 管理规则]**\n> 请务必严格按照全局规范（如全局规则或 `.agents/skills/agentflow/SKILL.md`）执行所有操作。\n\n<!-- /%s -->\n", config.AgentFlowMarker, config.AgentFlowMarker)
+		globalRulesPath := filepath.ToSlash(filepath.Join("~", config.GlobalRulesDir, config.GlobalRulesFile))
+		globalModulesPath := filepath.ToSlash(filepath.Join("~", config.GlobalRulesDir, config.PluginDirName))
+		refContent := fmt.Sprintf(
+			"<!-- %s v1.0.0 -->\n\n"+
+				"> **[AgentFlow 工作流规则]**\n"+
+				"> 核心规则文件: `%s`\n"+
+				"> 在执行任何操作前，请先读取上述文件获取完整的 AgentFlow 路由、安全、输出格式和执行模式规则。\n"+
+				"> 模块文件位于 `%s/` 目录下，按规则中的模块加载表按需读取。\n\n"+
+				"<!-- /%s -->\n",
+			config.AgentFlowMarker, globalRulesPath, globalModulesPath, config.AgentFlowMarker,
+		)
 
-		skillContent, err := readAssetWithFallback("agentflow/_SKILL.md", "SKILL.md")
+		skillContent, err := readLangAsset(lang, "agentflow/_SKILL.md", "SKILL.md")
 		if err != nil {
 			return nil, err
 		}
@@ -269,4 +326,181 @@ func readAssetWithFallback(paths ...string) ([]byte, error) {
 		lastErr = fmt.Errorf("asset not found")
 	}
 	return nil, lastErr
+}
+
+// buildGlobalRulesContent compiles the full rules content, mirroring the
+// logic in install.buildRulesContent(). This avoids importing the install
+// package which would create a circular dependency.
+func buildGlobalRulesContent(targetName, profile, lang string) (string, error) {
+	target, ok := targets.Lookup(targetName)
+	if !ok {
+		return "", fmt.Errorf("unknown target: %s", targetName)
+	}
+	if profile == "" {
+		profile = targets.DefaultProfile
+	}
+	if !targets.ValidProfile(profile) {
+		return "", fmt.Errorf("invalid profile: %s", profile)
+	}
+
+	content, err := readLangAsset(lang, "agentflow/_AGENTS.md", "AGENTS.md")
+	if err != nil {
+		return "", err
+	}
+
+	rendered := string(content)
+	if !strings.Contains(rendered, config.Marker) {
+		rendered = "<!-- AGENTFLOW_ROUTER: v1.0.0 -->\n" + rendered
+	}
+	rendered = strings.ReplaceAll(rendered, "{TARGET_CLI}", target.DisplayName)
+	rendered = strings.ReplaceAll(rendered, "{HOOKS_SUMMARY}", target.HooksSummary)
+
+	// Strip sections beyond the selected profile (no module inlining).
+	rendered = stripBeyondProfile(rendered, profile)
+
+	return strings.TrimRight(rendered, "\n") + "\n", nil
+}
+
+// stripBeyondProfile removes sections beyond the selected profile level.
+func stripBeyondProfile(text, profile string) string {
+	switch profile {
+	case "lite":
+		if idx := strings.Index(text, "<!-- PROFILE:standard"); idx > 0 {
+			footer := "\n---\n\n> **AgentFlow** — 比分析更进一步，持续工作直到实现和验证完成。\n"
+			return strings.TrimRight(text[:idx], "\n") + "\n" + footer
+		}
+	case "standard":
+		if idx := strings.Index(text, "<!-- PROFILE:full"); idx > 0 {
+			footer := "\n---\n\n> **AgentFlow** — 比分析更进一步，持续工作直到实现和验证完成。\n"
+			return strings.TrimRight(text[:idx], "\n") + "\n" + footer
+		}
+	}
+	return text
+}
+
+var (
+	targetSubagentFiles = map[string]string{
+		"codex":  "subagent_codex.md",
+		"claude": "subagent_claude.md",
+	}
+	targetHooksFiles = map[string]string{
+		"codex":  "hooks_codex.md",
+		"claude": "hooks_claude.md",
+	}
+)
+
+func buildCoreModuleForTarget(targetName, modFile string) (string, error) {
+	content, err := readAssetWithFallback(filepath.ToSlash(filepath.Join("agentflow", "core", modFile)))
+	if err != nil {
+		return "", err
+	}
+
+	rendered := string(content)
+	if modFile == "subagent.md" {
+		cliFile := targetSubagentFiles[targetName]
+		if cliFile == "" {
+			cliFile = "subagent_other.md"
+		}
+		cliContent, err := readAssetWithFallback(filepath.ToSlash(filepath.Join("agentflow", "core", cliFile)))
+		if err != nil {
+			return "", err
+		}
+		rendered = strings.ReplaceAll(rendered, "{CLI_SUBAGENT_PROTOCOL}", string(cliContent))
+	}
+	if modFile == "hooks.md" {
+		cliFile := targetHooksFiles[targetName]
+		if cliFile == "" {
+			cliFile = "hooks_other.md"
+		}
+		cliContent, err := readAssetWithFallback(filepath.ToSlash(filepath.Join("agentflow", "core", cliFile)))
+		if err != nil {
+			return "", err
+		}
+		rendered = strings.ReplaceAll(rendered, "{HOOKS_MATRIX}", string(cliContent))
+	}
+	return rendered, nil
+}
+
+// deployModuleDirTo deploys embedded agentflow module files to the target directory.
+// Pass 1: shared files (skip zh/, en/ dirs). Pass 2: overlay from agentflow/{lang}/.
+func deployModuleDirTo(baseDir, lang string) error {
+	if err := config.SafeRemove(baseDir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		return err
+	}
+
+	moduleFS, err := agentflowassets.Sub("agentflow")
+	if err != nil {
+		return err
+	}
+
+	// Pass 1: Deploy shared (non-language) files, skipping zh/ and en/ dirs.
+	if err := fs.WalkDir(moduleFS, ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == "." {
+			return nil
+		}
+		if entry.IsDir() && path == "locales" {
+			return fs.SkipDir
+		}
+		if !entry.IsDir() && (path == "_AGENTS.md" || path == "_SKILL.md") {
+			return nil
+		}
+		if entry.IsDir() {
+			return os.MkdirAll(filepath.Join(baseDir, filepath.FromSlash(path)), 0o755)
+		}
+		content, err := fs.ReadFile(moduleFS, path)
+		if err != nil {
+			return err
+		}
+		return config.SafeWrite(filepath.Join(baseDir, filepath.FromSlash(path)), content, 0o644)
+	}); err != nil {
+		return err
+	}
+
+	// Pass 2: Overlay language-specific files from agentflow/locales/{lang}/.
+	langFS, err := agentflowassets.Sub("agentflow/locales/" + lang)
+	if err != nil {
+		return nil // no language dir — not an error
+	}
+	return fs.WalkDir(langFS, ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == "." {
+			return nil
+		}
+		if !entry.IsDir() && (path == "_AGENTS.md" || path == "_SKILL.md") {
+			return nil
+		}
+		if entry.IsDir() {
+			return os.MkdirAll(filepath.Join(baseDir, filepath.FromSlash(path)), 0o755)
+		}
+		content, err := fs.ReadFile(langFS, path)
+		if err != nil {
+			return err
+		}
+		return config.SafeWrite(filepath.Join(baseDir, filepath.FromSlash(path)), content, 0o644)
+	})
+}
+
+// readLangAsset reads an embedded asset from the language-specific directory.
+// e.g. readLangAsset("en", "agentflow/_AGENTS.md") tries "agentflow/en/_AGENTS.md"
+// first, then falls back to "agentflow/_AGENTS.md".
+func readLangAsset(lang string, paths ...string) ([]byte, error) {
+	var langPaths []string
+	for _, p := range paths {
+		if strings.HasPrefix(p, "agentflow/") {
+			rest := strings.TrimPrefix(p, "agentflow/")
+			langPaths = append(langPaths, "agentflow/locales/"+lang+"/"+rest)
+		} else {
+			langPaths = append(langPaths, p)
+		}
+	}
+	langPaths = append(langPaths, paths...) // fallback to root
+	return readAssetWithFallback(langPaths...)
 }

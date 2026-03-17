@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/kittors/AgentFlow/internal/buildinfo"
+	"github.com/kittors/AgentFlow/internal/config"
 	"github.com/kittors/AgentFlow/internal/debuglog"
 	"github.com/kittors/AgentFlow/internal/i18n"
 	"github.com/kittors/AgentFlow/internal/install"
@@ -182,11 +183,14 @@ func (a *App) runInstall(args []string) int {
 	profile := targets.DefaultProfile
 	targetName := ""
 	installAll := false
+	lang := ""
 
 	for _, arg := range args {
 		switch {
 		case strings.HasPrefix(arg, "--profile="):
 			profile = strings.TrimPrefix(arg, "--profile=")
+		case strings.HasPrefix(arg, "--lang="):
+			lang = strings.TrimPrefix(arg, "--lang=")
 		case arg == "--all":
 			installAll = true
 		case strings.HasPrefix(arg, "--"):
@@ -196,9 +200,12 @@ func (a *App) runInstall(args []string) int {
 			targetName = arg
 		}
 	}
+	if lang == "" {
+		lang = config.DefaultLang
+	}
 
 	if installAll {
-		if _, err := a.Installer.InstallAll(profile); err != nil {
+		if _, err := a.Installer.InstallAll(profile, lang); err != nil {
 			fmt.Fprintln(a.Stderr, err.Error())
 			return 1
 		}
@@ -214,7 +221,7 @@ func (a *App) runInstall(args []string) int {
 		return 1
 	}
 
-	if err := a.Installer.Install(targetName, profile); err != nil {
+	if err := a.Installer.Install(targetName, profile, lang); err != nil {
 		fmt.Fprintln(a.Stderr, err.Error())
 		return 1
 	}
@@ -991,7 +998,7 @@ func (a *App) installTargetsPanel(profile string, targets []string) ui.Panel {
 		fmt.Sprintf(a.Catalog.Msg("Profile: %s", "Profile: %s"), profile),
 	}
 	for _, name := range targets {
-		if err := a.Installer.Install(name, profile); err != nil {
+		if err := a.Installer.Install(name, profile, config.DefaultLang); err != nil {
 			lines = append(lines, fmt.Sprintf(a.Catalog.Msg("[失败] %s: %v", "[failed] %s: %v"), name, err))
 			continue
 		}

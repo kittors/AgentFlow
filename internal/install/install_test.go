@@ -8,13 +8,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kittors/AgentFlow/internal/config"
 	"github.com/kittors/AgentFlow/internal/i18n"
 )
 
 func TestBuildRulesContentUsesProfileAndTargetPlaceholders(t *testing.T) {
 	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
 
-	content, err := installer.buildRulesContent("codex", "standard")
+	content, err := installer.buildRulesContent("codex", "standard", config.DefaultLang)
 	if err != nil {
 		t.Fatalf("buildRulesContent returned error: %v", err)
 	}
@@ -56,23 +57,46 @@ func TestInstallAndUninstallCodex(t *testing.T) {
 	installer := New(i18n.NewCatalog(), stdout)
 	installer.HomeDir = homeDir
 
-	if err := installer.Install("codex", "full"); err != nil {
+	if err := installer.Install("codex", "full", config.DefaultLang); err != nil {
 		t.Fatalf("Install returned error: %v", err)
 	}
 
+	// CLI AGENTS.md should now be a lightweight reference pointing to ~/.agentflow/.
 	agentsContent, err := os.ReadFile(rulesFile)
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	if !strings.Contains(string(agentsContent), "PROFILE:full") {
-		t.Fatal("expected full profile extension in AGENTS.md")
+	agentsStr := string(agentsContent)
+	if !strings.Contains(agentsStr, "AGENTFLOW_ROUTER:") {
+		t.Fatal("expected AGENTFLOW_ROUTER marker in CLI AGENTS.md")
 	}
-	if strings.Contains(string(agentsContent), "{HOOKS_SUMMARY}") {
+	if !strings.Contains(agentsStr, ".agentflow/AGENTS.md") {
+		t.Fatal("expected reference to ~/.agentflow/AGENTS.md in CLI AGENTS.md")
+	}
+
+	// Full rules should be in ~/.agentflow/AGENTS.md (global dir).
+	globalRulesFile := filepath.Join(homeDir, ".agentflow", "AGENTS.md")
+	globalContent, err := os.ReadFile(globalRulesFile)
+	if err != nil {
+		t.Fatalf("read global rules: %v", err)
+	}
+	if !strings.Contains(string(globalContent), "PROFILE:full") {
+		t.Fatal("expected full profile extension in global AGENTS.md")
+	}
+	if strings.Contains(string(globalContent), "{HOOKS_SUMMARY}") {
 		t.Fatal("expected rules placeholders to be rendered")
 	}
-	if _, err := os.Stat(filepath.Join(codexDir, "agentflow")); err != nil {
-		t.Fatalf("expected plugin dir: %v", err)
+
+	// Module dir should be in ~/.agentflow/agentflow/ (not CLI dir).
+	globalModuleDir := filepath.Join(homeDir, ".agentflow", "agentflow")
+	if _, err := os.Stat(globalModuleDir); err != nil {
+		t.Fatalf("expected global module dir: %v", err)
 	}
+	// CLI-local agentflow dir should NOT exist (modules are centralized).
+	if _, err := os.Stat(filepath.Join(codexDir, "agentflow")); !os.IsNotExist(err) {
+		t.Fatal("expected CLI-local agentflow dir to NOT exist")
+	}
+
 	if _, err := os.Stat(filepath.Join(codexDir, "skills", "agentflow", "SKILL.md")); err != nil {
 		t.Fatalf("expected skill file: %v", err)
 	}
@@ -117,11 +141,12 @@ func TestInstallAndUninstallCodex(t *testing.T) {
 	if err := installer.Uninstall("codex"); err != nil {
 		t.Fatalf("Uninstall returned error: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(codexDir, "agentflow")); !os.IsNotExist(err) {
-		t.Fatalf("expected plugin dir removed, got err=%v", err)
-	}
 	if _, err := os.Stat(filepath.Join(codexDir, "agents", "reviewer.toml")); !os.IsNotExist(err) {
 		t.Fatalf("expected reviewer role removed, got err=%v", err)
+	}
+	// Global module dir should still exist after single CLI uninstall.
+	if _, err := os.Stat(globalModuleDir); err != nil {
+		t.Fatalf("expected global module dir to persist after single uninstall: %v", err)
 	}
 
 	configContent, err = os.ReadFile(configFile)
@@ -177,7 +202,7 @@ func TestInstallAndUninstallClaudeHooks(t *testing.T) {
 	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
 	installer.HomeDir = homeDir
 
-	if err := installer.Install("claude", "full"); err != nil {
+	if err := installer.Install("claude", "full", config.DefaultLang); err != nil {
 		t.Fatalf("Install returned error: %v", err)
 	}
 
@@ -274,7 +299,7 @@ func TestInstallCodexBacksUpUserManagedReviewerRole(t *testing.T) {
 	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
 	installer.HomeDir = homeDir
 
-	if err := installer.Install("codex", "full"); err != nil {
+	if err := installer.Install("codex", "full", config.DefaultLang); err != nil {
 		t.Fatalf("Install returned error: %v", err)
 	}
 

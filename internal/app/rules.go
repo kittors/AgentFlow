@@ -38,13 +38,13 @@ func (a *App) runRules(args []string) int {
 		return 0
 
 	case "install":
-		targets, root, quiet, profile, err := parseRulesInstallArgs(args[1:])
+		targets, root, quiet, profile, lang, err := parseRulesInstallArgs(args[1:])
 		if err != nil {
 			fmt.Fprintln(a.Stderr, err.Error())
 			return 1
 		}
 		manager := projectrules.NewManager()
-		written, err := manager.Install(root, targets, projectrules.InstallOptions{Profile: profile})
+		written, err := manager.Install(root, targets, projectrules.InstallOptions{Profile: profile, Lang: lang})
 		if err != nil {
 			fmt.Fprintln(a.Stderr, err.Error())
 			return 1
@@ -117,10 +117,11 @@ func (a *App) runRulesInteractive() int {
 	return 0
 }
 
-func parseRulesInstallArgs(args []string) ([]string, string, bool, string, error) {
+func parseRulesInstallArgs(args []string) ([]string, string, bool, string, string, error) {
 	root := ""
 	quiet := false
 	profile := ""
+	lang := ""
 	targets := make([]string, 0, 8)
 	for _, arg := range args {
 		switch {
@@ -128,10 +129,12 @@ func parseRulesInstallArgs(args []string) ([]string, string, bool, string, error
 			root = strings.TrimPrefix(arg, "--root=")
 		case strings.HasPrefix(arg, "--profile="):
 			profile = strings.TrimPrefix(arg, "--profile=")
+		case strings.HasPrefix(arg, "--lang="):
+			lang = strings.TrimPrefix(arg, "--lang=")
 		case arg == "--quiet":
 			quiet = true
 		case strings.HasPrefix(arg, "--"):
-			return nil, "", false, "", fmt.Errorf("unknown flag: %s", arg)
+			return nil, "", false, "", "", fmt.Errorf("unknown flag: %s", arg)
 		default:
 			targets = append(targets, arg)
 		}
@@ -139,7 +142,7 @@ func parseRulesInstallArgs(args []string) ([]string, string, bool, string, error
 
 	resolvedRoot, err := resolveProjectRoot(root, false)
 	if err != nil {
-		return nil, "", false, "", err
+		return nil, "", false, "", "", err
 	}
 
 	dedup := sliceToSet(targets)
@@ -150,10 +153,10 @@ func parseRulesInstallArgs(args []string) ([]string, string, bool, string, error
 	sort.Strings(targets)
 
 	if len(targets) == 0 {
-		return nil, "", false, "", fmt.Errorf("missing targets")
+		return nil, "", false, "", "", fmt.Errorf("missing targets")
 	}
 
-	return targets, resolvedRoot, quiet, profile, nil
+	return targets, resolvedRoot, quiet, profile, lang, nil
 }
 
 func (a *App) printRuleStatuses(root string, statuses []projectrules.Status) {
