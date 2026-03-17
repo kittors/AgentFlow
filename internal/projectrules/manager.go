@@ -83,8 +83,13 @@ func (m *Manager) Install(root string, targetNames []string, options InstallOpti
 		lang = config.DefaultLang
 	}
 
-	// Ensure ~/.agentflow/ has the latest rules before writing project references.
-	if err := m.ensureGlobalRules(targetNames, profile, lang); err != nil {
+	// Deploy full rules + modules to {root}/.agentflow/ so IDE agents
+	// can access them within the workspace (they cannot read ~/.agentflow/).
+	targetName := "codex"
+	if len(targetNames) > 0 {
+		targetName = targetNames[0]
+	}
+	if err := m.deployProjectRules(root, targetName, profile, lang); err != nil {
 		return nil, err
 	}
 
@@ -134,39 +139,27 @@ func (m *Manager) Install(root string, targetNames []string, options InstallOpti
 	return written, nil
 }
 
-// ensureGlobalRules deploys the full rules + modules to ~/.agentflow/
-// using the install package. This ensures project-level installs work
-// independently of whether a global install was ever performed.
-func (m *Manager) ensureGlobalRules(targetNames []string, profile, lang string) error {
-	// Use an Installer with defaults to deploy global rules.
-	// We import install indirectly to avoid circular deps — use the same
-	// logic the Installer uses: build rules content + deploy module dir.
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
+// deployProjectRules deploys the full compiled rules and module files
+// into {root}/.agentflow/ so IDE agents can read them within the workspace.
+// Unlike the global install (which writes to ~/.agentflow/), project-level
+// installs must keep everything inside the project directory because IDE
+// agents are restricted to the workspace.
+func (m *Manager) deployProjectRules(root, targetName, profile, lang string) error {
+	localDir := filepath.Join(root, config.GlobalRulesDir)
+	if err := os.MkdirAll(localDir, 0o755); err != nil {
 		return err
-	}
-
-	globalDir := filepath.Join(homeDir, config.GlobalRulesDir)
-	if err := os.MkdirAll(globalDir, 0o755); err != nil {
-		return err
-	}
-
-	// Pick the first target name for template rendering.
-	targetName := "codex"
-	if len(targetNames) > 0 {
-		targetName = targetNames[0]
 	}
 
 	rendered, err := buildGlobalRulesContent(targetName, profile, lang)
 	if err != nil {
 		return err
 	}
-	rulesPath := filepath.Join(globalDir, config.GlobalRulesFile)
+	rulesPath := filepath.Join(localDir, config.GlobalRulesFile)
 	if err := config.SafeWrite(rulesPath, []byte(rendered), 0o644); err != nil {
 		return err
 	}
 
-	return deployModuleDirTo(filepath.Join(globalDir, config.PluginDirName), lang)
+	return deployModuleDirTo(filepath.Join(localDir, config.PluginDirName), lang)
 }
 
 // Uninstall removes AgentFlow-managed project rule files from the given root.
@@ -220,6 +213,14 @@ func (m *Manager) Uninstall(root string, targetNames []string) ([]string, error)
 			}
 		}
 	}
+
+	// Clean project-local rules and modules deployed by project-level install.
+	localRulesPath := filepath.Join(root, config.GlobalRulesDir, config.GlobalRulesFile)
+	if config.IsAgentFlowFile(localRulesPath) {
+		_ = config.SafeRemove(localRulesPath)
+	}
+	_ = config.SafeRemove(filepath.Join(root, config.GlobalRulesDir, config.PluginDirName))
+
 	cleanEmptyParents(root, filepath.Join(root, ".agents", "skills", "agentflow", "SKILL.md"))
 	return removed, nil
 }
@@ -261,8 +262,9 @@ func buildWrites(target Target, profile, lang string) ([]writeFile, error) {
 	switch target.Name {
 	case "codex", "claude":
 		filename := rulesFilenameForCLITarget(target.Name)
-		globalRulesPath := filepath.ToSlash(filepath.Join("~", config.GlobalRulesDir, config.GlobalRulesFile))
-		globalModulesPath := filepath.ToSlash(filepath.Join("~", config.GlobalRulesDir, config.PluginDirName))
+		// Use project-relative paths so IDE agents can read them within the workspace.
+		globalRulesPath := filepath.ToSlash(filepath.Join(config.GlobalRulesDir, config.GlobalRulesFile))
+		globalModulesPath := filepath.ToSlash(filepath.Join(config.GlobalRulesDir, config.PluginDirName))
 		refContent := fmt.Sprintf(
 			"<!-- %s v1.0.0 -->\n\n"+
 				"> **[AgentFlow 工作流规则]**\n"+

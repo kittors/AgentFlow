@@ -29,6 +29,24 @@ func TestManagerInstallWritesExpectedFiles(t *testing.T) {
 		if !strings.Contains(string(data), "AGENTFLOW_ROUTER:") {
 			t.Fatalf("expected AgentFlow marker in %s", path)
 		}
+		// Paths should reference project-local .agentflow/ (not ~/.agentflow/).
+		content := string(data)
+		if strings.Contains(content, "~/.agentflow/") {
+			t.Fatalf("expected project-relative path, got global ~/.agentflow/ reference in %s", path)
+		}
+		if !strings.Contains(content, ".agentflow/AGENTS.md") {
+			t.Fatalf("expected reference to .agentflow/AGENTS.md in %s", path)
+		}
+	}
+
+	// Project-local .agentflow/ should contain full rules and modules.
+	localRulesFile := filepath.Join(root, ".agentflow", "AGENTS.md")
+	if _, err := os.Stat(localRulesFile); err != nil {
+		t.Fatalf("expected project-local .agentflow/AGENTS.md: %v", err)
+	}
+	localModuleDir := filepath.Join(root, ".agentflow", "agentflow")
+	if _, err := os.Stat(localModuleDir); err != nil {
+		t.Fatalf("expected project-local .agentflow/agentflow/ module dir: %v", err)
 	}
 }
 
