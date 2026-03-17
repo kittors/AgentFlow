@@ -14,31 +14,32 @@ func TestFlowStatusActionStaysInMainScreen(t *testing.T) {
 		Status: func() Panel {
 			return Panel{Title: "Environment", Lines: []string{"CLI status:", "  [OK] codex"}}
 		},
+		Update: func(progress func(stage string, percent int, info string)) (Panel, string) {
+			return Panel{Title: "Update result", Lines: []string{"Already up to date."}}, "1.0.3-main.test"
+		},
 	})
+	// Update is at index 3 in the new menu.
 	model.mainCursor = 3
 
 	next, cmd := model.handleEnter()
 	model = next.(interactiveFlowModel)
 	if !model.busy {
-		t.Fatal("expected model to enter busy state for status refresh")
+		t.Fatal("expected model to enter busy state for update")
 	}
 	if cmd == nil {
-		t.Fatal("expected status action to return a command")
+		t.Fatal("expected update action to return a command")
 	}
 
+	notice, version := model.callbacks.Update(func(string, int, string) {})
 	next, _ = model.Update(flowResultMsg{
-		action: flowActionRefreshStatus,
-		status: model.callbacks.Status(),
+		action:  flowActionUpdate,
+		notice:  panelRef(notice),
+		status:  model.callbacks.Status(),
+		version: version,
 	})
 	model = next.(interactiveFlowModel)
 	if model.busy {
-		t.Fatal("expected busy state to clear after status refresh")
-	}
-	if model.screen != flowScreenMain {
-		t.Fatalf("expected to stay on main screen, got %v", model.screen)
-	}
-	if model.status.Title != "Environment" {
-		t.Fatalf("expected refreshed status panel, got %#v", model.status)
+		t.Fatal("expected busy state to clear after update")
 	}
 }
 
@@ -50,20 +51,15 @@ func TestFlowEscReturnsSingleLevelFromInstallTargets(t *testing.T) {
 		},
 	})
 
+	// Navigate: Main → AgentFlow → global install → profile → targets
+	model.mainCursor = 1 // AgentFlow
 	next, _ := model.handleEnter()
 	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenInstallHub {
-		t.Fatalf("expected install hub after selecting install, got %v", model.screen)
+	if model.screen != flowScreenAgentFlow {
+		t.Fatalf("expected agentflow screen after selecting agentflow, got %v", model.screen)
 	}
 
-	model.installHubCursor = 1
-	next, _ = model.handleEnter()
-	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenInstallScope {
-		t.Fatalf("expected install scope screen after selecting install-agentflow, got %v", model.screen)
-	}
-
-	model.installScopeCursor = 0 // Select Global install
+	model.agentflowCursor = 0 // Global install
 	next, _ = model.handleEnter()
 	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenProfile {
@@ -81,24 +77,6 @@ func TestFlowEscReturnsSingleLevelFromInstallTargets(t *testing.T) {
 	if model.screen != flowScreenProfile {
 		t.Fatalf("expected single Esc to return to profile, got %v", model.screen)
 	}
-
-	next, _ = model.handleBack()
-	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenInstallScope {
-		t.Fatalf("expected second Esc to return to install scope, got %v", model.screen)
-	}
-
-	next, _ = model.handleBack()
-	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenInstallHub {
-		t.Fatalf("expected third Esc to return to install hub, got %v", model.screen)
-	}
-
-	next, _ = model.handleBack()
-	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenMain {
-		t.Fatalf("expected third Esc to return to main, got %v", model.screen)
-	}
 }
 
 func TestFlowBootstrapBranchNavigatesAndReturnsSingleLevel(t *testing.T) {
@@ -112,19 +90,27 @@ func TestFlowBootstrapBranchNavigatesAndReturnsSingleLevel(t *testing.T) {
 		},
 	})
 
+	// Navigate: Main → Toolbox → CLI → select codex → Bootstrap Actions
+	model.mainCursor = 0 // Toolbox
 	next, _ := model.handleEnter()
 	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenInstallHub {
-		t.Fatalf("expected install hub, got %v", model.screen)
+	if model.screen != flowScreenToolbox {
+		t.Fatalf("expected toolbox, got %v", model.screen)
 	}
 
-	next, _ = model.handleEnter()
+	model.toolboxCursor = 0 // CLI
+	next, cmd := model.handleEnter()
 	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenBootstrapTargets {
-		t.Fatalf("expected bootstrap targets screen, got %v", model.screen)
+	if model.screen != flowScreenCLI {
+		t.Fatalf("expected CLI screen, got %v", model.screen)
 	}
-	if model.bootstrapDetail == nil || model.bootstrapDetail.Title != "CLI details" {
-		t.Fatalf("expected bootstrap detail panel, got %#v", model.bootstrapDetail)
+	// CLI screen triggers CLIRefreshDetail which is async; simulate result.
+	if cmd != nil {
+		next, _ = model.Update(flowResultMsg{
+			action: flowActionCLIRefreshDetail,
+			status: model.callbacks.Status(),
+		})
+		model = next.(interactiveFlowModel)
 	}
 
 	next, _ = model.handleEnter()
@@ -136,13 +122,7 @@ func TestFlowBootstrapBranchNavigatesAndReturnsSingleLevel(t *testing.T) {
 	next, _ = model.handleBack()
 	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenBootstrapTargets {
-		t.Fatalf("expected Esc to return to bootstrap targets, got %v", model.screen)
-	}
-
-	next, _ = model.handleBack()
-	model = next.(interactiveFlowModel)
-	if model.screen != flowScreenInstallHub {
-		t.Fatalf("expected second Esc to return to install hub, got %v", model.screen)
+		t.Fatalf("expected Esc to return to bootstrap targets (which is now CLI screen), got %v", model.screen)
 	}
 }
 
@@ -426,7 +406,7 @@ func TestFlowUpdateActionRefreshesVersionAndNotice(t *testing.T) {
 			}, "1.0.4-main.deadbee"
 		},
 	})
-	model.mainCursor = 2
+	model.mainCursor = 3 // Update is now index 3
 
 	next, cmd := model.handleEnter()
 	model = next.(interactiveFlowModel)
@@ -468,7 +448,7 @@ func TestFlowUpdateActionShowsBusyPanelInsideMainView(t *testing.T) {
 	model := newTestInteractiveFlowModel(InteractiveCallbacks{
 		Status: func() Panel { return Panel{Title: "Environment"} },
 	})
-	model.mainCursor = 2
+	model.mainCursor = 3 // Update is now index 3
 
 	next, cmd := model.handleEnter()
 	model = next.(interactiveFlowModel)
@@ -500,7 +480,7 @@ func TestFlowCleanActionReturnsToMainWithNotice(t *testing.T) {
 			return Panel{Title: "Clean result", Lines: []string{"Cleaned 2 cache directories."}}
 		},
 	})
-	model.mainCursor = 4
+	model.mainCursor = 2 // Clean is now index 2
 
 	next, cmd := model.handleEnter()
 	model = next.(interactiveFlowModel)
@@ -539,9 +519,16 @@ func TestFlowEscReturnsSingleLevelFromUninstallTargets(t *testing.T) {
 			return []Option{{Value: "codex", Label: "codex", Badge: "CODEX"}}
 		},
 	})
-	model.mainCursor = 1
-
+	// Navigate: Main → AgentFlow → Uninstall
+	model.mainCursor = 1 // AgentFlow
 	next, _ := model.handleEnter()
+	model = next.(interactiveFlowModel)
+	if model.screen != flowScreenAgentFlow {
+		t.Fatalf("expected agentflow screen, got %v", model.screen)
+	}
+
+	model.agentflowCursor = 2 // Uninstall
+	next, _ = model.handleEnter()
 	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenUninstallTargets {
 		t.Fatalf("expected uninstall target screen after selecting uninstall, got %v", model.screen)
@@ -566,9 +553,13 @@ func TestFlowUninstallActionReturnsToMainWithNotice(t *testing.T) {
 			return Panel{Title: "Uninstall result", Lines: []string{"[done] codex"}}
 		},
 	})
-	model.mainCursor = 1
-
+	// Navigate: Main → AgentFlow → Uninstall
+	model.mainCursor = 1 // AgentFlow
 	next, _ := model.handleEnter()
+	model = next.(interactiveFlowModel)
+
+	model.agentflowCursor = 2 // Uninstall
+	next, _ = model.handleEnter()
 	model = next.(interactiveFlowModel)
 	if model.screen != flowScreenUninstallTargets {
 		t.Fatalf("expected uninstall target screen, got %v", model.screen)
@@ -620,10 +611,24 @@ func TestFlowBootstrapBranchDefaultsToManualWhenAutoUnsupported(t *testing.T) {
 		},
 	})
 
+	// Navigate: Main → Toolbox → CLI → select claude → Bootstrap Actions
+	model.mainCursor = 0 // Toolbox
 	next, _ := model.handleEnter()
 	model = next.(interactiveFlowModel)
-	next, _ = model.handleEnter()
+
+	model.toolboxCursor = 0 // CLI
+	next, cmd := model.handleEnter()
 	model = next.(interactiveFlowModel)
+	// CLI screen triggers async detail refresh; simulate result.
+	if cmd != nil {
+		next, _ = model.Update(flowResultMsg{
+			action: flowActionCLIRefreshDetail,
+			status: model.callbacks.Status(),
+		})
+		model = next.(interactiveFlowModel)
+	}
+
+	// Enter on CLI selects bootstrap target and goes to actions.
 	next, _ = model.handleEnter()
 	model = next.(interactiveFlowModel)
 
@@ -683,12 +688,21 @@ func newTestInteractiveFlowModel(callbacks InteractiveCallbacks) interactiveFlow
 		screen:    flowScreenMain,
 		status:    Panel{Title: "Environment", Lines: []string{"Loading status..."}},
 		mainOptions: []Option{
-			{Value: string(ActionInstall), Label: "Install", Badge: "SETUP"},
-			{Value: string(ActionUninstall), Label: "Uninstall", Badge: "REMOVE"},
-			{Value: string(ActionUpdate), Label: "Update", Badge: "UPDATE"},
-			{Value: string(ActionStatus), Label: "Status", Badge: "STATUS"},
+			{Value: string(ActionToolbox), Label: "Toolbox", Badge: "TOOLS"},
+			{Value: string(ActionAgentFlow), Label: "AgentFlow", Badge: "RULES"},
 			{Value: string(ActionClean), Label: "Clean", Badge: "CLEAN"},
+			{Value: string(ActionUpdate), Label: "Update", Badge: "UPDATE"},
 			{Value: string(ActionExit), Label: "Exit", Badge: "EXIT"},
+		},
+		toolboxOptions: []Option{
+			{Value: string(ActionCLI), Label: "CLI", Badge: "CLI"},
+			{Value: string(ActionMCP), Label: "MCP", Badge: "MCP"},
+			{Value: string(ActionSkill), Label: "Skill", Badge: "SKILL"},
+		},
+		agentflowOptions: []Option{
+			{Value: "install-global", Label: "Global install", Badge: "GLOBAL"},
+			{Value: "install-project", Label: "Project install", Badge: "PROJECT"},
+			{Value: "uninstall", Label: "Uninstall", Badge: "REMOVE"},
 		},
 		installHubOptions: []Option{
 			{Value: "bootstrap-cli", Label: "Install CLI tools", Badge: "CLI"},

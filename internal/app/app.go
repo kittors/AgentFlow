@@ -108,6 +108,7 @@ func (a *App) runInteractiveMainMenu() int {
 
 	if err := ui.RunInteractiveFlow(a.Catalog, a.Version, ui.InteractiveCallbacks{
 		Status:                  a.statusPanel,
+		CLIDetailPanel:          a.cliDetailPanel,
 		MCPTargetOptions:        a.mcpTargetOptions,
 		MCPInstallOptions:       a.mcpInstallOptions,
 		MCPRemoveOptions:        a.mcpRemoveOptions,
@@ -784,6 +785,140 @@ func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
 
 	return ui.Panel{
 		Title: fmt.Sprintf(a.Catalog.Msg("%s 安装信息", "%s install details"), status.Target.DisplayName),
+		Lines: lines,
+	}
+}
+
+// cliDetailPanel returns a rich detail panel for a CLI, showing installation status,
+// configuration, installed MCPs, installed skills, and version information.
+func (a *App) cliDetailPanel(targetName string) ui.Panel {
+	status, err := a.Installer.DetectTargetStatus(targetName)
+	if err != nil {
+		return errorPanel(a.Catalog.Msg("CLI 详情", "CLI details"), err)
+	}
+
+	greenDot := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("●")
+	grayDot := lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Render("○")
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("230"))
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	blueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+
+	lines := make([]string, 0, 40)
+
+	// ── CLI Status ──
+	if status.CLIInstalled {
+		location := status.CLIPath
+		if strings.TrimSpace(status.CLIPathScope) != "" {
+			location = fmt.Sprintf("%s (%s)", status.CLIPath, status.CLIPathScope)
+		}
+		lines = append(lines, fmt.Sprintf("%s %s: %s", greenDot,
+			labelStyle.Render(a.Catalog.Msg("CLI 状态", "CLI status")),
+			valueStyle.Render(a.Catalog.Msg("已安装", "installed"))))
+		lines = append(lines, fmt.Sprintf("  %s", mutedStyle.Render(location)))
+	} else {
+		lines = append(lines, fmt.Sprintf("%s %s: %s", grayDot,
+			labelStyle.Render(a.Catalog.Msg("CLI 状态", "CLI status")),
+			mutedStyle.Render(a.Catalog.Msg("未安装", "not installed"))))
+	}
+
+	// ── AgentFlow Status ──
+	if status.AgentFlowInstalled {
+		lines = append(lines, fmt.Sprintf("%s %s: %s", greenDot,
+			labelStyle.Render("AgentFlow"),
+			valueStyle.Render(a.Catalog.Msg("已安装", "installed"))))
+	} else {
+		lines = append(lines, fmt.Sprintf("%s %s: %s", grayDot,
+			labelStyle.Render("AgentFlow"),
+			mutedStyle.Render(a.Catalog.Msg("未安装", "not installed"))))
+	}
+
+	// ── Configuration (only when CLI installed) ──
+	if status.CLIInstalled {
+		target := status.Target
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 配置状态 ───", "─── Configuration ───")))
+
+		if target.APIKeyEnv != "" {
+			envVal := a.Installer.GetEnvOrRC(target.APIKeyEnv)
+			if envVal == "" && target.Name == "codex" {
+				envVal = a.Installer.ReadCodexAuthKey()
+			}
+			if envVal != "" {
+				displayVal := envVal
+				if len(envVal) > 6 {
+					displayVal = envVal[:3] + strings.Repeat("*", len(envVal)-6) + envVal[len(envVal)-3:]
+				}
+				lines = append(lines, fmt.Sprintf("  %s API Key: %s", greenDot, valueStyle.Render(displayVal)))
+			} else {
+				lines = append(lines, fmt.Sprintf("  %s API Key: %s", grayDot, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+			}
+		}
+
+		if target.BaseURLEnv != "" {
+			envVal := a.Installer.GetEnvOrRC(target.BaseURLEnv)
+			if envVal == "" && target.Name == "codex" {
+				envVal = a.Installer.ReadCodexConfigField("base_url")
+			}
+			if envVal != "" {
+				lines = append(lines, fmt.Sprintf("  %s Base URL: %s", greenDot, valueStyle.Render(strings.TrimRight(envVal, "/"))))
+			} else {
+				lines = append(lines, fmt.Sprintf("  %s Base URL: %s", grayDot, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+			}
+		}
+
+		modelVal := a.Installer.ReadCLIConfigModel(target.Name)
+		if modelVal != "" {
+			lines = append(lines, fmt.Sprintf("  %s %s: %s", greenDot,
+				a.Catalog.Msg("模型", "Model"), valueStyle.Render(modelVal)))
+		} else {
+			lines = append(lines, fmt.Sprintf("  %s %s: %s", grayDot,
+				a.Catalog.Msg("模型", "Model"), mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+		}
+	}
+
+	// ── Installed MCP ──
+	mcpList := a.mcpListPanel(targetName)
+	if len(mcpList.Lines) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 MCP ───", "─── Installed MCP ───")))
+		for _, line := range mcpList.Lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "─") || strings.HasPrefix(trimmed, "=") {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("  %s %s", valueStyle.Render("✔"), trimmed))
+		}
+	} else {
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 MCP ───", "─── Installed MCP ───")))
+		lines = append(lines, fmt.Sprintf("  %s %s", grayDot, mutedStyle.Render(a.Catalog.Msg("暂无", "none"))))
+	}
+
+	// ── Installed Skills ──
+	skillList := a.skillListPanel(targetName)
+	if len(skillList.Lines) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 Skill ───", "─── Installed Skills ───")))
+		for _, line := range skillList.Lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "─") || strings.HasPrefix(trimmed, "=") {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("  %s %s", blueStyle.Render("✔"), trimmed))
+		}
+	} else {
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render(a.Catalog.Msg("─── 已安装 Skill ───", "─── Installed Skills ───")))
+		lines = append(lines, fmt.Sprintf("  %s %s", grayDot, mutedStyle.Render(a.Catalog.Msg("暂无", "none"))))
+	}
+
+	// ── Version ──
+	lines = append(lines, "")
+	lines = append(lines, a.Installer.RuntimeSummaryLines()...)
+
+	return ui.Panel{
+		Title: fmt.Sprintf(a.Catalog.Msg("%s 详情", "%s details"), status.Target.DisplayName),
 		Lines: lines,
 	}
 }

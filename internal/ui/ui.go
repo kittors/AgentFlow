@@ -25,6 +25,9 @@ const (
 	ActionStatus       Action = "status"
 	ActionClean        Action = "clean"
 	ActionExit         Action = "exit"
+	ActionToolbox      Action = "toolbox"
+	ActionAgentFlow    Action = "agentflow"
+	ActionCLI          Action = "cli"
 )
 
 type Option struct {

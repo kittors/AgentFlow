@@ -19,6 +19,7 @@ import (
 
 type InteractiveCallbacks struct {
 	Status                  func() Panel
+	CLIDetailPanel          func(target string) Panel
 	MCPTargetOptions        func() []Option
 	MCPInstallOptions       func() []Option
 	MCPRemoveOptions        func(target string) []Option
@@ -68,6 +69,9 @@ type flowScreen int
 
 const (
 	flowScreenMain flowScreen = iota
+	flowScreenToolbox
+	flowScreenCLI
+	flowScreenAgentFlow
 	flowScreenInstallHub
 	flowScreenMCPTargets
 	flowScreenMCPActions
@@ -94,6 +98,7 @@ type flowAction int
 
 const (
 	flowActionRefreshStatus flowAction = iota
+	flowActionCLIRefreshDetail
 	flowActionMCPRefreshSummary
 	flowActionMCPList
 	flowActionMCPInstall
@@ -127,6 +132,7 @@ type flowResultMsg struct {
 	mcpSummary      *Panel
 	skillSummary    *Panel
 	skillOptions    []Option
+	cliDetail       *Panel
 }
 
 type flowTickMsg struct{}
@@ -158,6 +164,13 @@ type interactiveFlowModel struct {
 	updateProgress *updateProgressState // shared progress polled by tick
 
 	mainOptions            []Option
+	toolboxOptions         []Option
+	toolboxCursor          int
+	cliOptions             []Option
+	cliCursor              int
+	agentflowOptions       []Option
+	agentflowCursor        int
+	cliDetail              *Panel
 	installHubOptions      []Option
 	projectRoot            string
 	mcpTargets             []Option
@@ -383,40 +396,74 @@ func RunInteractiveFlow(catalog i18n.Catalog, version string, callbacks Interact
 		},
 		mainOptions: []Option{
 			{
-				Value:       string(ActionInstall),
-				Label:       catalog.Msg("安装 / 卸载", "Install / Uninstall"),
-				Badge:       catalog.Msg("安装", "SETUP"),
-				Description: catalog.Msg("安装或卸载 CLI 工具、AgentFlow 全局/项目级配置。", "Install or uninstall CLI tools and AgentFlow global/project configurations."),
+				Value:       string(ActionToolbox),
+				Label:       catalog.Msg("🧰 工具箱", "🧰 Toolbox"),
+				Badge:       catalog.Msg("工具", "TOOLS"),
+				Description: catalog.Msg("管理 CLI 工具、MCP Servers 和 Skills。", "Manage CLI tools, MCP servers, and skills."),
 			},
 			{
-				Value:       string(ActionMCP),
-				Label:       catalog.Msg("管理 MCP Servers", "Manage MCP servers"),
-				Badge:       catalog.Msg("MCP", "MCP"),
-				Description: catalog.Msg("为任意 CLI/IDE 写入、查看与移除 MCP servers 配置，并置顶推荐 Context7 / Playwright / Filesystem / Tavily。", "Write, inspect, and remove MCP server configs for any CLI/IDE, with pinned recommendations like Context7 / Playwright / Filesystem / Tavily."),
-			},
-			{
-				Value:       string(ActionSkill),
-				Label:       catalog.Msg("管理 Skills", "Manage skills"),
-				Badge:       catalog.Msg("SKILL", "SKILL"),
-				Description: catalog.Msg("为任意 CLI 安装、查看与卸载 skills（支持从 skills.sh/GitHub 安装）。", "Install, inspect, and uninstall skills for any CLI (supports skills.sh/GitHub sources)."),
+				Value:       string(ActionAgentFlow),
+				Label:       catalog.Msg("⚡ AgentFlow", "⚡ AgentFlow"),
+				Badge:       catalog.Msg("规则", "RULES"),
+				Description: catalog.Msg("安装或卸载 AgentFlow 规则（全局/项目级）。", "Install or uninstall AgentFlow rules (global/project-level)."),
 			},
 			{
 				Value:       string(ActionClean),
-				Label:       catalog.Msg("清理缓存", "Clean caches"),
+				Label:       catalog.Msg("🧹 清理缓存", "🧹 Clean caches"),
 				Badge:       catalog.Msg("清理", "CLEAN"),
-				Description: catalog.Msg("清除 AgentFlow 生成的缓存、临时目录和派生产物，保持环境整洁。", "Remove AgentFlow caches, temporary directories, and derived artifacts to keep the environment tidy."),
+				Description: catalog.Msg("清除 AgentFlow 生成的缓存、临时目录和派生产物。", "Remove AgentFlow caches, temporary directories, and derived artifacts."),
 			},
 			{
 				Value:       string(ActionUpdate),
-				Label:       catalog.Msg("检测更新", "Check for updates"),
+				Label:       catalog.Msg("⬆️  更新", "⬆️  Update"),
 				Badge:       catalog.Msg("更新", "UPDATE"),
-				Description: catalog.Msg("检测并安装 AgentFlow 的最新版本，更新成功后可选择重启。", "Check for and install the latest AgentFlow version, with an option to restart after a successful update."),
+				Description: catalog.Msg("检测并安装 AgentFlow 的最新版本。", "Check for and install the latest AgentFlow version."),
 			},
 			{
 				Value:       string(ActionExit),
-				Label:       catalog.Msg("退出", "Exit"),
+				Label:       catalog.Msg("🚪 退出", "🚪 Exit"),
 				Badge:       catalog.Msg("退出", "EXIT"),
 				Description: catalog.Msg("退出交互菜单并返回终端。", "Leave the interactive menu and return to the terminal."),
+			},
+		},
+		toolboxOptions: []Option{
+			{
+				Value:       string(ActionCLI),
+				Label:       catalog.Msg("CLI 工具", "CLI Tools"),
+				Badge:       "CLI",
+				Description: catalog.Msg("安装、配置和管理 Codex / Claude Code 等 CLI 工具。", "Install, configure, and manage CLI tools like Codex / Claude Code."),
+			},
+			{
+				Value:       string(ActionMCP),
+				Label:       catalog.Msg("MCP Servers", "MCP Servers"),
+				Badge:       "MCP",
+				Description: catalog.Msg("为 CLI 写入、查看与移除 MCP servers 配置。", "Write, inspect, and remove MCP server configs for CLIs."),
+			},
+			{
+				Value:       string(ActionSkill),
+				Label:       catalog.Msg("Skills", "Skills"),
+				Badge:       "SKILL",
+				Description: catalog.Msg("为 CLI 安装、查看与卸载 skills。", "Install, inspect, and uninstall skills for CLIs."),
+			},
+		},
+		agentflowOptions: []Option{
+			{
+				Value:       "install-global",
+				Label:       catalog.Msg("全局安装", "Global install"),
+				Badge:       catalog.Msg("全局", "GLOBAL"),
+				Description: catalog.Msg("安装 AgentFlow 规则到全局用户配置目录（~/.codex, ~/.claude），所有项目共享。", "Install AgentFlow rules to global user config dirs, shared across all projects."),
+			},
+			{
+				Value:       "install-project",
+				Label:       catalog.Msg("项目级安装", "Project install"),
+				Badge:       catalog.Msg("项目", "PROJECT"),
+				Description: catalog.Msg("安装 AgentFlow 规则到当前项目目录，仅对当前项目生效。", "Install AgentFlow rules to the current project directory."),
+			},
+			{
+				Value:       "uninstall",
+				Label:       catalog.Msg("卸载 AgentFlow", "Uninstall AgentFlow"),
+				Badge:       catalog.Msg("卸载", "REMOVE"),
+				Description: catalog.Msg("卸载已安装的 AgentFlow 规则（全局/项目级）。", "Remove installed AgentFlow rules (global/project-level)."),
 			},
 		},
 		installHubOptions: []Option{
@@ -540,6 +587,9 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if value.skillSummary != nil {
 			m.skillSummary = value.skillSummary
 		}
+		if value.cliDetail != nil {
+			m.cliDetail = value.cliDetail
+		}
 		switch value.action {
 		case flowActionRefreshStatus:
 			m.bootstrapOptions = m.bootstrapOptionsList()
@@ -549,6 +599,8 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = value.notice
 			}
 			m.refreshBootstrapDetail()
+		case flowActionCLIRefreshDetail:
+			// CLI detail was already stored above via cliDetail field.
 		case flowActionProjectRulesInstall:
 			if value.notice != nil {
 				m.notice = value.notice
@@ -764,6 +816,8 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if !m.focusDetails && m.currentCursor() != prev {
 			switch m.screen {
+			case flowScreenCLI:
+				return m.startBusy(flowActionCLIRefreshDetail, m.catalog.Msg("正在读取 CLI 详情…", "Loading CLI details..."))
 			case flowScreenSkillTargets:
 				return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 			case flowScreenMCPTargets:
@@ -780,6 +834,8 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if !m.focusDetails && m.currentCursor() != prev {
 			switch m.screen {
+			case flowScreenCLI:
+				return m.startBusy(flowActionCLIRefreshDetail, m.catalog.Msg("正在读取 CLI 详情…", "Loading CLI details..."))
 			case flowScreenSkillTargets:
 				return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 			case flowScreenMCPTargets:
@@ -796,6 +852,8 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if !m.focusDetails && m.currentCursor() != prev {
 			switch m.screen {
+			case flowScreenCLI:
+				return m.startBusy(flowActionCLIRefreshDetail, m.catalog.Msg("正在读取 CLI 详情…", "Loading CLI details..."))
 			case flowScreenSkillTargets:
 				return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 			case flowScreenMCPTargets:
@@ -812,6 +870,8 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if !m.focusDetails && m.currentCursor() != prev {
 			switch m.screen {
+			case flowScreenCLI:
+				return m.startBusy(flowActionCLIRefreshDetail, m.catalog.Msg("正在读取 CLI 详情…", "Loading CLI details..."))
 			case flowScreenSkillTargets:
 				return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 			case flowScreenMCPTargets:
@@ -828,6 +888,8 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if !m.focusDetails && m.currentCursor() != prev {
 			switch m.screen {
+			case flowScreenCLI:
+				return m.startBusy(flowActionCLIRefreshDetail, m.catalog.Msg("正在读取 CLI 详情…", "Loading CLI details..."))
 			case flowScreenSkillTargets:
 				return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 			case flowScreenMCPTargets:
@@ -844,6 +906,8 @@ func (m interactiveFlowModel) handleKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if !m.focusDetails && m.currentCursor() != prev {
 			switch m.screen {
+			case flowScreenCLI:
+				return m.startBusy(flowActionCLIRefreshDetail, m.catalog.Msg("正在读取 CLI 详情…", "Loading CLI details..."))
 			case flowScreenSkillTargets:
 				return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
 			case flowScreenMCPTargets:
@@ -906,10 +970,16 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case flowScreenMain:
 		return m, tea.Quit
+	case flowScreenToolbox:
+		m.screen = flowScreenMain
+	case flowScreenCLI:
+		m.screen = flowScreenToolbox
+	case flowScreenAgentFlow:
+		m.screen = flowScreenMain
 	case flowScreenInstallHub:
 		m.screen = flowScreenMain
 	case flowScreenMCPTargets:
-		m.screen = flowScreenMain
+		m.screen = flowScreenToolbox
 	case flowScreenMCPActions:
 		m.screen = flowScreenMCPTargets
 	case flowScreenMCPInstall, flowScreenMCPRemove:
@@ -919,7 +989,7 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 			m.projectInstallMode = false
 			m.screen = flowScreenInstallHub
 		} else {
-			m.screen = flowScreenMain
+			m.screen = flowScreenToolbox
 		}
 	case flowScreenSkillScope:
 		m.screen = flowScreenSkillTargets
@@ -936,7 +1006,7 @@ func (m interactiveFlowModel) handleBack() (tea.Model, tea.Cmd) {
 	case flowScreenSkillInstall, flowScreenSkillUninstall:
 		m.screen = flowScreenSkillActions
 	case flowScreenBootstrapTargets:
-		m.screen = flowScreenInstallHub
+		m.screen = flowScreenCLI
 	case flowScreenBootstrapActions:
 		m.screen = flowScreenBootstrapTargets
 		// Reset post-install state so selecting a different CLI target starts fresh.
@@ -1070,13 +1140,48 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case flowScreenMain:
 		switch Action(m.mainOptions[m.mainCursor].Value) {
-		case ActionInstall:
-			m.screen = flowScreenInstallHub
-			m.installHubCursor = 0
+		case ActionToolbox:
+			m.screen = flowScreenToolbox
+			m.toolboxCursor = 0
 			m.notice = nil
-			// Do NOT start any async operation here.
-			// statusPanel() runs 13+ shell commands + network requests which blocks
-			// the TUI for many seconds. Use the already-cached m.status instead.
+			return m, nil
+		case ActionAgentFlow:
+			m.screen = flowScreenAgentFlow
+			m.agentflowCursor = 0
+			m.notice = nil
+			return m, nil
+		case ActionUpdate:
+			return m.startBusy(flowActionUpdate, m.catalog.Msg("正在检查最新版本并更新…", "Checking the latest release and updating..."))
+		case ActionClean:
+			return m.startBusy(flowActionClean, m.catalog.Msg("正在清理缓存…", "Cleaning caches..."))
+		case ActionExit:
+			return m, tea.Quit
+		}
+	case flowScreenToolbox:
+		if len(m.toolboxOptions) == 0 {
+			return m, nil
+		}
+		switch Action(m.toolboxOptions[m.toolboxCursor].Value) {
+		case ActionCLI:
+			// Build CLI options from bootstrap options.
+			m.bootstrapOptions = m.bootstrapOptionsList()
+			if len(m.bootstrapOptions) == 0 {
+				m.notice = panelRef(Panel{
+					Title: m.catalog.Msg("CLI", "CLI"),
+					Lines: []string{m.catalog.Msg("未检测到可管理的 CLI。", "No manageable CLIs detected.")},
+				})
+				return m, nil
+			}
+			m.cliOptions = cloneOptions(m.bootstrapOptions)
+			m.screen = flowScreenCLI
+			m.cliCursor = 0
+			m.notice = nil
+			m.focusDetails = false
+			m.detailScroll = 0
+			// Refresh CLI detail panel for the first CLI.
+			if len(m.cliOptions) > 0 {
+				return m.startBusy(flowActionCLIRefreshDetail, m.catalog.Msg("正在读取 CLI 详情…", "Loading CLI details..."))
+			}
 			return m, nil
 		case ActionMCP:
 			if m.callbacks.MCPTargetOptions == nil {
@@ -1124,9 +1229,55 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.focusDetails = false
 			m.detailScroll = 0
 			return m.startBusy(flowActionSkillRefreshSummary, m.catalog.Msg("正在读取项目/全局 Skill 信息…", "Loading project/global skill status..."))
-		case ActionUninstall:
+		}
+	case flowScreenCLI:
+		if len(m.cliOptions) == 0 {
+			return m, nil
+		}
+		m.selectedBootstrapTarget = m.cliOptions[m.cliCursor].Value
+		m.screen = flowScreenBootstrapActions
+		m.bootstrapActionOptions = m.defaultBootstrapActionOptions()
+		m.bootstrapActionCursor = 0
+		// Pre-select "manual" if auto install is not supported for this target.
+		if m.callbacks.BootstrapAutoSupported != nil && !m.callbacks.BootstrapAutoSupported(m.selectedBootstrapTarget) {
+			m.bootstrapActionCursor = 1
+		}
+		m.notice = nil
+		m.focusDetails = false
+		m.detailScroll = 0
+		m.refreshBootstrapDetail()
+		return m, nil
+	case flowScreenAgentFlow:
+		if len(m.agentflowOptions) == 0 {
+			return m, nil
+		}
+		switch m.agentflowOptions[m.agentflowCursor].Value {
+		case "install-global":
+			// Global install: select profile → select targets → install
+			m.projectInstallMode = false
+			m.screen = flowScreenProfile
+			m.profileCursor = 2 // default to "full"
+			m.notice = nil
+			return m, nil
+		case "install-project":
+			// Project install: select targets → select profile → install
+			m.projectInstallMode = true
+			if m.callbacks.UninstallProjectOptions != nil {
+				m.skillTargets = cloneOptions(m.callbacks.UninstallProjectOptions())
+			}
+			if m.callbacks.SkillTargetOptions != nil {
+				m.skillTargets = cloneOptions(m.callbacks.SkillTargetOptions())
+			}
+			m.installOptions = m.installOptionsList()
+			m.screen = flowScreenInstallTargets
+			m.installCursor = 0
+			m.notice = nil
+			return m, nil
+		case "uninstall":
 			m.uninstallCLIMode = false
-			m.uninstallOptions = cloneOptions(m.callbacks.UninstallOptions())
+			if m.callbacks.UninstallOptions != nil {
+				m.uninstallOptions = cloneOptions(m.callbacks.UninstallOptions())
+			}
 			if len(m.uninstallOptions) == 0 {
 				m.notice = panelRef(Panel{
 					Title: m.catalog.Msg("卸载结果", "Uninstall result"),
@@ -1137,31 +1288,6 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 			m.screen = flowScreenUninstallTargets
 			m.notice = nil
 			return m, nil
-		case ActionUninstallCLI:
-			m.uninstallCLIMode = true
-			if m.callbacks.UninstallCLIOptions != nil {
-				m.uninstallOptions = cloneOptions(m.callbacks.UninstallCLIOptions())
-			} else {
-				m.uninstallOptions = nil
-			}
-			if len(m.uninstallOptions) == 0 {
-				m.notice = panelRef(Panel{
-					Title: m.catalog.Msg("卸载结果", "Uninstall result"),
-					Lines: []string{m.catalog.Msg("未检测到可卸载的 CLI。", "No CLI installations found.")},
-				})
-				return m, nil
-			}
-			m.screen = flowScreenUninstallTargets
-			m.notice = nil
-			return m, nil
-		case ActionUpdate:
-			return m.startBusy(flowActionUpdate, m.catalog.Msg("正在检查最新版本并更新…", "Checking the latest release and updating..."))
-		case ActionStatus:
-			return m.startBusy(flowActionRefreshStatus, m.catalog.Msg("正在刷新状态…", "Refreshing status..."))
-		case ActionClean:
-			return m.startBusy(flowActionClean, m.catalog.Msg("正在清理缓存…", "Cleaning caches..."))
-		case ActionExit:
-			return m, tea.Quit
 		}
 	case flowScreenMCPTargets:
 		if len(m.mcpTargets) == 0 {
@@ -1776,6 +1902,33 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 			cursor = len(m.mainOptions) - 1
 		}
 		m.mainCursor = cursor
+	case flowScreenToolbox:
+		if len(m.toolboxOptions) == 0 {
+			m.toolboxCursor = 0
+			break
+		}
+		if cursor > len(m.toolboxOptions)-1 {
+			cursor = len(m.toolboxOptions) - 1
+		}
+		m.toolboxCursor = cursor
+	case flowScreenCLI:
+		if len(m.cliOptions) == 0 {
+			m.cliCursor = 0
+			break
+		}
+		if cursor > len(m.cliOptions)-1 {
+			cursor = len(m.cliOptions) - 1
+		}
+		m.cliCursor = cursor
+	case flowScreenAgentFlow:
+		if len(m.agentflowOptions) == 0 {
+			m.agentflowCursor = 0
+			break
+		}
+		if cursor > len(m.agentflowOptions)-1 {
+			cursor = len(m.agentflowOptions) - 1
+		}
+		m.agentflowCursor = cursor
 	case flowScreenInstallHub:
 		if len(m.installHubOptions) == 0 {
 			m.installHubCursor = 0
@@ -1971,6 +2124,12 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 
 func (m interactiveFlowModel) currentCursor() int {
 	switch m.screen {
+	case flowScreenToolbox:
+		return m.toolboxCursor
+	case flowScreenCLI:
+		return m.cliCursor
+	case flowScreenAgentFlow:
+		return m.agentflowCursor
 	case flowScreenInstallHub:
 		return m.installHubCursor
 	case flowScreenMCPTargets:
@@ -2018,6 +2177,12 @@ func (m interactiveFlowModel) currentCursor() int {
 
 func (m interactiveFlowModel) currentOptionsLen() int {
 	switch m.screen {
+	case flowScreenToolbox:
+		return len(m.toolboxOptions)
+	case flowScreenCLI:
+		return len(m.cliOptions)
+	case flowScreenAgentFlow:
+		return len(m.agentflowOptions)
 	case flowScreenInstallHub:
 		return len(m.installHubOptions)
 	case flowScreenMCPTargets:
@@ -2109,6 +2274,22 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 			return flowResultMsg{
 				action: action,
 				status: m.callbacks.Status(),
+			}
+		case flowActionCLIRefreshDetail:
+			var detail Panel
+			if m.callbacks.CLIDetailPanel != nil {
+				target := ""
+				if len(m.cliOptions) > 0 && m.cliCursor < len(m.cliOptions) {
+					target = m.cliOptions[m.cliCursor].Value
+				}
+				if target != "" {
+					detail = m.callbacks.CLIDetailPanel(target)
+				}
+			}
+			return flowResultMsg{
+				action:    action,
+				status:    m.callbacks.Status(),
+				cliDetail: panelRef(detail),
 			}
 		case flowActionInstallHubRefresh:
 			// Only call Status() — it's lightweight.
@@ -2398,6 +2579,43 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 	model.toast = m.toast
 
 	switch m.screen {
+	case flowScreenToolbox:
+		model.subtitle = m.catalog.Msg("选择要管理的工具类型。Esc 返回主菜单。", "Choose the tool category to manage. Press Esc to return.")
+		model.hint = m.catalog.Msg("↑/↓ 切换类型，Enter 进入，Esc 返回。", "Use ↑/↓ to switch category, Enter to continue, Esc to go back.")
+		model.options = cloneOptions(m.toolboxOptions)
+		model.cursor = m.toolboxCursor
+		panels := make([]Panel, 0, 2)
+		if m.notice != nil {
+			panels = append(panels, *m.notice)
+		}
+		panels = append(panels, m.status)
+		model.panels = panels
+	case flowScreenCLI:
+		model.subtitle = m.catalog.Msg("选择要管理的 CLI 工具。Esc 返回工具箱。", "Choose the CLI tool to manage. Press Esc to return to toolbox.")
+		model.hint = m.catalog.Msg("↑/↓ 切换 CLI，Enter 进入安装/配置，Esc 返回。", "Use ↑/↓ to switch CLI, Enter to install/configure, Esc to go back.")
+		model.options = cloneOptions(m.cliOptions)
+		model.cursor = m.cliCursor
+		panels := make([]Panel, 0, 2)
+		if m.notice != nil {
+			panels = append(panels, *m.notice)
+		}
+		if m.cliDetail != nil {
+			panels = append(panels, *m.cliDetail)
+		} else {
+			panels = append(panels, m.status)
+		}
+		model.panels = panels
+	case flowScreenAgentFlow:
+		model.subtitle = fmt.Sprintf(m.catalog.Msg("管理 AgentFlow 规则。当前目录: %s。Esc 返回主菜单。", "Manage AgentFlow rules. Current directory: %s. Press Esc to return."), m.projectRoot)
+		model.hint = m.catalog.Msg("↑/↓ 选择操作，Enter 执行，Esc 返回。", "Use ↑/↓ to choose an action, Enter to run, Esc to go back.")
+		model.options = cloneOptions(m.agentflowOptions)
+		model.cursor = m.agentflowCursor
+		panels := make([]Panel, 0, 2)
+		if m.notice != nil {
+			panels = append(panels, *m.notice)
+		}
+		panels = append(panels, m.status)
+		model.panels = panels
 	case flowScreenInstallHub:
 		model.subtitle = m.catalog.Msg("先决定要安装 CLI 工具，还是把 AgentFlow 写入已经存在的 CLI。Esc 返回主菜单。", "Choose whether to install CLI tools first, or write AgentFlow into CLIs that already exist. Press Esc to return.")
 		model.hint = m.catalog.Msg("↑/↓ 切换安装路径，Enter 继续，Esc 返回。", "Use ↑/↓ to choose the install path, Enter to continue, Esc to go back.")
