@@ -885,6 +885,19 @@ func (a *App) cliDetailPanel(targetName string) ui.Panel {
 			lines = append(lines, fmt.Sprintf("  %s %s: %s", grayDot,
 				a.Catalog.Msg("模型", "Model"), mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
 		}
+
+		// Reasoning level (Codex only).
+		if target.Name == "codex" {
+			reasoningVal := a.Installer.ReadCodexConfigField("model_reasoning_effort")
+			reasoningLabel := a.Catalog.Msg("思考等级", "Thinking Level")
+			if reasoningVal != "" {
+				lines = append(lines, fmt.Sprintf("  %s %s: %s",
+					greenDot, reasoningLabel, valueStyle.Render(reasoningVal)))
+			} else {
+				lines = append(lines, fmt.Sprintf("  %s %s: %s",
+					grayDot, reasoningLabel, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+			}
+		}
 	}
 
 	// ── Installed MCP ──

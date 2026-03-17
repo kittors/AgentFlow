@@ -334,10 +334,17 @@ func (m interactiveFlowModel) runActionCmd(action flowAction) tea.Cmd {
 			if m.callbacks.WriteEnvConfig != nil {
 				notice = m.callbacks.WriteEnvConfig(configEnvVars)
 			}
+			// Refresh bootstrap detail so the config status panel shows new values.
+			var detail *Panel
+			if m.callbacks.BootstrapDetails != nil {
+				d := m.callbacks.BootstrapDetails(selectedBootstrapTarget)
+				detail = &d
+			}
 			return flowResultMsg{
-				action: action,
-				notice: panelRef(notice),
-				status: m.callbacks.Status(),
+				action:          action,
+				notice:          panelRef(notice),
+				status:          m.callbacks.Status(),
+				bootstrapDetail: detail,
 			}
 		default:
 			return flowResultMsg{

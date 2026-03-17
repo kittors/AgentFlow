@@ -172,6 +172,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.screen = flowScreenBootstrapActions
 			m.configEditing = false
+			m.refreshBootstrapDetail()
 		case flowActionInstall, flowActionUninstall, flowActionUninstallCLI, flowActionUninstallProject, flowActionClean:
 			m.screen = flowScreenMain
 			m.resetDetailFocus()
