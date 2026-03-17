@@ -106,12 +106,9 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		case "__MODEL__": // fallback
 			codexModel = value
 		case "OPENAI_API_KEY":
-			// For Codex, API key goes to auth.json AND shell rc.
-			// When using a custom model_provider, Codex reads the key
-			// via env_key (OPENAI_API_KEY), so it must be persisted
-			// as an environment variable too.
+			// API key goes to auth.json only. Codex reads it from there
+			// when using openai_base_url (no env var needed).
 			codexAPIKey = value
-			normalEnvVars[key] = value
 		case "__CODEX_BASE_URL__":
 			// Codex CLI v0.115+ uses openai_base_url in config.toml; no longer an env var.
 			codexBaseURL = value

@@ -194,10 +194,10 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 			text = fmt.Sprintf("model_reasoning_effort = %q\n%s", reasoning, text)
 		}
 	}
-	// Custom model provider with base_url (for third-party API proxies).
+	// Custom base_url for third-party API proxies.
 	if baseURL != "" {
-		// Codex CLI v0.115+ reads openai_base_url from config.toml instead
-		// of the deprecated OPENAI_BASE_URL env var.
+		// Codex CLI v0.115+ reads openai_base_url from config.toml and
+		// API key from auth.json. No model_provider or env var needed.
 		reBaseURL := regexp.MustCompile(`(?m)^openai_base_url\s*=.*$`)
 		if reBaseURL.MatchString(text) {
 			text = reBaseURL.ReplaceAllString(text, fmt.Sprintf(`openai_base_url = "%s"`, baseURL))
@@ -205,28 +205,17 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 			text = fmt.Sprintf("openai_base_url = %q\n%s", baseURL, text)
 		}
 
-		providerName := "agentflow"
-		// Set top-level model_provider.
-		reProvider := regexp.MustCompile(`(?m)^model_provider\s*=.*$`)
-		if reProvider.MatchString(text) {
-			text = reProvider.ReplaceAllString(text, fmt.Sprintf(`model_provider = "%s"`, providerName))
-		} else {
-			text = insertTopLevel(text, fmt.Sprintf("model_provider = %q", providerName))
-		}
-		// Append or replace the [model_providers.agentflow] section.
-		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.` + regexp.QuoteMeta(providerName) + `\].*?(?:\n\[|\z)`)
-		providerSection := fmt.Sprintf("[model_providers.%s]\nname = %q\nbase_url = %q\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n",
-			providerName, providerName, baseURL)
+		// Remove any leftover model_provider / [model_providers.*] from
+		// older AgentFlow versions that used the custom provider approach.
+		reProvider := regexp.MustCompile(`(?m)^model_provider\s*=.*\n`)
+		text = reProvider.ReplaceAllString(text, "")
+		sectionRe := regexp.MustCompile(`(?ms)^\[model_providers\.agentflow\].*?(?:\n\[|\z)`)
 		if loc := sectionRe.FindStringIndex(text); loc != nil {
 			end := loc[1]
-			// If the match ends with a new section header "[", keep it
-			// so the next TOML section is not corrupted.
 			if end > 0 && text[end-1] == '[' {
 				end--
 			}
-			text = text[:loc[0]] + providerSection + text[end:]
-		} else {
-			text = strings.TrimRight(text, "\n") + "\n\n" + providerSection
+			text = text[:loc[0]] + text[end:]
 		}
 	}
 
