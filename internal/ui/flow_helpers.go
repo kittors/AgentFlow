@@ -407,6 +407,8 @@ func (m interactiveFlowModel) currentCursor() int {
 		return m.mcpInstallCursor
 	case flowScreenMCPRemove:
 		return m.mcpRemoveCursor
+	case flowScreenMCPList:
+		return m.mcpListCursor
 	case flowScreenSkillTargets:
 		return m.skillTargetCursor
 	case flowScreenSkillScope:
@@ -460,6 +462,8 @@ func (m interactiveFlowModel) currentOptionsLen() int {
 		return len(m.mcpInstallOptions)
 	case flowScreenMCPRemove:
 		return len(m.mcpRemoveOptions)
+	case flowScreenMCPList:
+		return len(m.mcpListOptions)
 	case flowScreenSkillTargets:
 		return len(m.skillTargets)
 	case flowScreenSkillScope:
