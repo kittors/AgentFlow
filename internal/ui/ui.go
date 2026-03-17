@@ -525,7 +525,6 @@ func (m selectionModel) detailLines(width int) []string {
 		return nil
 	}
 
-	current := m.options[m.cursor]
 	lines := make([]string, 0, 12)
 
 	for _, panel := range m.panels {
@@ -548,22 +547,6 @@ func (m selectionModel) detailLines(width int) []string {
 			}
 			lines = append(lines, primaryTextStyle.Render(truncated))
 		}
-	}
-
-	if len(lines) > 0 {
-		lines = append(lines, "")
-	}
-	lines = append(lines,
-		sectionTitleStyle.Render(m.catalog.Msg("当前动作", "Current action")),
-		lipgloss.JoinHorizontal(
-			lipgloss.Left,
-			selectedBadgeStyle.Render(defaultBadge(current, m.cursor)),
-			" ",
-			primaryTextStyle.Bold(true).Render(current.Label),
-		),
-	)
-	if strings.TrimSpace(current.Description) != "" {
-		lines = append(lines, wrapStyledLine(mutedTextStyle, width, current.Description)...)
 	}
 
 	return lines
