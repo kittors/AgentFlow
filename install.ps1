@@ -1,6 +1,28 @@
 # AgentFlow Installer for Windows PowerShell
 # Usage: irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 
+# ── Guard: enforce TLS 1.2+ before any network call ──
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+} catch {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+}
+
+# ── Language detection (must be before try/catch for error messages) ──
+$USE_ZH = $false
+try {
+    if ((Get-Culture).Name -match '^zh') { $USE_ZH = $true }
+} catch {}
+
+function msg($zh, $en) {
+    if ($USE_ZH) { return $zh }
+    return $en
+}
+
+# ── Wrap the entire installer in try/catch so errors are always visible
+#    even when running via  irm ... | iex  ──
+try {
+
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -12,20 +34,10 @@ try {
     if ($existing) { $PREVIOUS_AGENTFLOW = $existing.Source }
 } catch {}
 
-$USE_ZH = $false
-try {
-    if ((Get-Culture).Name -match '^zh') { $USE_ZH = $true }
-} catch {}
-
-function msg($zh, $en) {
-    if ($USE_ZH) { return $zh }
-    return $en
-}
-
 function Write-Step($text)  { Write-Host "`n  --- $text ---`n" -ForegroundColor Cyan }
 function Write-Ok($text)    { Write-Host "  [✓]  $text" -ForegroundColor Green }
 function Write-Info($text)  { Write-Host "  [·]  $text" -ForegroundColor Cyan }
-function Write-Err($text)   { Write-Host "  [✗]  $text" -ForegroundColor Red; exit 1 }
+function Write-Err($text)   { Write-Host "  [✗]  $text" -ForegroundColor Red; throw $text }
 
 function Resolve-AssetName {
     $arch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
@@ -46,7 +58,8 @@ function Resolve-DownloadUrl {
     }
 
     $assetName = Resolve-AssetName
-    $releaseInfo = Invoke-RestMethod -Uri $GITHUB_API -Headers @{ "User-Agent" = "AgentFlow-Installer" }
+    Write-Info (msg "正在从 GitHub 获取最新版本信息..." "Fetching latest release from GitHub...")
+    $releaseInfo = Invoke-RestMethod -Uri $GITHUB_API -Headers @{ "User-Agent" = "AgentFlow-Installer" } -TimeoutSec 30
     $asset = $releaseInfo.assets | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
     if (-not $asset) {
         Write-Err (msg "未在最新 Release 中找到匹配当前平台的二进制文件。" "No matching binary was found in the latest release.")
@@ -94,7 +107,8 @@ if (-not (Test-Path $INSTALL_DIR)) {
     New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
 }
 $exePath = Join-Path $INSTALL_DIR "agentflow.exe"
-Invoke-WebRequest -Uri $downloadUrl -OutFile $exePath -UseBasicParsing
+Write-Info (msg "正在下载，请稍候..." "Downloading, please wait...")
+Invoke-WebRequest -Uri $downloadUrl -OutFile $exePath -UseBasicParsing -TimeoutSec 120
 Write-Ok (msg "已下载到 $exePath" "Downloaded to $exePath")
 
 Write-Step (msg "步骤 3/3: 配置 PATH 并验证" "Step 3/3: Configure PATH and verify")
@@ -109,3 +123,21 @@ Show-ShadowWarning
 Write-Host ""
 Write-Host (msg "  ✅ 安装完成" "  ✅ Installation complete") -ForegroundColor Green
 Start-AgentFlowMenu
+
+# ── End of try; catch block to display errors clearly ──
+} catch {
+    Write-Host ""
+    Write-Host "  [✗]  $(if ($USE_ZH) { '安装失败' } else { 'Installation failed' })" -ForegroundColor Red
+    Write-Host "       $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host ""
+    $errMsg = "$($_.Exception.Message)"
+    if ($errMsg -match 'SSL|TLS|Ssl|Tls|SecureChannel|Could not create') {
+        Write-Host (msg "  [?]  提示: 可能是 TLS 版本不兼容，请尝试以管理员身份运行 PowerShell 后重试。" "  [?]  Hint: This may be a TLS compatibility issue. Try running PowerShell as Administrator.") -ForegroundColor Yellow
+    }
+    if ($errMsg -match '403|rate limit|API rate') {
+        Write-Host (msg "  [?]  提示: GitHub API 限流，请稍后重试或设置 AGENTFLOW_DOWNLOAD_URL 环境变量直接指定下载地址。" "  [?]  Hint: GitHub API rate-limited. Wait a few minutes or set AGENTFLOW_DOWNLOAD_URL.") -ForegroundColor Yellow
+    }
+    if ($errMsg -match 'Unable to connect|Could not resolve|timeout|NameResolutionFailure') {
+        Write-Host (msg "  [?]  提示: 网络连接失败。请检查网络连接，或设置代理后重试。" "  [?]  Hint: Network error. Check your connection or configure a proxy.") -ForegroundColor Yellow
+    }
+}
