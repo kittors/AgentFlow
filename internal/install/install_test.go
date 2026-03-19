@@ -446,9 +446,9 @@ func TestCLIConfigFieldsClaude(t *testing.T) {
 	foundAPIKey, foundBaseURL, foundModel := false, false, false
 	for _, f := range fields {
 		switch f.EnvVar {
-		case "ANTHROPIC_API_KEY":
+		case "__CLAUDE_API_KEY__":
 			foundAPIKey = true
-		case "ANTHROPIC_BASE_URL":
+		case "__CLAUDE_BASE_URL__":
 			foundBaseURL = true
 		case "__CLAUDE_MODEL__":
 			foundModel = true
@@ -461,10 +461,10 @@ func TestCLIConfigFieldsClaude(t *testing.T) {
 		}
 	}
 	if !foundAPIKey {
-		t.Fatal("expected ANTHROPIC_API_KEY field")
+		t.Fatal("expected __CLAUDE_API_KEY__ field")
 	}
 	if !foundBaseURL {
-		t.Fatal("expected ANTHROPIC_BASE_URL field")
+		t.Fatal("expected __CLAUDE_BASE_URL__ field")
 	}
 	if !foundModel {
 		t.Fatal("expected __CLAUDE_MODEL__ field")

@@ -35,8 +35,26 @@ func (a *App) authDisplayValue(targetName, apiKeyEnv, baseURLEnv string) (string
 			return label, value
 		}
 		return label, a.Installer.ReadCodexAuthKey()
+	case "claude":
+		// Read from ~/.claude/settings.json env section.
+		return label, a.Installer.ReadClaudeSettingsEnv("ANTHROPIC_API_KEY")
 	default:
 		return label, a.Installer.GetEnvOrRC(apiKeyEnv)
+	}
+}
+
+// readBaseURLDisplayValue reads the configured Base URL for display.
+func (a *App) readBaseURLDisplayValue(targetName, baseURLEnv string) string {
+	switch targetName {
+	case "claude":
+		return a.Installer.ReadClaudeSettingsEnv("ANTHROPIC_BASE_URL")
+	case "codex":
+		if val := a.Installer.GetEnvOrRC(baseURLEnv); val != "" {
+			return val
+		}
+		return a.Installer.ReadCodexConfigField("base_url")
+	default:
+		return a.Installer.GetEnvOrRC(baseURLEnv)
 	}
 }
 
@@ -224,18 +242,13 @@ func (a *App) bootstrapTargetPanel(targetName string) ui.Panel {
 			}
 		}
 
-		// Base URL: read from env/rc, also check config.toml model_provider for Codex.
+		// Base URL.
 		if target.BaseURLEnv != "" {
-			envVal := a.Installer.GetEnvOrRC(target.BaseURLEnv)
-			if envVal == "" && target.Name == "codex" {
-				envVal = a.Installer.ReadCodexConfigField("base_url")
-			}
+			envVal := a.readBaseURLDisplayValue(target.Name, target.BaseURLEnv)
 			if envVal != "" {
-				lines = append(lines, fmt.Sprintf("  %s Base URL: %s",
-					greenDot, valueStyle.Render(strings.TrimRight(envVal, "/"))))
+				lines = append(lines, fmt.Sprintf("  %s Base URL: %s", greenDot, valueStyle.Render(strings.TrimRight(envVal, "/"))))
 			} else {
-				lines = append(lines, fmt.Sprintf("  %s Base URL: %s",
-					grayDot, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
+				lines = append(lines, fmt.Sprintf("  %s Base URL: %s", grayDot, mutedStyle.Render(a.Catalog.Msg("未设置", "not set"))))
 			}
 		}
 
@@ -352,10 +365,7 @@ func (a *App) cliDetailPanel(targetName string) ui.Panel {
 		}
 
 		if target.BaseURLEnv != "" {
-			envVal := a.Installer.GetEnvOrRC(target.BaseURLEnv)
-			if envVal == "" && target.Name == "codex" {
-				envVal = a.Installer.ReadCodexConfigField("base_url")
-			}
+			envVal := a.readBaseURLDisplayValue(target.Name, target.BaseURLEnv)
 			if envVal != "" {
 				lines = append(lines, fmt.Sprintf("  %s Base URL: %s", greenDot, valueStyle.Render(strings.TrimRight(envVal, "/"))))
 			} else {

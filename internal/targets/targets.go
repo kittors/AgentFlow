@@ -71,9 +71,13 @@ var All = map[string]Target{
 		DocsURL:               "https://docs.anthropic.com/en/docs/claude-code/getting-started",
 		BootstrapSupported:    true,
 		RecommendWSLOnWindows: true,
-		APIKeyEnv:             "ANTHROPIC_API_KEY",
-		BaseURLEnv:            "ANTHROPIC_BASE_URL",
-		ModelEnv:              "__CLAUDE_MODEL__",
+		// Claude Code reads config from ~/.claude/settings.json (env section).
+		// We use internal markers so the UI shows input fields, but values
+		// are written to settings.json via WriteClaudeSettings (not shell RC).
+		APIKeyEnv:     "__CLAUDE_API_KEY__",
+		BaseURLEnv:    "__CLAUDE_BASE_URL__",
+		ModelEnv:      "__CLAUDE_MODEL__",
+		HasConfigFile: true,
 		Models: []ModelOption{
 			{Value: "claude-opus-4-6", Label: "Claude Opus 4.6 (推荐/Recommended)", Default: true},
 			{Value: "claude-haiku-4-5-20251001", Label: "Claude Haiku 4.5"},

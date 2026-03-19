@@ -113,9 +113,9 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		case "__CODEX_BASE_URL__":
 			// Base URL goes to [model_providers.agentflow].base_url in config.toml.
 			codexBaseURL = value
-		case "ANTHROPIC_API_KEY":
+		case "__CLAUDE_API_KEY__":
 			claudeAPIKey = value
-		case "ANTHROPIC_BASE_URL":
+		case "__CLAUDE_BASE_URL__":
 			claudeBaseURL = value
 		default:
 			normalEnvVars[key] = value
@@ -127,13 +127,9 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		}
 	}
 
-	for key, value := range a.buildClaudeEnvVars(claudeAPIKey, claudeBaseURL) {
-		normalEnvVars[key] = value
-	}
-
 	var allLines []string
 
-	// Write normal env vars to shell rc (excludes Codex API Key / Base URL).
+	// Write normal env vars to shell rc (excludes Codex/Claude internal fields).
 	if len(normalEnvVars) > 0 {
 		lines, err := a.Installer.WriteEnvConfig(normalEnvVars)
 		if err != nil {
@@ -168,14 +164,26 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		}
 	}
 
-	// Write Claude settings.json if applicable.
-	if claudeModel != "" {
-		if err := a.Installer.WriteClaudeConfig(claudeModel); err != nil {
+	// Write Claude Code config to ~/.claude/settings.json.
+	if claudeAPIKey != "" || claudeBaseURL != "" || claudeModel != "" {
+		if err := a.Installer.WriteClaudeSettings(claudeAPIKey, claudeBaseURL, claudeModel); err != nil {
 			return errorPanel(a.Catalog.Msg("Claude 配置写入失败", "Claude config write failed"), err)
 		}
 		allLines = append(allLines, "")
-		allLines = append(allLines, a.Catalog.Msg("已写入 ~/.claude.json:", "Written to ~/.claude.json:"))
-		allLines = append(allLines, fmt.Sprintf("  model: %s", claudeModel))
+		allLines = append(allLines, a.Catalog.Msg("已写入 ~/.claude/settings.json:", "Written to ~/.claude/settings.json:"))
+		if claudeAPIKey != "" {
+			masked := claudeAPIKey
+			if len(claudeAPIKey) > 6 {
+				masked = claudeAPIKey[:3] + strings.Repeat("*", len(claudeAPIKey)-6) + claudeAPIKey[len(claudeAPIKey)-3:]
+			}
+			allLines = append(allLines, fmt.Sprintf("  env.ANTHROPIC_API_KEY: %s", masked))
+		}
+		if claudeBaseURL != "" {
+			allLines = append(allLines, fmt.Sprintf("  env.ANTHROPIC_BASE_URL: %s", claudeBaseURL))
+		}
+		if claudeModel != "" {
+			allLines = append(allLines, fmt.Sprintf("  model: %s", claudeModel))
+		}
 	}
 
 	// Report model env var if written.
@@ -192,32 +200,6 @@ func (a *App) writeEnvConfigPanel(envVars map[string]string) ui.Panel {
 		Title: a.Catalog.Msg("配置写入成功", "Configuration saved"),
 		Lines: allLines,
 	}
-}
-
-func (a *App) buildClaudeEnvVars(apiKey, baseURL string) map[string]string {
-	result := make(map[string]string)
-	apiKey = strings.TrimSpace(apiKey)
-	baseURL = strings.TrimSpace(baseURL)
-
-	if baseURL != "" {
-		token := apiKey
-		if token == "" {
-			token = a.Installer.GetEnvOrRC("ANTHROPIC_API_KEY")
-		}
-		if token != "" {
-			result["ANTHROPIC_API_KEY"] = token
-		}
-		result["ANTHROPIC_BASE_URL"] = baseURL
-		// Clean up legacy ANTHROPIC_AUTH_TOKEN to avoid conflicts.
-		result["ANTHROPIC_AUTH_TOKEN"] = ""
-		return result
-	}
-
-	if apiKey != "" {
-		result["ANTHROPIC_API_KEY"] = apiKey
-		result["ANTHROPIC_AUTH_TOKEN"] = ""
-	}
-	return result
 }
 
 func (a *App) installTargetsPanel(profile string, targets []string) ui.Panel {

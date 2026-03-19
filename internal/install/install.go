@@ -230,30 +230,76 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 	return config.SafeWrite(configPath, []byte(strings.TrimSpace(text)+"\n"), 0o644)
 }
 
-// WriteClaudeConfig writes the default model setting to ~/.claude.json.
-func (i *Installer) WriteClaudeConfig(model string) error {
-	if model == "" {
-		return nil
+// WriteClaudeSettings writes Claude Code configuration to ~/.claude/settings.json.
+// API Key and Base URL go into the "env" section; model goes into the top-level
+// "model" field. This is the official Claude Code configuration mechanism and
+// works consistently across all platforms (Windows/macOS/Linux).
+//
+// When a custom Base URL is set, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC is
+// also set to "1" to prevent Claude Code from attempting to contact Anthropic
+// servers for non-essential operations.
+func (i *Installer) WriteClaudeSettings(apiKey, baseURL, model string) error {
+	settingsDir := filepath.Join(i.HomeDir, ".claude")
+	if err := os.MkdirAll(settingsDir, 0o755); err != nil {
+		return err
 	}
-	configPath := filepath.Join(i.HomeDir, ".claude.json")
 
+	settingsPath := filepath.Join(settingsDir, "settings.json")
 	var settings map[string]any
-	if data, err := os.ReadFile(configPath); err == nil {
+	if data, err := os.ReadFile(settingsPath); err == nil {
 		_ = json.Unmarshal(data, &settings)
 	}
 	if settings == nil {
 		settings = make(map[string]any)
 	}
 
-	settings["model"] = model
+	// Get or create the env section.
+	envMap, _ := settings["env"].(map[string]any)
+	if envMap == nil {
+		envMap = make(map[string]any)
+	}
+
+	if strings.TrimSpace(apiKey) != "" {
+		envMap["ANTHROPIC_API_KEY"] = apiKey
+		// Clear legacy auth token to avoid conflicts.
+		delete(envMap, "ANTHROPIC_AUTH_TOKEN")
+	}
+	if strings.TrimSpace(baseURL) != "" {
+		envMap["ANTHROPIC_BASE_URL"] = baseURL
+		// Disable non-essential traffic when using a custom API endpoint.
+		envMap["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+	}
+	settings["env"] = envMap
+
+	if strings.TrimSpace(model) != "" {
+		settings["model"] = model
+	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err
 	}
-	data = append(data, '\n')
+	return config.SafeWrite(settingsPath, append(data, '\n'), 0o644)
+}
 
-	return config.SafeWrite(configPath, data, 0o644)
+// ReadClaudeSettingsEnv reads an environment variable value from the env
+// section of ~/.claude/settings.json.
+func (i *Installer) ReadClaudeSettingsEnv(key string) string {
+	settingsPath := filepath.Join(i.HomeDir, ".claude", "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return ""
+	}
+	var settings map[string]any
+	if json.Unmarshal(data, &settings) != nil {
+		return ""
+	}
+	envMap, _ := settings["env"].(map[string]any)
+	if envMap == nil {
+		return ""
+	}
+	val, _ := envMap[key].(string)
+	return val
 }
 
 // cleanCodexBootstrapConfig removes AgentFlow-written config from Codex CLI files.
@@ -301,25 +347,54 @@ func (i *Installer) cleanCodexBootstrapConfig() {
 	}
 }
 
-// cleanClaudeBootstrapConfig removes AgentFlow-written config from Claude CLI files.
-// This cleans the "model" field from ~/.claude.json.
+// cleanClaudeBootstrapConfig removes AgentFlow-written config from Claude Code files.
+// This cleans the env section in ~/.claude/settings.json (API key, base URL,
+// non-essential traffic flag) and the model field.
+// Also cleans legacy ~/.claude.json model field if present.
 // Best-effort: errors are silently ignored so uninstall always succeeds.
 func (i *Installer) cleanClaudeBootstrapConfig() {
+	// Clean ~/.claude/settings.json — remove AgentFlow-written env vars and model.
+	settingsPath := filepath.Join(i.HomeDir, ".claude", "settings.json")
+	if data, err := os.ReadFile(settingsPath); err == nil {
+		var settings map[string]any
+		if json.Unmarshal(data, &settings) == nil && settings != nil {
+			// Remove model field.
+			delete(settings, "model")
+			// Clean env section.
+			if envMap, ok := settings["env"].(map[string]any); ok {
+				for _, key := range []string{
+					"ANTHROPIC_API_KEY",
+					"ANTHROPIC_BASE_URL",
+					"ANTHROPIC_AUTH_TOKEN",
+					"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+				} {
+					delete(envMap, key)
+				}
+				if len(envMap) == 0 {
+					delete(settings, "env")
+				} else {
+					settings["env"] = envMap
+				}
+			}
+			out, err := json.MarshalIndent(settings, "", "  ")
+			if err == nil {
+				_ = config.SafeWrite(settingsPath, append(out, '\n'), 0o644)
+			}
+		}
+	}
+
+	// Clean legacy ~/.claude.json model field.
 	configPath := filepath.Join(i.HomeDir, ".claude.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return
+	if data, err := os.ReadFile(configPath); err == nil {
+		var legacy map[string]any
+		if json.Unmarshal(data, &legacy) == nil && legacy != nil {
+			delete(legacy, "model")
+			out, err := json.MarshalIndent(legacy, "", "  ")
+			if err == nil {
+				_ = config.SafeWrite(configPath, append(out, '\n'), 0o644)
+			}
+		}
 	}
-	var settings map[string]any
-	if json.Unmarshal(data, &settings) != nil || settings == nil {
-		return
-	}
-	delete(settings, "model")
-	out, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return
-	}
-	_ = config.SafeWrite(configPath, append(out, '\n'), 0o644)
 }
 
 // ReadCodexAuthKey reads the API key token from ~/.codex/auth.json.
@@ -383,17 +458,25 @@ func (i *Installer) ReadCLIConfigModel(targetName string) string {
 	case "codex":
 		return i.ReadCodexConfigField("model")
 	case "claude":
+		// Read from ~/.claude/settings.json (primary).
+		settingsPath := filepath.Join(i.HomeDir, ".claude", "settings.json")
+		if data, err := os.ReadFile(settingsPath); err == nil {
+			var settings map[string]any
+			if json.Unmarshal(data, &settings) == nil {
+				if model, ok := settings["model"].(string); ok && model != "" {
+					return model
+				}
+			}
+		}
+		// Fallback: legacy ~/.claude.json.
 		configPath := filepath.Join(i.HomeDir, ".claude.json")
-		data, err := os.ReadFile(configPath)
-		if err != nil {
-			return ""
-		}
-		var settings map[string]any
-		if json.Unmarshal(data, &settings) != nil {
-			return ""
-		}
-		if model, ok := settings["model"].(string); ok {
-			return model
+		if data, err := os.ReadFile(configPath); err == nil {
+			var settings map[string]any
+			if json.Unmarshal(data, &settings) == nil {
+				if model, ok := settings["model"].(string); ok {
+					return model
+				}
+			}
 		}
 		return ""
 	default:
