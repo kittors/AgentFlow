@@ -720,7 +720,7 @@ func initConfigFieldState(f ConfigField) configFieldState {
 	} else {
 		// Text field: pre-fill with CurrentValue and place cursor at end.
 		state.Value = f.CurrentValue
-		state.CursorPos = len(f.CurrentValue)
+		state.CursorPos = len([]rune(f.CurrentValue))
 	}
 	return state
 }

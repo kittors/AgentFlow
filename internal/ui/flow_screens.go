@@ -296,47 +296,43 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 					if f.Value == "" {
 						inputDisplay = m.catalog.Msg("请在此输入…", "type here…")
 					} else {
+						runes := []rune(f.Value)
 						pos := f.CursorPos
-						if pos > len(f.Value) {
-							pos = len(f.Value)
+						if pos > len(runes) {
+							pos = len(runes)
 						}
-						// Calculate available display width for input content.
-						// Panel prefix "  │ " = 4 chars, cursor "█" = 1 char,
-						// overflow indicators "◁"/"▷" = 1 char each, plus some margin.
-						const inputBoxWidth = 36 // max chars visible inside the box
-						withCursor := f.Value[:pos] + "█" + f.Value[pos:]
-						if ansi.StringWidth(withCursor) <= inputBoxWidth {
-							inputDisplay = withCursor
+						// Max visible runes inside the input box (excluding cursor/indicators).
+						const maxVisible = 34
+						if len(runes) <= maxVisible {
+							// Entire value fits: show with cursor.
+							inputDisplay = string(runes[:pos]) + "█" + string(runes[pos:])
 						} else {
-							// Sliding window: keep cursor visible in the center.
-							half := inputBoxWidth / 2
+							// Sliding window: keep cursor centered in the visible area.
+							half := maxVisible / 2
 							start := pos - half
 							if start < 0 {
 								start = 0
 							}
-							end := start + inputBoxWidth
-							if end > len(f.Value) {
-								end = len(f.Value)
-								start = end - inputBoxWidth
+							end := start + maxVisible
+							if end > len(runes) {
+								end = len(runes)
+								start = end - maxVisible
 								if start < 0 {
 									start = 0
 								}
 							}
-							visible := f.Value[start:end]
-							// Insert cursor into visible portion.
 							cursorInWindow := pos - start
-							if cursorInWindow > len(visible) {
-								cursorInWindow = len(visible)
-							}
-							inputDisplay = visible[:cursorInWindow] + "█" + visible[cursorInWindow:]
-							// Add overflow indicators.
+							visible := runes[start:end]
+							inputDisplay = string(visible[:cursorInWindow]) + "█" + string(visible[cursorInWindow:])
 							if start > 0 {
 								inputDisplay = "◁" + inputDisplay
 							}
-							if end < len(f.Value) {
+							if end < len(runes) {
 								inputDisplay = inputDisplay + "▷"
 							}
 						}
+						// Safety: hard-truncate to prevent any line overflow.
+						inputDisplay = ansi.Truncate(inputDisplay, 38, "")
 					}
 					// Styled input line.
 					summaryLines = append(summaryLines,

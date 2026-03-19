@@ -327,7 +327,7 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 				f.Value = f.Options[f.OptionCursor]
 				f.Dirty = true
 			} else if f.FieldType != "select" {
-				// Move text cursor left.
+				// Move text cursor left (rune-based).
 				if f.CursorPos > 0 {
 					f.CursorPos--
 				}
@@ -346,8 +346,9 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 				f.Value = f.Options[f.OptionCursor]
 				f.Dirty = true
 			} else if f.FieldType != "select" {
-				// Move text cursor right.
-				if f.CursorPos < len(f.Value) {
+				// Move text cursor right (rune-based).
+				runes := []rune(f.Value)
+				if f.CursorPos < len(runes) {
 					f.CursorPos++
 				}
 			}
@@ -357,8 +358,9 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
 			f := &m.configFields[m.configFieldCursor]
 			if f.FieldType != "select" && f.CursorPos > 0 {
-				// Delete character before cursor.
-				f.Value = f.Value[:f.CursorPos-1] + f.Value[f.CursorPos:]
+				// Delete rune before cursor.
+				runes := []rune(f.Value)
+				f.Value = string(runes[:f.CursorPos-1]) + string(runes[f.CursorPos:])
 				f.CursorPos--
 				f.Dirty = true
 			}
@@ -368,12 +370,14 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
 			f := &m.configFields[m.configFieldCursor]
 			if f.FieldType != "select" {
-				// Insert characters at cursor position.
+				// Insert characters at cursor position (rune-aware).
 				// Strip bracket chars from bracketed paste sequences.
 				ins := strings.NewReplacer("[", "", "]", "").Replace(key.String())
 				if ins != "" {
-					f.Value = f.Value[:f.CursorPos] + ins + f.Value[f.CursorPos:]
-					f.CursorPos += len(ins)
+					runes := []rune(f.Value)
+					insRunes := []rune(ins)
+					f.Value = string(runes[:f.CursorPos]) + ins + string(runes[f.CursorPos:])
+					f.CursorPos += len(insRunes)
 					f.Dirty = true
 				}
 			}
