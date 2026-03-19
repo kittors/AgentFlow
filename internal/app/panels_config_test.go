@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kittors/AgentFlow/internal/install"
 	"github.com/kittors/AgentFlow/internal/projectrules"
 )
 
@@ -69,6 +70,10 @@ func TestBuildClaudeEnvVarsUsesApiKeyForDirectMode(t *testing.T) {
 }
 
 func TestWriteEnvConfigPanelWritesClaudeApiKeyForGateway(t *testing.T) {
+	// Override runtimeGOOS so that on Windows CI this test still exercises
+	// the RC-file code path rather than the setx code path.
+	defer install.OverrideGOOS("linux")()
+
 	homeDir := t.TempDir()
 	zshrcPath := filepath.Join(homeDir, ".zshrc")
 	if err := os.WriteFile(zshrcPath, []byte("# AgentFlow CLI configuration\nexport ANTHROPIC_API_KEY=\"old-key\"\nexport ANTHROPIC_BASE_URL=\"https://old.example.com\"\n"), 0o644); err != nil {

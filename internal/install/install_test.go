@@ -543,6 +543,12 @@ func TestWriteCodexConfigMergesExisting(t *testing.T) {
 }
 
 func TestWriteEnvConfigWritesToShellRC(t *testing.T) {
+	// Override runtimeGOOS so that on Windows CI this test still exercises
+	// the RC-file code path rather than the setx code path.
+	old := runtimeGOOS
+	runtimeGOOS = "linux"
+	defer func() { runtimeGOOS = old }()
+
 	homeDir := t.TempDir()
 	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
 	installer.HomeDir = homeDir
