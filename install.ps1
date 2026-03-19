@@ -40,11 +40,36 @@ function Write-Info($text)  { Write-Host "  [·]  $text" -ForegroundColor Cyan }
 function Write-Err($text)   { Write-Host "  [✗]  $text" -ForegroundColor Red; throw $text }
 
 function Resolve-AssetName {
-    $arch = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
-        "X64" { "amd64" }
-        "Arm64" { "arm64" }
-        default { Write-Err (msg "不支持的 CPU 架构" "Unsupported CPU architecture") }
+    $arch = $null
+
+    # Method 1: RuntimeInformation (preferred, .NET 4.7.1+)
+    try {
+        $osArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+        Write-Info (msg "检测到 OS 架构 (RuntimeInfo): $osArch" "Detected OS architecture (RuntimeInfo): $osArch")
+        $arch = switch -Wildcard ($osArch) {
+            "*64*" {
+                if ($osArch -match '(?i)arm') { "arm64" } else { "amd64" }
+            }
+            "*86*" { "amd64" }
+            "*arm*" { "arm64" }
+        }
+    } catch {}
+
+    # Method 2: Fallback to environment variable (always available, very reliable on ARM64 Windows)
+    if (-not $arch) {
+        $envArch = $env:PROCESSOR_ARCHITECTURE
+        Write-Info (msg "使用环境变量检测架构: $envArch" "Using env var for architecture: $envArch")
+        $arch = switch ($envArch) {
+            "AMD64" { "amd64" }
+            "x86"   { "amd64" }
+            "ARM64" { "arm64" }
+        }
     }
+
+    if (-not $arch) {
+        Write-Err (msg "不支持的 CPU 架构 (OS=$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture), ENV=$env:PROCESSOR_ARCHITECTURE)" "Unsupported CPU architecture (OS=$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture), ENV=$env:PROCESSOR_ARCHITECTURE)")
+    }
+
     return "agentflow-windows-$arch.exe"
 }
 
