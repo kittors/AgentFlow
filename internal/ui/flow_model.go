@@ -50,11 +50,12 @@ type InteractiveCallbacks struct {
 
 // ConfigField describes a single configurable field for a CLI.
 type ConfigField struct {
-	Label   string   // e.g. "API Key"
-	EnvVar  string   // e.g. "OPENAI_API_KEY" or "__MODEL__" for non-env fields
-	Type    string   // "text" for free-form input, "select" for option list
-	Options []string // For "select" type: available choices
-	Default string   // Default value (pre-selected for "select")
+	Label        string   // e.g. "API Key"
+	EnvVar       string   // e.g. "OPENAI_API_KEY" or "__MODEL__" for non-env fields
+	Type         string   // "text" for free-form input, "select" for option list
+	Options      []string // For "select" type: available choices
+	Default      string   // Default value (pre-selected for "select")
+	CurrentValue string   // Currently saved value (pre-fills the field for editing)
 }
 
 type flowScreen int

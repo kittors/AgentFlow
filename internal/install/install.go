@@ -310,6 +310,7 @@ func (i *Installer) cleanClaudeSystemEnvVars() {
 		"ANTHROPIC_BASE_URL",
 		"ANTHROPIC_AUTH_TOKEN",
 		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+		"DISABLE_AUTOUPDATER",
 	}
 
 	// On Windows, delete from registry via setx (set to empty = delete).
@@ -350,7 +351,7 @@ func (i *Installer) cleanClaudeEnvFromRC() error {
 	}
 	content := string(data)
 	changed := false
-	for _, key := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"} {
+	for _, key := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_AUTOUPDATER"} {
 		exportPrefix := "export " + key + "="
 		if strings.Contains(content, exportPrefix) {
 			var updated strings.Builder
@@ -458,6 +459,7 @@ func (i *Installer) cleanClaudeBootstrapConfig() {
 					"ANTHROPIC_BASE_URL",
 					"ANTHROPIC_AUTH_TOKEN",
 					"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+					"DISABLE_AUTOUPDATER",
 				} {
 					delete(envMap, key)
 				}

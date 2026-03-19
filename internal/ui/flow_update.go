@@ -159,26 +159,7 @@ func (m interactiveFlowModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.configTarget = "tavily-custom"
 					m.configFields = make([]configFieldState, len(fields))
 					for idx, f := range fields {
-						fieldType := f.Type
-						if fieldType == "" {
-							fieldType = "text"
-						}
-						state := configFieldState{
-							Label:     f.Label,
-							EnvVar:    f.EnvVar,
-							FieldType: fieldType,
-							Options:   f.Options,
-						}
-						if fieldType == "select" && len(f.Options) > 0 {
-							state.Value = f.Default
-							for i, opt := range f.Options {
-								if opt == f.Default {
-									state.OptionCursor = i
-									break
-								}
-							}
-						}
-						m.configFields[idx] = state
+						m.configFields[idx] = initConfigFieldState(f)
 					}
 					m.configFieldCursor = 0
 					m.configEditing = true

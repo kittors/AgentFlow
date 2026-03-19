@@ -84,6 +84,27 @@ func (a *App) cliConfigFields(target string) []ui.ConfigField {
 			Options: f.Options,
 			Default: f.Default,
 		}
+		// Pre-fill CurrentValue from existing config.
+		switch f.EnvVar {
+		case "__CLAUDE_API_KEY__":
+			result[i].CurrentValue = a.Installer.ReadClaudeSettingsEnv("ANTHROPIC_API_KEY")
+		case "__CLAUDE_BASE_URL__":
+			result[i].CurrentValue = a.Installer.ReadClaudeSettingsEnv("ANTHROPIC_BASE_URL")
+		case "__CLAUDE_MODEL__":
+			result[i].CurrentValue = a.Installer.ReadCLIConfigModel("claude")
+		case "OPENAI_API_KEY":
+			if v := a.Installer.GetEnvOrRC(f.EnvVar); v != "" {
+				result[i].CurrentValue = v
+			} else {
+				result[i].CurrentValue = a.Installer.ReadCodexAuthKey()
+			}
+		case "__CODEX_BASE_URL__":
+			result[i].CurrentValue = a.Installer.ReadCodexConfigField("base_url")
+		case "__CODEX_MODEL__":
+			result[i].CurrentValue = a.Installer.ReadCLIConfigModel("codex")
+		default:
+			result[i].CurrentValue = a.Installer.GetEnvOrRC(f.EnvVar)
+		}
 	}
 	return result
 }

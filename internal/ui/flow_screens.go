@@ -236,9 +236,9 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 				m.configTarget, stepNum, totalSteps, fieldLabel,
 			)
 			if f.FieldType == "select" {
-				model.hint = m.catalog.Msg("←/→ 切换选项，Enter 确认并继续，Esc 跳过剩余步骤。", "←/→ to switch options, Enter to confirm and continue, Esc to skip remaining.")
+				model.hint = m.catalog.Msg("←/→ 切换选项，↑/↓ 切换字段，Enter 确认并继续，Esc 保存并退出。", "←/→ to switch options, ↑/↓ to switch fields, Enter to confirm, Esc to save and exit.")
 			} else {
-				model.hint = m.catalog.Msg("直接输入文本，Enter 确认并继续（留空跳过），Esc 跳过剩余步骤。", "Type to input, Enter to confirm and continue (empty = skip), Esc to skip remaining.")
+				model.hint = m.catalog.Msg("直接输入文本，↑/↓ 切换字段，Enter 确认并继续（留空跳过），Esc 保存并退出。", "Type to input, ↑/↓ to switch fields, Enter to confirm (empty = skip), Esc to save and exit.")
 			}
 
 			// Left option: just show step name, no value echo.

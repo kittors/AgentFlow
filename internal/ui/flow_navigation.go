@@ -303,6 +303,18 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 		m.focusDetails = false
 		m.detailScroll = 0
 		return m.handleEnter()
+	case tea.KeyUp:
+		// Navigate to previous field.
+		if m.configFieldCursor > 0 {
+			m.configFieldCursor--
+		}
+		return m, nil
+	case tea.KeyDown:
+		// Navigate to next field.
+		if m.configFieldCursor < len(m.configFields)-1 {
+			m.configFieldCursor++
+		}
+		return m, nil
 	case tea.KeyLeft:
 		if m.configFieldCursor >= 0 && m.configFieldCursor < len(m.configFields) {
 			f := &m.configFields[m.configFieldCursor]
@@ -689,26 +701,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.configTarget = m.selectedMCPServer
 				m.configFields = make([]configFieldState, len(fields))
 				for idx, f := range fields {
-					fieldType := f.Type
-					if fieldType == "" {
-						fieldType = "text"
-					}
-					state := configFieldState{
-						Label:     f.Label,
-						EnvVar:    f.EnvVar,
-						FieldType: fieldType,
-						Options:   f.Options,
-					}
-					if fieldType == "select" && len(f.Options) > 0 {
-						state.Value = f.Default
-						for i, opt := range f.Options {
-							if opt == f.Default {
-								state.OptionCursor = i
-								break
-							}
-						}
-					}
-					m.configFields[idx] = state
+					m.configFields[idx] = initConfigFieldState(f)
 				}
 				m.configFieldCursor = 0
 				m.configEditing = true
@@ -749,26 +742,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.configTarget = selectedServer
 				m.configFields = make([]configFieldState, len(fields))
 				for idx, f := range fields {
-					fieldType := f.Type
-					if fieldType == "" {
-						fieldType = "text"
-					}
-					state := configFieldState{
-						Label:     f.Label,
-						EnvVar:    f.EnvVar,
-						FieldType: fieldType,
-						Options:   f.Options,
-					}
-					if fieldType == "select" && len(f.Options) > 0 {
-						state.Value = f.Default
-						for i, opt := range f.Options {
-							if opt == f.Default {
-								state.OptionCursor = i
-								break
-							}
-						}
-					}
-					m.configFields[idx] = state
+					m.configFields[idx] = initConfigFieldState(f)
 				}
 				m.configFieldCursor = 0
 				m.configEditing = true
@@ -1054,26 +1028,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 				m.configTarget = m.selectedBootstrapTarget
 				m.configFields = make([]configFieldState, len(m.pendingConfigFields))
 				for idx, f := range m.pendingConfigFields {
-					fieldType := f.Type
-					if fieldType == "" {
-						fieldType = "text"
-					}
-					state := configFieldState{
-						Label:     f.Label,
-						EnvVar:    f.EnvVar,
-						FieldType: fieldType,
-						Options:   f.Options,
-					}
-					if fieldType == "select" && len(f.Options) > 0 {
-						state.Value = f.Default
-						for i, opt := range f.Options {
-							if opt == f.Default {
-								state.OptionCursor = i
-								break
-							}
-						}
-					}
-					m.configFields[idx] = state
+					m.configFields[idx] = initConfigFieldState(f)
 				}
 				m.configFieldCursor = 0
 				m.configEditing = true
@@ -1093,26 +1048,7 @@ func (m interactiveFlowModel) handleEnter() (tea.Model, tea.Cmd) {
 					m.configTarget = m.selectedBootstrapTarget
 					m.configFields = make([]configFieldState, len(fields))
 					for idx, f := range fields {
-						fieldType := f.Type
-						if fieldType == "" {
-							fieldType = "text"
-						}
-						state := configFieldState{
-							Label:     f.Label,
-							EnvVar:    f.EnvVar,
-							FieldType: fieldType,
-							Options:   f.Options,
-						}
-						if fieldType == "select" && len(f.Options) > 0 {
-							state.Value = f.Default
-							for i, opt := range f.Options {
-								if opt == f.Default {
-									state.OptionCursor = i
-									break
-								}
-							}
-						}
-						m.configFields[idx] = state
+						m.configFields[idx] = initConfigFieldState(f)
 					}
 					m.configFieldCursor = 0
 					m.configEditing = true

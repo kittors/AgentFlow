@@ -690,3 +690,37 @@ func copyToClipboard(text string) error {
 	cmd.Stdin = strings.NewReader(text)
 	return cmd.Run()
 }
+
+// initConfigFieldState converts a ConfigField into an editable configFieldState,
+// pre-filling CurrentValue (or Default) so the wizard shows existing config.
+func initConfigFieldState(f ConfigField) configFieldState {
+	fieldType := f.Type
+	if fieldType == "" {
+		fieldType = "text"
+	}
+	state := configFieldState{
+		Label:     f.Label,
+		EnvVar:    f.EnvVar,
+		FieldType: fieldType,
+		Options:   f.Options,
+	}
+	if fieldType == "select" && len(f.Options) > 0 {
+		// Prefer CurrentValue, fall back to Default.
+		chosen := f.CurrentValue
+		if chosen == "" {
+			chosen = f.Default
+		}
+		state.Value = chosen
+		for i, opt := range f.Options {
+			if opt == chosen {
+				state.OptionCursor = i
+				break
+			}
+		}
+	} else {
+		// Text field: pre-fill with CurrentValue and place cursor at end.
+		state.Value = f.CurrentValue
+		state.CursorPos = len(f.CurrentValue)
+	}
+	return state
+}
