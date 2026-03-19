@@ -156,12 +156,59 @@ jobs:
         shell: bash
         run: bash -n ./install.sh
 
+      - name: Validate local-install.sh
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash -n ./local-install.sh
+
       - name: Validate install.ps1
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content -Raw ./install.ps1), [ref]$null)
           Write-Host "install.ps1 syntax check passed"
+
+      - name: Test offline install (non-Windows)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "=== Testing offline install flow ==="
+          mkdir -p /tmp/agentflow-test-pkg
+          cp release-test/${{ matrix.binary_name }} /tmp/agentflow-test-pkg/agentflow
+          chmod +x /tmp/agentflow-test-pkg/agentflow
+          cp local-install.sh /tmp/agentflow-test-pkg/install.sh
+          chmod +x /tmp/agentflow-test-pkg/install.sh
+
+          export HOME=/tmp/agentflow-test-home
+          mkdir -p "$HOME"
+          cd /tmp/agentflow-test-pkg
+          bash install.sh
+
+          echo "=== Verifying install ==="
+          test -f "$HOME/.agentflow/bin/agentflow" || { echo "FAIL: binary not installed"; exit 1; }
+          "$HOME/.agentflow/bin/agentflow" version
+          echo "=== Offline install test PASSED ==="
+
+      - name: Test offline install (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          echo === Testing offline install flow ===
+          mkdir "%TEMP%\agentflow-test-pkg"
+          copy "release-test\${{ matrix.binary_name }}" "%TEMP%\agentflow-test-pkg\agentflow.exe"
+          copy "install.bat" "%TEMP%\agentflow-test-pkg\install.bat"
+
+          echo === Running install.bat ===
+          cd /d "%TEMP%\agentflow-test-pkg"
+          call install.bat < nul
+
+          echo === Verifying install ===
+          if not exist "%USERPROFILE%\.agentflow\bin\agentflow.exe" (
+            echo FAIL: binary not installed
+            exit /b 1
+          )
+          "%USERPROFILE%\.agentflow\bin\agentflow.exe" version
+          echo === Offline install test PASSED ===
 
   release:
     needs: [metadata, build, test-install]
