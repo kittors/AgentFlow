@@ -93,13 +93,31 @@ func (i *Installer) RuntimeStatus() RuntimeStatus {
 		if bashPath, err := lookPath("bash"); err == nil {
 			status.BashPath = bashPath
 		}
+		// Detect native Windows Node/npm first.
+		if nodePath, err := lookPath("node"); err == nil {
+			status.NodePath = nodePath
+			if out, runErr := runCombined("node", "--version"); runErr == nil {
+				status.NodeVersion = strings.TrimSpace(string(out))
+			}
+		}
+		if npmPath, err := lookPath("npm"); err == nil {
+			status.NPMPath = npmPath
+			if out, runErr := runCombined("npm", "--version"); runErr == nil {
+				status.NPMVersion = strings.TrimSpace(string(out))
+			}
+		}
+		// Also check WSL if available (may override with WSL versions if native not found).
 		if distro, ready := detectWSL(); ready {
 			status.WSLReady = true
 			status.WSLDistro = distro
-			status.NodePath = strings.TrimSpace(i.wslCommandPath("node"))
-			status.NodeVersion = strings.TrimSpace(i.wslCommandValue("node --version"))
-			status.NPMPath = strings.TrimSpace(i.wslCommandPath("npm"))
-			status.NPMVersion = strings.TrimSpace(i.wslCommandValue("npm --version"))
+			if status.NodePath == "" {
+				status.NodePath = strings.TrimSpace(i.wslCommandPath("node"))
+				status.NodeVersion = strings.TrimSpace(i.wslCommandValue("node --version"))
+			}
+			if status.NPMPath == "" {
+				status.NPMPath = strings.TrimSpace(i.wslCommandPath("npm"))
+				status.NPMVersion = strings.TrimSpace(i.wslCommandValue("npm --version"))
+			}
 			status.NVMReady = strings.TrimSpace(i.wslCommandValue(`if command -v nvm >/dev/null 2>&1; then printf yes; fi`)) == "yes"
 		}
 		return status
@@ -237,6 +255,10 @@ func (i *Installer) autoInstallSupported(target targets.Target, runtimeStatus Ru
 	case platformWindows:
 		if runtimeStatus.InWSL {
 			return runtimeStatus.BashPath != ""
+		}
+		// Support native Windows npm or WSL.
+		if runtimeStatus.NPMPath != "" {
+			return true
 		}
 		return runtimeStatus.WSLReady
 	default:
@@ -491,6 +513,12 @@ npm --version
 
 	switch runtimeStatus.Platform {
 	case platformWindows:
+		if !runtimeStatus.InWSL && !runtimeStatus.WSLReady {
+			// No WSL: try native Windows npm directly.
+			if npmPath, err := lookPath("npm"); err == nil {
+				return runCombined(npmPath, "install", "-g", target.NPMPackage)
+			}
+		}
 		return runCombined("wsl.exe", "bash", "-lc", script)
 	default:
 		return runCombined("bash", "-lc", script)
