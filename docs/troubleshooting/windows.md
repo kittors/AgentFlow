@@ -3,14 +3,26 @@
 This doc covers common Windows issues when running the one-line PowerShell installer:
 
 ```powershell
-irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
 ---
 
 ## zh-CN：Windows 常见问题
 
-### 1) 报错：`未能解析此远程名称: 'raw.githubusercontent.com'`
+### 1) 报错：`基础连接已经关闭: 接收时发生错误`
+
+**原因**：Windows PowerShell 5.1 默认不启用 TLS 1.2，而 GitHub 要求 TLS 1.2+。
+
+**解决**：在命令前加上 TLS 设置（上面已包含此修复）：
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
+```
+
+如果你使用的是 PowerShell 7+（`pwsh`），则不需要此前缀。
+
+### 2) 报错：`未能解析此远程名称: 'raw.githubusercontent.com'`
 
 **结论**：这是网络/DNS/代理导致的域名解析失败，通常不是脚本本身的问题。
 

@@ -184,10 +184,12 @@ curl -fsSL https://raw.githubusercontent.com/kittors/AgentFlow/main/install.sh |
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
-> Windows recommendation: download `agentflow-windows-amd64.exe` from GitHub Releases and put it on your `PATH`.
+> The `[Net.ServicePointManager]` prefix is needed because Windows PowerShell 5.1 does not enable TLS 1.2 by default. Without it you may see *"The underlying connection was closed"*.
+>
+> Windows recommendation: download `agentflow-windows-amd64.exe` (or `agentflow-windows-arm64.exe` for ARM devices) from GitHub Releases and put it on your `PATH`.
 
 Windows troubleshooting: see [docs/troubleshooting/windows.md](docs/troubleshooting/windows.md).
 
@@ -210,6 +212,7 @@ Download the matching asset from [Releases](https://github.com/kittors/AgentFlow
 - `agentflow-darwin-amd64`
 - `agentflow-darwin-arm64`
 - `agentflow-windows-amd64.exe`
+- `agentflow-windows-arm64.exe`
 
 Then place it somewhere on `PATH`, for example:
 
@@ -243,6 +246,7 @@ Go to [Releases](https://github.com/kittors/AgentFlow/releases) and download the
 | Linux | x86_64 | `agentflow-linux-amd64` |
 | Linux | ARM64 / aarch64 | `agentflow-linux-arm64` |
 | Windows | x86_64 | `agentflow-windows-amd64.exe` |
+| Windows | ARM64 | `agentflow-windows-arm64.exe` |
 
 #### Step 2 — Transfer
 
@@ -454,6 +458,7 @@ Release builds are produced by `.github/workflows/release.yml` for:
 - macOS `amd64`
 - macOS `arm64`
 - Windows `amd64`
+- Windows `arm64`
 
 ---
 

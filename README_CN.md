@@ -184,10 +184,12 @@ curl -fsSL https://raw.githubusercontent.com/kittors/AgentFlow/main/install.sh |
 Windows PowerShell：
 
 ```powershell
-irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/kittors/AgentFlow/main/install.ps1 | iex
 ```
 
-> Windows 建议：优先直接从 GitHub Releases 下载 `agentflow-windows-amd64.exe`，放到 `PATH` 后即可使用。
+> 前面的 `[Net.ServicePointManager]` 是必须的，因为 Windows PowerShell 5.1 默认未启用 TLS 1.2。如果不加，可能会报 *"基础连接已经关闭: 接收时发生错误"*。
+>
+> Windows 建议：优先直接从 GitHub Releases 下载 `agentflow-windows-amd64.exe`（ARM 设备下载 `agentflow-windows-arm64.exe`），放到 `PATH` 后即可使用。
 
 Windows 常见问题（DNS/代理/raw 域名解析失败等）：见 [docs/troubleshooting/windows.md](docs/troubleshooting/windows.md)。
 
@@ -210,6 +212,7 @@ npx agentflow
 - `agentflow-darwin-amd64`
 - `agentflow-darwin-arm64`
 - `agentflow-windows-amd64.exe`
+- `agentflow-windows-arm64.exe`
 
 然后放到 `PATH` 中，例如：
 
@@ -243,6 +246,7 @@ go build -o ./bin/agentflow ./cmd/agentflow
 | Linux | x86_64 | `agentflow-linux-amd64` |
 | Linux | ARM64 / aarch64 | `agentflow-linux-arm64` |
 | Windows | x86_64 | `agentflow-windows-amd64.exe` |
+| Windows | ARM64 | `agentflow-windows-arm64.exe` |
 
 #### 第二步 — 传输
 
@@ -454,6 +458,7 @@ node --check bin/agentflow.js
 - macOS `amd64`
 - macOS `arm64`
 - Windows `amd64`
+- Windows `arm64`
 
 ---
 
