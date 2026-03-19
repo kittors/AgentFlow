@@ -132,8 +132,23 @@ if (-not (Test-Path $INSTALL_DIR)) {
     New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
 }
 $exePath = Join-Path $INSTALL_DIR "agentflow.exe"
-Write-Info (msg "正在下载，请稍候..." "Downloading, please wait...")
-Invoke-WebRequest -Uri $downloadUrl -OutFile $exePath -UseBasicParsing -TimeoutSec 120
+Write-Info (msg "正在下载: $downloadUrl" "Downloading: $downloadUrl")
+
+# Try BITS transfer first (shows native Windows progress bar)
+$downloaded = $false
+try {
+    Import-Module BitsTransfer -ErrorAction Stop
+    Start-BitsTransfer -Source $downloadUrl -Destination $exePath -Description (msg "正在下载 AgentFlow..." "Downloading AgentFlow...")
+    $downloaded = $true
+} catch {
+    Write-Info (msg "BITS 不可用，使用备用下载方式..." "BITS unavailable, using fallback download...")
+}
+
+# Fallback: Invoke-WebRequest with progress
+if (-not $downloaded) {
+    $ProgressPreference = 'Continue'
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $exePath -UseBasicParsing -TimeoutSec 120
+}
 Write-Ok (msg "已下载到 $exePath" "Downloaded to $exePath")
 
 Write-Step (msg "步骤 3/3: 配置 PATH 并验证" "Step 3/3: Configure PATH and verify")
