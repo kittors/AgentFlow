@@ -134,17 +134,40 @@ if (-not (Test-Path $INSTALL_DIR)) {
 $exePath = Join-Path $INSTALL_DIR "agentflow.exe"
 Write-Info (msg "正在下载: $downloadUrl" "Downloading: $downloadUrl")
 
-# Try BITS transfer first (shows native Windows progress bar)
-$downloaded = $false
+# Re-enforce TLS 1.2 before download (GitHub release redirects may need it)
 try {
-    Import-Module BitsTransfer -ErrorAction Stop
-    Start-BitsTransfer -Source $downloadUrl -Destination $exePath -Description (msg "正在下载 AgentFlow..." "Downloading AgentFlow...")
-    $downloaded = $true
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
 } catch {
-    Write-Info (msg "BITS 不可用，使用备用下载方式..." "BITS unavailable, using fallback download...")
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 }
 
-# Fallback: Invoke-WebRequest with progress
+$downloaded = $false
+
+# Method 1: BITS transfer (shows native Windows progress bar)
+if (-not $downloaded) {
+    try {
+        Import-Module BitsTransfer -ErrorAction Stop
+        Start-BitsTransfer -Source $downloadUrl -Destination $exePath -Description (msg "正在下载 AgentFlow..." "Downloading AgentFlow...")
+        if (Test-Path $exePath) { $downloaded = $true }
+    } catch {
+        Write-Info (msg "BITS 下载失败，尝试其他方式..." "BITS failed, trying alternatives...")
+    }
+}
+
+# Method 2: .NET WebClient (handles GitHub redirects well)
+if (-not $downloaded) {
+    try {
+        Write-Info (msg "使用 WebClient 下载..." "Downloading via WebClient...")
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add("User-Agent", "AgentFlow-Installer")
+        $wc.DownloadFile($downloadUrl, $exePath)
+        if (Test-Path $exePath) { $downloaded = $true }
+    } catch {
+        Write-Info (msg "WebClient 下载失败，尝试最后方式..." "WebClient failed, trying last resort...")
+    }
+}
+
+# Method 3: Invoke-WebRequest (last resort)
 if (-not $downloaded) {
     $ProgressPreference = 'Continue'
     Invoke-WebRequest -Uri $downloadUrl -OutFile $exePath -UseBasicParsing -TimeoutSec 120
