@@ -167,15 +167,84 @@ jobs:
     needs: [metadata, build, test-install]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: release-assets
 
-      - name: Collect assets
+      - name: Collect assets and create archives
         shell: bash
         run: |
           mkdir -p final-assets
           find release-assets -type f -maxdepth 2 -exec cp {} final-assets/ \;
+
+          # Create archives for each platform (binary + install script)
+          mkdir -p archives
+
+          # ── Windows amd64 ──
+          if [ -f final-assets/agentflow-windows-amd64.exe ]; then
+            mkdir -p pkg-win-amd64
+            cp final-assets/agentflow-windows-amd64.exe pkg-win-amd64/agentflow.exe
+            cp install.bat pkg-win-amd64/
+            (cd pkg-win-amd64 && zip -r ../final-assets/agentflow-windows-amd64.zip .)
+            rm -rf pkg-win-amd64
+          fi
+
+          # ── Windows arm64 ──
+          if [ -f final-assets/agentflow-windows-arm64.exe ]; then
+            mkdir -p pkg-win-arm64
+            cp final-assets/agentflow-windows-arm64.exe pkg-win-arm64/agentflow.exe
+            cp install.bat pkg-win-arm64/
+            (cd pkg-win-arm64 && zip -r ../final-assets/agentflow-windows-arm64.zip .)
+            rm -rf pkg-win-arm64
+          fi
+
+          # ── macOS amd64 ──
+          if [ -f final-assets/agentflow-darwin-amd64 ]; then
+            mkdir -p pkg-darwin-amd64
+            cp final-assets/agentflow-darwin-amd64 pkg-darwin-amd64/agentflow
+            chmod +x pkg-darwin-amd64/agentflow
+            cp local-install.sh pkg-darwin-amd64/install.sh
+            chmod +x pkg-darwin-amd64/install.sh
+            tar -czf final-assets/agentflow-darwin-amd64.tar.gz -C pkg-darwin-amd64 .
+            rm -rf pkg-darwin-amd64
+          fi
+
+          # ── macOS arm64 ──
+          if [ -f final-assets/agentflow-darwin-arm64 ]; then
+            mkdir -p pkg-darwin-arm64
+            cp final-assets/agentflow-darwin-arm64 pkg-darwin-arm64/agentflow
+            chmod +x pkg-darwin-arm64/agentflow
+            cp local-install.sh pkg-darwin-arm64/install.sh
+            chmod +x pkg-darwin-arm64/install.sh
+            tar -czf final-assets/agentflow-darwin-arm64.tar.gz -C pkg-darwin-arm64 .
+            rm -rf pkg-darwin-arm64
+          fi
+
+          # ── Linux amd64 ──
+          if [ -f final-assets/agentflow-linux-amd64 ]; then
+            mkdir -p pkg-linux-amd64
+            cp final-assets/agentflow-linux-amd64 pkg-linux-amd64/agentflow
+            chmod +x pkg-linux-amd64/agentflow
+            cp local-install.sh pkg-linux-amd64/install.sh
+            chmod +x pkg-linux-amd64/install.sh
+            tar -czf final-assets/agentflow-linux-amd64.tar.gz -C pkg-linux-amd64 .
+            rm -rf pkg-linux-amd64
+          fi
+
+          # ── Linux arm64 ──
+          if [ -f final-assets/agentflow-linux-arm64 ]; then
+            mkdir -p pkg-linux-arm64
+            cp final-assets/agentflow-linux-arm64 pkg-linux-arm64/agentflow
+            chmod +x pkg-linux-arm64/agentflow
+            cp local-install.sh pkg-linux-arm64/install.sh
+            chmod +x pkg-linux-arm64/install.sh
+            tar -czf final-assets/agentflow-linux-arm64.tar.gz -C pkg-linux-arm64 .
+            rm -rf pkg-linux-arm64
+          fi
+
+          echo "=== Final release assets ==="
           ls -la final-assets
 
       - name: Delete previous continuous release
