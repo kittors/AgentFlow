@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -237,7 +238,13 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 //
 // When a custom Base URL is set, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC is
 // also set to "1" to prevent Claude Code from attempting to contact Anthropic
-// servers for non-essential operations.
+// servers for non-essential operations. DISABLE_AUTOUPDATER is also set to
+// prevent startup network checks.
+//
+// IMPORTANT: On Windows, this function also clears any stale ANTHROPIC_*
+// environment variables from the registry (previously set by older AgentFlow
+// versions via setx). System env vars take PRECEDENCE over settings.json env
+// section, so leftover registry entries would cause settings.json to be ignored.
 func (i *Installer) WriteClaudeSettings(apiKey, baseURL, model string) error {
 	settingsDir := filepath.Join(i.HomeDir, ".claude")
 	if err := os.MkdirAll(settingsDir, 0o755); err != nil {
@@ -268,6 +275,8 @@ func (i *Installer) WriteClaudeSettings(apiKey, baseURL, model string) error {
 		envMap["ANTHROPIC_BASE_URL"] = baseURL
 		// Disable non-essential traffic when using a custom API endpoint.
 		envMap["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+		// Disable auto-updater to prevent startup network checks to Anthropic.
+		envMap["DISABLE_AUTOUPDATER"] = "1"
 	}
 	settings["env"] = envMap
 
@@ -279,7 +288,89 @@ func (i *Installer) WriteClaudeSettings(apiKey, baseURL, model string) error {
 	if err != nil {
 		return err
 	}
-	return config.SafeWrite(settingsPath, append(data, '\n'), 0o644)
+	if err := config.SafeWrite(settingsPath, append(data, '\n'), 0o644); err != nil {
+		return err
+	}
+
+	// Clean up stale system environment variables that would override
+	// settings.json. System env vars have HIGHER precedence than the env
+	// section in settings.json, so any leftover registry entries from older
+	// AgentFlow versions (which used setx) must be removed.
+	i.cleanClaudeSystemEnvVars()
+
+	return nil
+}
+
+// cleanClaudeSystemEnvVars removes stale ANTHROPIC_* environment variables
+// from both the Windows registry (setx) and the current process. This ensures
+// settings.json env values are not overridden by leftover system env vars.
+func (i *Installer) cleanClaudeSystemEnvVars() {
+	keysToClean := []string{
+		"ANTHROPIC_API_KEY",
+		"ANTHROPIC_BASE_URL",
+		"ANTHROPIC_AUTH_TOKEN",
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+	}
+
+	// On Windows, delete from registry via setx (set to empty = delete).
+	if currentPlatform() == platformWindows && !inWSL() {
+		for _, key := range keysToClean {
+			// Check if the key exists in the registry before trying to delete.
+			if val := i.readWindowsUserEnv(key); val != "" {
+				// setx KEY "" removes the user env var from registry.
+				cmd := exec.Command("reg", "delete", `HKCU\Environment`, "/v", key, "/f")
+				_ = cmd.Run()
+			}
+		}
+		// Broadcast WM_SETTINGCHANGE so new processes pick up the change.
+		_ = exec.Command("cmd", "/C", "setx", "__AGENTFLOW_DUMMY__", "1").Run()
+		_ = exec.Command("reg", "delete", `HKCU\Environment`, "/v", "__AGENTFLOW_DUMMY__", "/f").Run()
+	}
+
+	// Also remove from the current process environment. Even if the registry
+	// entries are removed, the current terminal session may still have them.
+	for _, key := range keysToClean {
+		os.Unsetenv(key)
+	}
+
+	// Clean from RC files too (macOS/Linux legacy).
+	_ = i.cleanClaudeEnvFromRC()
+}
+
+// cleanClaudeEnvFromRC removes ANTHROPIC_* exports from the shell RC file.
+// This cleans up config written by older AgentFlow versions.
+func (i *Installer) cleanClaudeEnvFromRC() error {
+	rcFile := i.detectShellRC()
+	if rcFile == "" {
+		return nil
+	}
+	data, err := os.ReadFile(rcFile)
+	if err != nil {
+		return nil
+	}
+	content := string(data)
+	changed := false
+	for _, key := range []string{"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"} {
+		exportPrefix := "export " + key + "="
+		if strings.Contains(content, exportPrefix) {
+			var updated strings.Builder
+			for _, line := range strings.Split(content, "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, exportPrefix) && !strings.HasPrefix(trimmed, "#") {
+					// Comment out instead of deleting.
+					updated.WriteString("# " + line + "  # removed by AgentFlow (now in settings.json)\n")
+					changed = true
+				} else {
+					updated.WriteString(line + "\n")
+				}
+			}
+			content = updated.String()
+		}
+	}
+	if changed {
+		return os.WriteFile(rcFile, []byte(strings.TrimRight(content, "\n")+"\n"), 0o644)
+	}
+	return nil
 }
 
 // ReadClaudeSettingsEnv reads an environment variable value from the env
