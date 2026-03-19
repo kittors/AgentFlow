@@ -897,15 +897,20 @@ func (i *Installer) ReadEnvFromShellRC() map[string]string {
 // process environment (os.Getenv), then falling back to reading from the
 // shell rc file (or Windows registry). This ensures config values are visible
 // even when the rc file hasn't been sourced yet.
+//
+// On Windows (non-WSL), the registry is checked FIRST because setx only
+// writes to the registry and does not update the current terminal session.
+// If the user re-runs agentflow in the same terminal after a config change,
+// os.Getenv would return the stale value inherited from the parent shell.
 func (i *Installer) GetEnvOrRC(key string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	// On Windows, also check user-level registry env vars.
+	// On Windows, prefer registry values (set by setx) over inherited env.
 	if currentPlatform() == platformWindows && !inWSL() {
 		if val := i.readWindowsUserEnv(key); val != "" {
 			return val
 		}
+	}
+	if val := os.Getenv(key); val != "" {
+		return val
 	}
 	rcVars := i.ReadEnvFromShellRC()
 	if rcVars != nil {
