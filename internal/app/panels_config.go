@@ -202,16 +202,14 @@ func (a *App) buildClaudeEnvVars(apiKey, baseURL string) map[string]string {
 	if baseURL != "" {
 		token := apiKey
 		if token == "" {
-			token = a.Installer.GetEnvOrRC("ANTHROPIC_AUTH_TOKEN")
-		}
-		if token == "" {
 			token = a.Installer.GetEnvOrRC("ANTHROPIC_API_KEY")
 		}
 		if token != "" {
-			result["ANTHROPIC_AUTH_TOKEN"] = token
+			result["ANTHROPIC_API_KEY"] = token
 		}
 		result["ANTHROPIC_BASE_URL"] = baseURL
-		result["ANTHROPIC_API_KEY"] = ""
+		// Clean up legacy ANTHROPIC_AUTH_TOKEN to avoid conflicts.
+		result["ANTHROPIC_AUTH_TOKEN"] = ""
 		return result
 	}
 

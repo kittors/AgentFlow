@@ -28,10 +28,6 @@ func (a *App) cleanPanel() ui.Panel {
 
 func (a *App) authDisplayValue(targetName, apiKeyEnv, baseURLEnv string) (string, string) {
 	label := "API Key"
-	baseURL := ""
-	if baseURLEnv != "" {
-		baseURL = a.Installer.GetEnvOrRC(baseURLEnv)
-	}
 
 	switch targetName {
 	case "codex":
@@ -39,13 +35,6 @@ func (a *App) authDisplayValue(targetName, apiKeyEnv, baseURLEnv string) (string
 			return label, value
 		}
 		return label, a.Installer.ReadCodexAuthKey()
-	case "claude":
-		if baseURL != "" {
-			if value := a.Installer.GetEnvOrRC("ANTHROPIC_AUTH_TOKEN"); value != "" {
-				return "Auth Token", value
-			}
-		}
-		return label, a.Installer.GetEnvOrRC(apiKeyEnv)
 	default:
 		return label, a.Installer.GetEnvOrRC(apiKeyEnv)
 	}

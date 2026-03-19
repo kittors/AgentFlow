@@ -41,18 +41,18 @@ func TestUninstallProjectTargetOptionsOnlyShowsInstalledTarget(t *testing.T) {
 	}
 }
 
-func TestBuildClaudeEnvVarsUsesAuthTokenForGatewayMode(t *testing.T) {
+func TestBuildClaudeEnvVarsUsesApiKeyForGatewayMode(t *testing.T) {
 	application := New(&bytes.Buffer{}, &bytes.Buffer{})
 
 	envVars := application.buildClaudeEnvVars("sk-gateway-token", "https://proxy.example.com/v1")
-	if envVars["ANTHROPIC_AUTH_TOKEN"] != "sk-gateway-token" {
-		t.Fatalf("expected gateway auth token, got %#v", envVars)
+	if envVars["ANTHROPIC_API_KEY"] != "sk-gateway-token" {
+		t.Fatalf("expected gateway API key, got %#v", envVars)
 	}
 	if envVars["ANTHROPIC_BASE_URL"] != "https://proxy.example.com/v1" {
 		t.Fatalf("expected gateway base url, got %#v", envVars)
 	}
-	if value, ok := envVars["ANTHROPIC_API_KEY"]; !ok || value != "" {
-		t.Fatalf("expected API key to be cleared in gateway mode, got %#v", envVars)
+	if value, ok := envVars["ANTHROPIC_AUTH_TOKEN"]; !ok || value != "" {
+		t.Fatalf("expected auth token to be cleared in gateway mode, got %#v", envVars)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestBuildClaudeEnvVarsUsesApiKeyForDirectMode(t *testing.T) {
 	}
 }
 
-func TestWriteEnvConfigPanelWritesClaudeGatewayToken(t *testing.T) {
+func TestWriteEnvConfigPanelWritesClaudeApiKeyForGateway(t *testing.T) {
 	homeDir := t.TempDir()
 	zshrcPath := filepath.Join(homeDir, ".zshrc")
 	if err := os.WriteFile(zshrcPath, []byte("# AgentFlow CLI configuration\nexport ANTHROPIC_API_KEY=\"old-key\"\nexport ANTHROPIC_BASE_URL=\"https://old.example.com\"\n"), 0o644); err != nil {
@@ -92,13 +92,13 @@ func TestWriteEnvConfigPanelWritesClaudeGatewayToken(t *testing.T) {
 		t.Fatalf("read .zshrc: %v", err)
 	}
 	text := string(content)
-	if !strings.Contains(text, "export ANTHROPIC_AUTH_TOKEN=\"sk-gateway-token\"") {
-		t.Fatalf("expected gateway auth token export, got %q", text)
+	if !strings.Contains(text, "export ANTHROPIC_API_KEY=\"sk-gateway-token\"") {
+		t.Fatalf("expected API key export in gateway mode, got %q", text)
 	}
 	if !strings.Contains(text, "export ANTHROPIC_BASE_URL=\"https://proxy.example.com/v1\"") {
 		t.Fatalf("expected gateway base url export, got %q", text)
 	}
-	if strings.Contains(text, "export ANTHROPIC_API_KEY=\"sk-gateway-token\"") {
-		t.Fatalf("expected API key export to be removed in gateway mode, got %q", text)
+	if strings.Contains(text, "ANTHROPIC_AUTH_TOKEN") {
+		t.Fatalf("expected no ANTHROPIC_AUTH_TOKEN in gateway mode, got %q", text)
 	}
 }
