@@ -3,6 +3,8 @@ package ui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
@@ -289,19 +291,54 @@ func (m interactiveFlowModel) selectionForCurrentScreen() selectionModel {
 					summaryLines = append(summaryLines,
 						fmt.Sprintf("  ✏️  %s:", label))
 
-					// Prominent input box.
+					// Prominent input box with sliding window for long values.
 					var inputDisplay string
 					if f.Value == "" {
 						inputDisplay = m.catalog.Msg("请在此输入…", "type here…")
 					} else {
-						// Show value with cursor.
 						pos := f.CursorPos
 						if pos > len(f.Value) {
 							pos = len(f.Value)
 						}
-						inputDisplay = f.Value[:pos] + "█" + f.Value[pos:]
+						// Calculate available display width for input content.
+						// Panel prefix "  │ " = 4 chars, cursor "█" = 1 char,
+						// overflow indicators "◁"/"▷" = 1 char each, plus some margin.
+						const inputBoxWidth = 36 // max chars visible inside the box
+						withCursor := f.Value[:pos] + "█" + f.Value[pos:]
+						if ansi.StringWidth(withCursor) <= inputBoxWidth {
+							inputDisplay = withCursor
+						} else {
+							// Sliding window: keep cursor visible in the center.
+							half := inputBoxWidth / 2
+							start := pos - half
+							if start < 0 {
+								start = 0
+							}
+							end := start + inputBoxWidth
+							if end > len(f.Value) {
+								end = len(f.Value)
+								start = end - inputBoxWidth
+								if start < 0 {
+									start = 0
+								}
+							}
+							visible := f.Value[start:end]
+							// Insert cursor into visible portion.
+							cursorInWindow := pos - start
+							if cursorInWindow > len(visible) {
+								cursorInWindow = len(visible)
+							}
+							inputDisplay = visible[:cursorInWindow] + "█" + visible[cursorInWindow:]
+							// Add overflow indicators.
+							if start > 0 {
+								inputDisplay = "◁" + inputDisplay
+							}
+							if end < len(f.Value) {
+								inputDisplay = inputDisplay + "▷"
+							}
+						}
 					}
-					// Styled input line: ┃ value █ ┃
+					// Styled input line.
 					summaryLines = append(summaryLines,
 						"  ┌──────────────────────────────────────┐",
 						fmt.Sprintf("  │ %s", inputDisplay),
