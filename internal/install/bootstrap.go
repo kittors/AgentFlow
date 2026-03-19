@@ -664,12 +664,18 @@ func nodeMajor(version string) int {
 }
 
 // WriteEnvConfig writes environment variable exports to the user's shell config
-// file (~/.zshrc, ~/.bashrc, or ~/.profile). Instead of appending a new block
+// file (~/.zshrc, ~/.bashrc, or ~/.profile). On Windows, it uses setx to set
+// persistent user-level environment variables. Instead of appending a new block
 // every time, it looks for an existing "# AgentFlow CLI configuration" section
 // and replaces it in-place. This prevents duplicate blocks from accumulating.
 func (i *Installer) WriteEnvConfig(envVars map[string]string) ([]string, error) {
 	if len(envVars) == 0 {
 		return []string{i.Catalog.Msg("没有需要写入的配置。", "No configuration to write.")}, nil
+	}
+
+	// On Windows (not in WSL), use setx to persist env vars.
+	if currentPlatform() == platformWindows && !inWSL() {
+		return i.writeEnvConfigWindows(envVars)
 	}
 
 	rcFile := i.detectShellRC()
@@ -748,6 +754,13 @@ func (i *Installer) WriteEnvConfig(envVars map[string]string) ([]string, error) 
 
 	if err := os.WriteFile(rcFile, []byte(content), 0644); err != nil {
 		return nil, fmt.Errorf(i.Catalog.Msg("写入 %s 失败: %v", "failed to write %s: %v"), rcFile, err)
+	}
+
+	// Also set in current process so values are immediately visible.
+	for envVar, value := range envVars {
+		if strings.TrimSpace(value) != "" {
+			os.Setenv(envVar, value)
+		}
 	}
 
 	lines := []string{
@@ -882,15 +895,57 @@ func (i *Installer) ReadEnvFromShellRC() map[string]string {
 
 // GetEnvOrRC returns the value of an env var, first checking the current
 // process environment (os.Getenv), then falling back to reading from the
-// shell rc file. This ensures config values are visible even when the rc
-// file hasn't been sourced yet.
+// shell rc file (or Windows registry). This ensures config values are visible
+// even when the rc file hasn't been sourced yet.
 func (i *Installer) GetEnvOrRC(key string) string {
 	if val := os.Getenv(key); val != "" {
 		return val
+	}
+	// On Windows, also check user-level registry env vars.
+	if currentPlatform() == platformWindows && !inWSL() {
+		if val := i.readWindowsUserEnv(key); val != "" {
+			return val
+		}
 	}
 	rcVars := i.ReadEnvFromShellRC()
 	if rcVars != nil {
 		return rcVars[key]
 	}
 	return ""
+}
+
+// readWindowsUserEnv reads a user-level environment variable from the Windows registry.
+func (i *Installer) readWindowsUserEnv(key string) string {
+	script := fmt.Sprintf(`[Environment]::GetEnvironmentVariable('%s', 'User')`, key)
+	output, err := runCombined("powershell", "-NoProfile", "-Command", script)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+// writeEnvConfigWindows sets persistent user-level environment variables on Windows
+// using setx, and also sets them in the current process for immediate effect.
+func (i *Installer) writeEnvConfigWindows(envVars map[string]string) ([]string, error) {
+	lines := []string{
+		i.Catalog.Msg("正在设置 Windows 用户环境变量:", "Setting Windows user environment variables:"),
+	}
+	for envVar, value := range envVars {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		// setx writes to the registry (user-level, persistent across terminals).
+		if _, err := runCombined("setx", envVar, value); err != nil {
+			return nil, fmt.Errorf(i.Catalog.Msg("设置环境变量 %s 失败: %v", "Failed to set env var %s: %v"), envVar, err)
+		}
+		// Also set in current process for immediate effect.
+		os.Setenv(envVar, value)
+		lines = append(lines, fmt.Sprintf("  %s=%s", envVar, value))
+	}
+	if len(lines) == 1 {
+		return []string{i.Catalog.Msg("所有配置项均为空，未写入。", "All config values were empty; nothing written.")}, nil
+	}
+	lines = append(lines, "")
+	lines = append(lines, i.Catalog.Msg("✅ 环境变量已设置。新打开的终端窗口会自动生效。", "✅ Environment variables set. New terminal windows will pick them up automatically."))
+	return lines, nil
 }
