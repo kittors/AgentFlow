@@ -144,6 +144,12 @@ func (i *Installer) CLIConfigFields(targetName string) []EnvVarConfig {
 //
 // Any empty parameter is skipped (existing values are preserved).
 func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) error {
+	// Defensive: strip NULL bytes that Windows console paste may inject.
+	apiKey = strings.ReplaceAll(apiKey, "\x00", "")
+	baseURL = strings.ReplaceAll(baseURL, "\x00", "")
+	model = strings.ReplaceAll(model, "\x00", "")
+	reasoning = strings.ReplaceAll(reasoning, "\x00", "")
+
 	codexDir := filepath.Join(i.HomeDir, ".codex")
 	if err := os.MkdirAll(codexDir, 0o755); err != nil {
 		return err
@@ -246,6 +252,11 @@ func (i *Installer) WriteCodexConfig(apiKey, baseURL, model, reasoning string) e
 // versions via setx). System env vars take PRECEDENCE over settings.json env
 // section, so leftover registry entries would cause settings.json to be ignored.
 func (i *Installer) WriteClaudeSettings(apiKey, baseURL, model string) error {
+	// Defensive: strip NULL bytes that Windows console paste may inject.
+	apiKey = strings.ReplaceAll(apiKey, "\x00", "")
+	baseURL = strings.ReplaceAll(baseURL, "\x00", "")
+	model = strings.ReplaceAll(model, "\x00", "")
+
 	settingsDir := filepath.Join(i.HomeDir, ".claude")
 	if err := os.MkdirAll(settingsDir, 0o755); err != nil {
 		return err

@@ -372,7 +372,7 @@ func (m interactiveFlowModel) handleConfigKey(key tea.KeyMsg) (tea.Model, tea.Cm
 			if f.FieldType != "select" {
 				// Insert characters at cursor position (rune-aware).
 				// Strip bracket chars from bracketed paste sequences.
-				ins := strings.NewReplacer("[", "", "]", "").Replace(key.String())
+				ins := strings.NewReplacer("[", "", "]", "", "\x00", "").Replace(key.String())
 				if ins != "" {
 					runes := []rune(f.Value)
 					insRunes := []rune(ins)

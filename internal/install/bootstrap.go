@@ -143,8 +143,10 @@ func detectWSL() (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	for _, line := range strings.Split(string(output), "\n") {
-		line = strings.TrimSpace(strings.TrimPrefix(line, "\x00"))
+	// wsl.exe outputs UTF-16LE text; strip all NULL bytes before splitting.
+	cleaned := strings.ReplaceAll(string(output), "\x00", "")
+	for _, line := range strings.Split(cleaned, "\n") {
+		line = strings.TrimSpace(line)
 		if line != "" {
 			return line, true
 		}
@@ -926,7 +928,8 @@ func (i *Installer) readWindowsUserEnv(key string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	// Strip NULL bytes that PowerShell/Windows may emit (UTF-16LE artifacts).
+	return strings.TrimSpace(strings.ReplaceAll(string(output), "\x00", ""))
 }
 
 // writeEnvConfigWindows sets persistent user-level environment variables on Windows
