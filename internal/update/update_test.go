@@ -271,11 +271,7 @@ func TestAssetNameForPlatform(t *testing.T) {
 	}
 }
 
-func TestSelfUpdateReplacesExecutableOnUnix(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("self-update replacement test is Unix-only")
-	}
-
+func TestSelfUpdateReplacesExecutable(t *testing.T) {
 	assetName, err := assetNameForPlatform(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatalf("assetNameForPlatform returned error: %v", err)
@@ -335,10 +331,6 @@ func TestSelfUpdateReplacesExecutableOnUnix(t *testing.T) {
 }
 
 func TestSelfUpdateAllowsSlowDownloadWithDefaultCheckerTimeout(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("self-update replacement test is Unix-only")
-	}
-
 	assetName, err := assetNameForPlatform(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatalf("assetNameForPlatform returned error: %v", err)

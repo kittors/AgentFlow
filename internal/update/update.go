@@ -171,10 +171,6 @@ func (c *Checker) SelfUpdateWithProgress(current string, progress ProgressFunc) 
 		executable = resolved
 	}
 
-	if runtime.GOOS == "windows" {
-		return result, errors.New("self-update on Windows is not supported yet; rerun install.ps1")
-	}
-
 	progress("downloading", 0, result.Latest)
 	if err := c.downloadAndReplace(downloadURL, executable, progress, result.Latest); err != nil {
 		return result, err
