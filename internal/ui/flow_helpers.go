@@ -317,7 +317,11 @@ func (m *interactiveFlowModel) setCursor(cursor int) {
 		}
 		m.bootstrapCursor = cursor
 		m.selectedBootstrapTarget = m.bootstrapOptions[cursor].Value
-		m.refreshBootstrapDetail()
+		// NOTE: Do NOT call refreshBootstrapDetail() here synchronously.
+		// On Windows it triggers WSL shell commands (400ms+ each) which blocks
+		// the TUI and causes freezes/crashes on rapid key presses.
+		// The detail panel is cleared and refreshed asynchronously when the
+		// user selects a target (Enter) or via cliDetailPanel.
 	case flowScreenBootstrapActions:
 		if len(m.bootstrapActionOptions) == 0 {
 			m.bootstrapActionCursor = 0
