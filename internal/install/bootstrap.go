@@ -524,6 +524,10 @@ func (i *Installer) runBootstrapScript(target targets.Target, runtimeStatus Runt
 	// The system npm fallback is critical: in many WSL setups, node/npm are installed
 	// via apt but neither fnm nor nvm exist. Without this fallback, the script would
 	// try to download nvm from GitHub, which fails behind the GFW.
+	//
+	// IMPORTANT: We use "$HOME/.nvm/nvm.sh" directly instead of "$NVM_DIR/nvm.sh"
+	// because the user's login profile (.bashrc/.profile) may set NVM_DIR to an
+	// empty or incorrect value, causing `. "$NVM_DIR/nvm.sh"` to become `. "/nvm.sh"`.
 	script := fmt.Sprintf(`set -e
 # Try fnm first (Fast Node Manager)
 USE_FNM=0
@@ -536,9 +540,9 @@ fi
 if [ "$USE_FNM" = "1" ] && command -v npm >/dev/null 2>&1; then
   npm install -g %s%s
 elif [ -s "$HOME/.nvm/nvm.sh" ]; then
-  # Use existing nvm installation
+  # Use existing nvm installation (source directly, do not rely on $NVM_DIR).
   export NVM_DIR="$HOME/.nvm"
-  . "$NVM_DIR/nvm.sh"
+  . "$HOME/.nvm/nvm.sh"
   %s
   npm install -g %s%s
 elif command -v npm >/dev/null 2>&1; then
@@ -556,7 +560,7 @@ else
     echo "AgentFlow: 或者先通过 apt install nodejs npm 安装 Node.js。" >&2
     exit 11
   fi
-  . "$NVM_DIR/nvm.sh"
+  . "$HOME/.nvm/nvm.sh"
   %s
   npm install -g %s%s
 fi
