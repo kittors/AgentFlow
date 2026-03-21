@@ -102,3 +102,148 @@ func restoreBootstrapTestEnv(t *testing.T) {
 		runtimeGOOS = previousRuntimeGOOS
 	})
 }
+
+func TestDetectNVMWindowsWithNVMHome(t *testing.T) {
+	t.Setenv("NVM_HOME", `C:\Users\Test\AppData\Roaming\nvm`)
+	if !detectNVMWindows() {
+		t.Fatal("expected detectNVMWindows to return true when NVM_HOME is set")
+	}
+}
+
+func TestDetectNVMWindowsWithLookPath(t *testing.T) {
+	restoreBootstrapTestEnv(t)
+	t.Setenv("NVM_HOME", "")
+	lookPath = func(name string) (string, error) {
+		if name == "nvm" {
+			return `C:\Users\Test\AppData\Roaming\nvm\nvm.exe`, nil
+		}
+		return "", exec.ErrNotFound
+	}
+	if !detectNVMWindows() {
+		t.Fatal("expected detectNVMWindows to return true when nvm is in PATH")
+	}
+}
+
+func TestDetectNVMWindowsNotInstalled(t *testing.T) {
+	restoreBootstrapTestEnv(t)
+	t.Setenv("NVM_HOME", "")
+	lookPath = func(name string) (string, error) {
+		return "", exec.ErrNotFound
+	}
+	if detectNVMWindows() {
+		t.Fatal("expected detectNVMWindows to return false when nvm-windows is not installed")
+	}
+}
+
+func TestRuntimeStatusWindowsNativeNVMDetected(t *testing.T) {
+	restoreBootstrapTestEnv(t)
+	runtimeGOOS = "windows"
+	t.Setenv("WSL_DISTRO_NAME", "")
+	t.Setenv("WSL_INTEROP", "")
+	t.Setenv("NVM_HOME", `C:\Users\Test\AppData\Roaming\nvm`)
+
+	lookPath = func(name string) (string, error) {
+		switch name {
+		case "node":
+			return `C:\Program Files\nodejs\node.exe`, nil
+		case "npm":
+			return `C:\Program Files\nodejs\npm.cmd`, nil
+		case "wsl.exe":
+			return "", exec.ErrNotFound // No WSL
+		default:
+			return "", exec.ErrNotFound
+		}
+	}
+	runCombined = func(name string, args ...string) ([]byte, error) {
+		switch name {
+		case "node":
+			return []byte("v24.14.0\n"), nil
+		case "npm":
+			return []byte("11.9.0\n"), nil
+		default:
+			return nil, errors.New("unexpected command")
+		}
+	}
+
+	installer := New(i18n.NewCatalog(), &bytes.Buffer{})
+	installer.HomeDir = t.TempDir()
+	status := installer.RuntimeStatus()
+
+	if !status.NVMReady {
+		t.Fatal("expected NVMReady to be true when NVM_HOME is set on Windows")
+	}
+	if status.NodeVersion != "v24.14.0" {
+		t.Fatalf("expected NodeVersion v24.14.0, got %q", status.NodeVersion)
+	}
+}
+
+func TestDetectNPMMirrorWithChineseLocale(t *testing.T) {
+	restoreBootstrapTestEnv(t)
+	t.Setenv("LANG", "zh_CN.UTF-8")
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LANGUAGE", "")
+	t.Setenv("LC_MESSAGES", "")
+
+	lookPath = func(name string) (string, error) {
+		return "", exec.ErrNotFound // No npm available
+	}
+
+	mirror := detectNPMMirror()
+	if mirror != "https://registry.npmmirror.com" {
+		t.Fatalf("expected npmmirror URL, got %q", mirror)
+	}
+}
+
+func TestDetectNPMMirrorWithExistingConfig(t *testing.T) {
+	restoreBootstrapTestEnv(t)
+	t.Setenv("LANG", "en_US.UTF-8")
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LANGUAGE", "")
+	t.Setenv("LC_MESSAGES", "")
+	runtimeGOOS = "linux" // Avoid Windows PowerShell check
+
+	lookPath = func(name string) (string, error) {
+		if name == "npm" {
+			return "/usr/bin/npm", nil
+		}
+		return "", exec.ErrNotFound
+	}
+	runCombined = func(name string, args ...string) ([]byte, error) {
+		if name == "/usr/bin/npm" && len(args) == 3 && args[0] == "config" && args[1] == "get" && args[2] == "registry" {
+			return []byte("https://registry.npmmirror.com\n"), nil
+		}
+		return nil, errors.New("unexpected")
+	}
+
+	mirror := detectNPMMirror()
+	if mirror != "https://registry.npmmirror.com" {
+		t.Fatalf("expected user-configured mirror, got %q", mirror)
+	}
+}
+
+func TestDetectNPMMirrorNoMirrorNeeded(t *testing.T) {
+	restoreBootstrapTestEnv(t)
+	t.Setenv("LANG", "en_US.UTF-8")
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LANGUAGE", "")
+	t.Setenv("LC_MESSAGES", "")
+	runtimeGOOS = "linux"
+
+	lookPath = func(name string) (string, error) {
+		if name == "npm" {
+			return "/usr/bin/npm", nil
+		}
+		return "", exec.ErrNotFound
+	}
+	runCombined = func(name string, args ...string) ([]byte, error) {
+		if name == "/usr/bin/npm" && len(args) == 3 && args[0] == "config" {
+			return []byte("https://registry.npmjs.org/\n"), nil
+		}
+		return nil, errors.New("unexpected")
+	}
+
+	mirror := detectNPMMirror()
+	if mirror != "" {
+		t.Fatalf("expected no mirror for en_US locale, got %q", mirror)
+	}
+}

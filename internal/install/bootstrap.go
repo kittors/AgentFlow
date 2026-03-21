@@ -118,7 +118,12 @@ func (i *Installer) RuntimeStatus() RuntimeStatus {
 				status.NPMPath = strings.TrimSpace(i.wslCommandPath("npm"))
 				status.NPMVersion = strings.TrimSpace(i.wslCommandValue("npm --version"))
 			}
-			status.NVMReady = strings.TrimSpace(i.wslCommandValue(`if command -v nvm >/dev/null 2>&1; then printf yes; fi`)) == "yes"
+			status.NVMReady = detectNVMWindows() ||
+				strings.TrimSpace(i.wslCommandValue(`if command -v nvm >/dev/null 2>&1; then printf yes; fi`)) == "yes"
+		}
+		// Also detect nvm-windows even without WSL.
+		if !status.NVMReady {
+			status.NVMReady = detectNVMWindows()
 		}
 		return status
 	}
@@ -478,6 +483,12 @@ func (i *Installer) runBootstrapScript(target targets.Target, runtimeStatus Runt
 		nodeInstall = fmt.Sprintf("nvm install %d && nvm use %d", target.MinNodeMajor, target.MinNodeMajor)
 	}
 
+	// Detect npm mirror for use in the bash script.
+	registryFlag := ""
+	if reg := detectNPMMirror(); reg != "" {
+		registryFlag = " --registry " + shellLiteral(reg)
+	}
+
 	// The script first tries fnm; if fnm is available and npm works, it skips nvm entirely.
 	// Otherwise it falls back to the nvm install-and-source flow.
 	script := fmt.Sprintf(`set -e
@@ -490,7 +501,7 @@ elif [ -s "$HOME/.local/share/fnm/fnm" ]; then
 fi
 
 if [ "$USE_FNM" = "1" ] && command -v npm >/dev/null 2>&1; then
-  npm install -g %s
+  npm install -g %s%s
 else
   # Fall back to nvm
   export NVM_DIR="$HOME/.nvm"
@@ -506,19 +517,23 @@ else
   fi
   . "$NVM_DIR/nvm.sh"
   %s
-  npm install -g %s
+  npm install -g %s%s
 fi
 command -v %s >/dev/null 2>&1
 node --version
 npm --version
-`, shellLiteral(target.NPMPackage), shellLiteral(nvmInstallScriptURL), shellLiteral(nvmInstallScriptURL), nodeInstall, shellLiteral(target.NPMPackage), shellLiteral(target.Command))
+`, shellLiteral(target.NPMPackage), registryFlag, shellLiteral(nvmInstallScriptURL), shellLiteral(nvmInstallScriptURL), nodeInstall, shellLiteral(target.NPMPackage), registryFlag, shellLiteral(target.Command))
 
 	switch runtimeStatus.Platform {
 	case platformWindows:
 		if !runtimeStatus.InWSL && !runtimeStatus.WSLReady {
 			// No WSL: try native Windows npm directly.
 			if npmPath, err := lookPath("npm"); err == nil {
-				return runCombined(npmPath, "install", "-g", target.NPMPackage)
+				args := []string{"install", "-g", target.NPMPackage}
+				if reg := detectNPMMirror(); reg != "" {
+					args = append(args, "--registry", reg)
+				}
+				return runCombined(npmPath, args...)
 			}
 		}
 		return runCombined("wsl.exe", "bash", "-lc", script)
@@ -612,6 +627,68 @@ func (s RuntimeStatus) runtimeLabel(catalog interface{ Msg(string, string) strin
 	default:
 		return string(s.Platform)
 	}
+}
+
+// detectNVMWindows checks whether nvm-windows is available on the native
+// Windows host. nvm-windows is an exe-based Node version manager
+// (github.com/coreybutler/nvm-windows) and is NOT the same as the bash-based
+// nvm used on Linux/macOS. It sets the NVM_HOME environment variable on
+// install and registers itself in PATH.
+func detectNVMWindows() bool {
+	// Check NVM_HOME env var (set by nvm-windows installer).
+	if nvmHome := os.Getenv("NVM_HOME"); strings.TrimSpace(nvmHome) != "" {
+		return true
+	}
+	// Also try to find the nvm executable in PATH.
+	if _, err := lookPath("nvm"); err == nil {
+		return true
+	}
+	return false
+}
+
+// detectNPMMirror checks whether the current environment would benefit from
+// using a China npm mirror (npmmirror.com). It checks:
+//  1. The existing npm registry config — if the user already configured a
+//     mirror, respect that.
+//  2. Locale environment variables — if zh_CN or zh_TW is detected, use
+//     the npmmirror registry automatically.
+//
+// Returns the mirror URL or empty string if no mirror is needed.
+func detectNPMMirror() string {
+	const mirrorURL = "https://registry.npmmirror.com"
+
+	// 1. Check if npm is already configured with a non-default registry.
+	if npmPath, err := lookPath("npm"); err == nil {
+		if out, runErr := runCombined(npmPath, "config", "get", "registry"); runErr == nil {
+			reg := strings.TrimSpace(string(out))
+			// If user already configured a mirror (not the default), respect it.
+			if reg != "" && reg != "https://registry.npmjs.org/" && reg != "https://registry.npmjs.org" {
+				return reg
+			}
+		}
+	}
+
+	// 2. Check common locale environment variables for Chinese locale.
+	for _, envVar := range []string{"LANG", "LC_ALL", "LANGUAGE", "LC_MESSAGES"} {
+		val := strings.ToLower(os.Getenv(envVar))
+		if strings.Contains(val, "zh_cn") || strings.Contains(val, "zh_tw") ||
+			strings.Contains(val, "zh_hk") || strings.Contains(val, "zh_sg") {
+			return mirrorURL
+		}
+	}
+
+	// 3. On Windows, check system UI culture via PowerShell.
+	if runtimeGOOS == "windows" {
+		if out, err := runCombined("powershell", "-NoProfile", "-Command",
+			"(Get-Culture).Name"); err == nil {
+			culture := strings.ToLower(strings.TrimSpace(string(out)))
+			if strings.HasPrefix(culture, "zh-") {
+				return mirrorURL
+			}
+		}
+	}
+
+	return ""
 }
 
 func shellLiteral(value string) string {
