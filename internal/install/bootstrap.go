@@ -483,7 +483,11 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; fi
 	if err != nil {
 		return ""
 	}
-	return cleanShellOutput(output)
+	result := cleanShellOutput(output)
+	if len(output) > 0 {
+		debuglog.Log("nativeCommandValue: raw=%q cleaned=%q", output, result)
+	}
+	return result
 }
 
 func (i *Installer) wslCommandPath(command string) string {
@@ -501,7 +505,11 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; fi
 	if err != nil {
 		return ""
 	}
-	return cleanShellOutput(output)
+	result := cleanShellOutput(output)
+	if len(output) > 0 {
+		debuglog.Log("wslCommandValue: raw=%q cleaned=%q", output, result)
+	}
+	return result
 }
 
 // cleanShellOutput strips NULL bytes, ANSI escape sequences, and login
