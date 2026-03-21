@@ -28,6 +28,12 @@ type Target struct {
 	// HasConfigFile indicates this CLI stores settings in a local config file
 	// (e.g. ~/.codex/config.json) and needs special handling beyond env vars.
 	HasConfigFile bool
+	// NativeInstallPS1 is the PowerShell install command for Windows (no npm needed).
+	// Example: "irm https://claude.ai/install.ps1 | iex"
+	NativeInstallPS1 string
+	// NativeInstallShell is the shell install command for macOS/Linux (no npm needed).
+	// Example: "curl -fsSL https://claude.ai/install.sh | bash"
+	NativeInstallShell string
 }
 
 var All = map[string]Target{
@@ -70,14 +76,16 @@ var All = map[string]Target{
 		MinNodeMajor:          18,
 		DocsURL:               "https://docs.anthropic.com/en/docs/claude-code/getting-started",
 		BootstrapSupported:    true,
-		RecommendWSLOnWindows: true,
+		RecommendWSLOnWindows: false, // Native install is now preferred on Windows.
 		// Claude Code reads config from ~/.claude/settings.json (env section).
 		// We use internal markers so the UI shows input fields, but values
 		// are written to settings.json via WriteClaudeSettings (not shell RC).
-		APIKeyEnv:     "__CLAUDE_API_KEY__",
-		BaseURLEnv:    "__CLAUDE_BASE_URL__",
-		ModelEnv:      "__CLAUDE_MODEL__",
-		HasConfigFile: true,
+		APIKeyEnv:          "__CLAUDE_API_KEY__",
+		BaseURLEnv:         "__CLAUDE_BASE_URL__",
+		ModelEnv:           "__CLAUDE_MODEL__",
+		HasConfigFile:      true,
+		NativeInstallPS1:   "irm https://claude.ai/install.ps1 | iex",
+		NativeInstallShell: "curl -fsSL https://claude.ai/install.sh | bash",
 		Models: []ModelOption{
 			{Value: "claude-opus-4-6", Label: "Claude Opus 4.6 (推荐/Recommended)", Default: true},
 			{Value: "claude-haiku-4-5-20251001", Label: "Claude Haiku 4.5"},

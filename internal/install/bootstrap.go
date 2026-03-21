@@ -259,12 +259,22 @@ func (i *Installer) autoInstallSupported(target targets.Target, runtimeStatus Ru
 
 	switch runtimeStatus.Platform {
 	case platformDarwin, platformLinux:
+		// Native install script (curl | bash) or bash + npm.
+		if target.NativeInstallShell != "" {
+			return i.hasNativeCommand("curl") || i.hasNativeCommand("wget")
+		}
 		return runtimeStatus.BashPath != ""
 	case platformWindows:
 		if runtimeStatus.InWSL {
+			if target.NativeInstallShell != "" {
+				return i.hasNativeCommand("curl") || i.hasNativeCommand("wget")
+			}
 			return runtimeStatus.BashPath != ""
 		}
-		// Support native Windows npm or WSL.
+		// Native Windows: PowerShell install script (always available), or native npm.
+		if target.NativeInstallPS1 != "" {
+			return true // PowerShell is always available on Windows.
+		}
 		if runtimeStatus.NPMPath != "" {
 			return true
 		}
@@ -334,10 +344,15 @@ func (i *Installer) BootstrapCLI(targetName string) ([]string, error) {
 	lines := []string{
 		fmt.Sprintf(i.Catalog.Msg("已准备 %s 的运行环境。", "Prepared the runtime environment for %s."), target.DisplayName),
 	}
-	if target.Name == "kiro" {
+	switch {
+	case target.Name == "kiro":
 		lines = append(lines, fmt.Sprintf(i.Catalog.Msg("安装命令: curl -sSL %s | bash", "Install command: curl -sSL %s | bash"), kiroInstallScriptURL))
 		lines = append(lines, i.Catalog.Msg("接下来可执行: kiro-cli login", "Next: run: kiro-cli login"))
-	} else {
+	case target.NativeInstallPS1 != "" && runtimeStatus.Platform == platformWindows && !runtimeStatus.InWSL:
+		lines = append(lines, i.Catalog.Msg("安装方式: 原生安装脚本（无需 Node.js）", "Install method: native installer (no Node.js required)"))
+	case target.NativeInstallShell != "":
+		lines = append(lines, fmt.Sprintf(i.Catalog.Msg("安装命令: %s", "Install command: %s"), target.NativeInstallShell))
+	default:
 		lines = append(lines, fmt.Sprintf(i.Catalog.Msg("安装命令: npm install -g %s", "Install command: npm install -g %s"), target.NPMPackage))
 	}
 	if status.CLIInstalled {
@@ -348,9 +363,6 @@ func (i *Installer) BootstrapCLI(targetName string) ([]string, error) {
 	}
 	if status.Runtime.NPMVersion != "" {
 		lines = append(lines, fmt.Sprintf(i.Catalog.Msg("npm: %s", "npm: %s"), status.Runtime.NPMVersion))
-	}
-	if runtimeStatus.Platform == platformWindows && !runtimeStatus.InWSL {
-		lines = append(lines, i.Catalog.Msg("当前 Windows 通过 WSL2 执行安装；后续也建议在 WSL2 Bash 中使用这些 CLI。", "Windows installation was executed via WSL2; keep using these CLIs inside WSL2 Bash for the best experience."))
 	}
 	return lines, nil
 }
@@ -379,6 +391,33 @@ func (i *Installer) manualInstallLines(target targets.Target, runtimeStatus Runt
 		return lines
 	}
 
+	// For targets with a native install script, show it instead of npm.
+	if runtimeStatus.Platform == platformWindows && !runtimeStatus.InWSL && target.NativeInstallPS1 != "" {
+		lines := []string{
+			fmt.Sprintf(i.Catalog.Msg("%s 的推荐安装命令 (Windows PowerShell):", "Recommended install command for %s (Windows PowerShell):"), target.DisplayName),
+			target.NativeInstallPS1,
+			"",
+			i.Catalog.Msg("或使用 WinGet:", "Or use WinGet:"),
+			"winget install Anthropic.ClaudeCode",
+			"",
+			i.Catalog.Msg("前提条件: 需要安装 Git for Windows。", "Prerequisite: Git for Windows must be installed."),
+		}
+		if target.DocsURL != "" {
+			lines = append(lines, fmt.Sprintf(i.Catalog.Msg("官方文档: %s", "Official docs: %s"), target.DocsURL))
+		}
+		return lines
+	}
+	if target.NativeInstallShell != "" {
+		lines := []string{
+			fmt.Sprintf(i.Catalog.Msg("%s 的推荐安装命令:", "Recommended install command for %s:"), target.DisplayName),
+			target.NativeInstallShell,
+		}
+		if target.DocsURL != "" {
+			lines = append(lines, fmt.Sprintf(i.Catalog.Msg("官方文档: %s", "Official docs: %s"), target.DocsURL))
+		}
+		return lines
+	}
+
 	lines := []string{
 		fmt.Sprintf(i.Catalog.Msg("%s 的推荐安装命令:", "Recommended install command for %s:"), target.DisplayName),
 		fmt.Sprintf("npm install -g %s", target.NPMPackage),
@@ -393,25 +432,12 @@ func (i *Installer) manualInstallLines(target targets.Target, runtimeStatus Runt
 	}
 	if runtimeStatus.Platform == platformWindows && !runtimeStatus.InWSL {
 		lines = append(lines, "")
-		lines = append(lines, i.Catalog.Msg("Windows 建议先开启 WSL2。很多 CLI 依赖 Bash 和沙箱能力，在 WSL2 中更稳定。", "On Windows, enable WSL2 first. Many CLIs rely on Bash behavior and sandbox support, and work more reliably inside WSL2."))
-		lines = append(lines, i.Catalog.Msg("在 WSL2 Bash 中安装顺序:", "Suggested sequence inside WSL2 Bash:"))
-		lines = append(lines, fmt.Sprintf("curl -fsSL %s | bash", nvmInstallScriptURL))
-		if target.MinNodeMajor > 0 {
-			lines = append(lines, fmt.Sprintf("export NVM_DIR=\"$HOME/.nvm\" && . \"$NVM_DIR/nvm.sh\" && nvm install %d && nvm use %d", target.MinNodeMajor, target.MinNodeMajor))
-		} else {
-			lines = append(lines, "export NVM_DIR=\"$HOME/.nvm\" && . \"$NVM_DIR/nvm.sh\" && nvm install --lts && nvm use --lts")
+		lines = append(lines, i.Catalog.Msg("Windows 可直接使用原生 npm 安装:", "On Windows, install directly with native npm:"))
+		args := fmt.Sprintf("npm install -g %s", target.NPMPackage)
+		if reg := detectNPMMirror(); reg != "" {
+			args += " --registry " + reg
 		}
-		lines = append(lines, fmt.Sprintf("npm install -g %s", target.NPMPackage))
-		return lines
-	}
-
-	lines = append(lines, "")
-	lines = append(lines, i.Catalog.Msg("如果缺少 nvm，可先执行:", "If nvm is missing, run this first:"))
-	lines = append(lines, fmt.Sprintf("curl -fsSL %s | bash", nvmInstallScriptURL))
-	if target.MinNodeMajor > 0 {
-		lines = append(lines, fmt.Sprintf("export NVM_DIR=\"$HOME/.nvm\" && . \"$NVM_DIR/nvm.sh\" && nvm install %d && nvm use %d", target.MinNodeMajor, target.MinNodeMajor))
-	} else {
-		lines = append(lines, "export NVM_DIR=\"$HOME/.nvm\" && . \"$NVM_DIR/nvm.sh\" && nvm install --lts && nvm use --lts")
+		lines = append(lines, args)
 	}
 	return lines
 }
@@ -576,18 +602,40 @@ npm --version
 
 	switch runtimeStatus.Platform {
 	case platformWindows:
-		if !runtimeStatus.InWSL && !runtimeStatus.WSLReady {
-			// No WSL: try native Windows npm directly.
+		if !runtimeStatus.InWSL {
+			// 1. Native install script via PowerShell (e.g. Claude Code).
+			if target.NativeInstallPS1 != "" {
+				debuglog.Log("bootstrap: using PowerShell native install for %s", target.Name)
+				return runCombined("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", target.NativeInstallPS1)
+			}
+			// 2. Native Windows npm (e.g. Codex).
 			if npmPath, err := lookPath("npm"); err == nil {
+				debuglog.Log("bootstrap: using native npm at %s for %s", npmPath, target.Name)
 				args := []string{"install", "-g", target.NPMPackage}
 				if reg := detectNPMMirror(); reg != "" {
 					args = append(args, "--registry", reg)
 				}
 				return runCombined(npmPath, args...)
 			}
+			// 3. Fall back to WSL bash script.
+			if runtimeStatus.WSLReady {
+				debuglog.Log("bootstrap: falling back to WSL for %s", target.Name)
+				return runCombined("wsl.exe", "bash", "-lc", script)
+			}
+			return nil, errors.New(i.Catalog.Msg(
+				"Windows 上未找到可用的安装方式（无 PowerShell 原生脚本、无 npm、无 WSL）。",
+				"No install method available on Windows (no native script, no npm, no WSL)."))
 		}
-		return runCombined("wsl.exe", "bash", "-lc", script)
+		// Inside WSL: use native install shell script if available, else bash+npm.
+		if target.NativeInstallShell != "" {
+			return runCombined("bash", "-lc", target.NativeInstallShell)
+		}
+		return runCombined("bash", "-lc", script)
 	default:
+		// macOS / Linux: prefer native install shell script if available.
+		if target.NativeInstallShell != "" {
+			return runCombined("bash", "-lc", target.NativeInstallShell)
+		}
 		return runCombined("bash", "-lc", script)
 	}
 }
