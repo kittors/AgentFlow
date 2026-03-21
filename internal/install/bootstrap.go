@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -456,7 +457,7 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; fi
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	return cleanShellOutput(output)
 }
 
 func (i *Installer) wslCommandPath(command string) string {
@@ -474,7 +475,37 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh" >/dev/null 2>&1; fi
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	return cleanShellOutput(output)
+}
+
+// cleanShellOutput strips NULL bytes, ANSI escape sequences, and login
+// banners (MOTD) from shell command output. It returns the last non-empty
+// line, which is the actual command result. This is essential for wsl.exe
+// output which may contain UTF-16LE NULL bytes and for login shells that
+// print welcome messages before the command output.
+func cleanShellOutput(raw []byte) string {
+	// 1. Strip NULL bytes (wsl.exe sometimes outputs UTF-16LE fragments).
+	cleaned := strings.ReplaceAll(string(raw), "\x00", "")
+	// 2. Strip ANSI escape sequences (colors, cursor movement, etc.).
+	cleaned = stripANSI(cleaned)
+	// 3. Take the last non-empty line (skip MOTD/login banners).
+	lines := strings.Split(cleaned, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+// ansiEscapeRe matches ANSI escape sequences including CSI sequences (colors,
+// cursor movement), OSC sequences (terminal titles), and simple two-byte
+// escape sequences.
+var ansiEscapeRe = regexp.MustCompile("\\x1b(?:\\[[0-9;]*[a-zA-Z]|\\][^\x07]*(?:\x07|\\x1b\\\\)|[()][A-Z0-9]|[^\\[\\]()])")
+
+func stripANSI(s string) string {
+	return ansiEscapeRe.ReplaceAllString(s, "")
 }
 
 func (i *Installer) runBootstrapScript(target targets.Target, runtimeStatus RuntimeStatus) ([]byte, error) {
