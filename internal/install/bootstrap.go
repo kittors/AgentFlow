@@ -489,8 +489,10 @@ func (i *Installer) runBootstrapScript(target targets.Target, runtimeStatus Runt
 		registryFlag = " --registry " + shellLiteral(reg)
 	}
 
-	// The script first tries fnm; if fnm is available and npm works, it skips nvm entirely.
-	// Otherwise it falls back to the nvm install-and-source flow.
+	// The script tries: fnm → existing nvm → system npm → download nvm from GitHub.
+	// The system npm fallback is critical: in many WSL setups, node/npm are installed
+	// via apt but neither fnm nor nvm exist. Without this fallback, the script would
+	// try to download nvm from GitHub, which fails behind the GFW.
 	script := fmt.Sprintf(`set -e
 # Try fnm first (Fast Node Manager)
 USE_FNM=0
@@ -502,18 +504,26 @@ fi
 
 if [ "$USE_FNM" = "1" ] && command -v npm >/dev/null 2>&1; then
   npm install -g %s%s
-else
-  # Fall back to nvm
+elif [ -s "$HOME/.nvm/nvm.sh" ]; then
+  # Use existing nvm installation
   export NVM_DIR="$HOME/.nvm"
-  if [ ! -s "$NVM_DIR/nvm.sh" ]; then
-    if command -v curl >/dev/null 2>&1; then
-      curl -fsSL %s | bash
-    elif command -v wget >/dev/null 2>&1; then
-      wget -qO- %s | bash
-    else
-      echo "AgentFlow: curl or wget is required to install nvm." >&2
-      exit 11
-    fi
+  . "$NVM_DIR/nvm.sh"
+  %s
+  npm install -g %s%s
+elif command -v npm >/dev/null 2>&1; then
+  # System npm is available (e.g. installed via apt); use it directly.
+  npm install -g %s%s
+else
+  # Last resort: download and install nvm from GitHub.
+  export NVM_DIR="$HOME/.nvm"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL %s | bash
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO- %s | bash
+  else
+    echo "AgentFlow: curl or wget is required to install nvm." >&2
+    echo "AgentFlow: 或者先通过 apt install nodejs npm 安装 Node.js。" >&2
+    exit 11
   fi
   . "$NVM_DIR/nvm.sh"
   %s
@@ -522,7 +532,12 @@ fi
 command -v %s >/dev/null 2>&1
 node --version
 npm --version
-`, shellLiteral(target.NPMPackage), registryFlag, shellLiteral(nvmInstallScriptURL), shellLiteral(nvmInstallScriptURL), nodeInstall, shellLiteral(target.NPMPackage), registryFlag, shellLiteral(target.Command))
+`, shellLiteral(target.NPMPackage), registryFlag,
+		nodeInstall, shellLiteral(target.NPMPackage), registryFlag,
+		shellLiteral(target.NPMPackage), registryFlag,
+		shellLiteral(nvmInstallScriptURL), shellLiteral(nvmInstallScriptURL),
+		nodeInstall, shellLiteral(target.NPMPackage), registryFlag,
+		shellLiteral(target.Command))
 
 	switch runtimeStatus.Platform {
 	case platformWindows:

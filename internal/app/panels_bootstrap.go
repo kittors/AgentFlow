@@ -471,9 +471,17 @@ func (a *App) cliDetailPanel(targetName string) ui.Panel {
 func (a *App) bootstrapAutoPanel(targetName string) ui.Panel {
 	lines, err := a.Installer.BootstrapCLI(targetName)
 	if err != nil {
+		// lines contains failure details (last 8 lines of command output)
+		// from failureLines(); show them alongside the error message.
+		errorLines := make([]string, 0, len(lines)+2)
+		errorLines = append(errorLines, err.Error())
+		if len(lines) > 0 {
+			errorLines = append(errorLines, "")
+			errorLines = append(errorLines, lines...)
+		}
 		return ui.Panel{
 			Title: "❌ " + a.Catalog.Msg("CLI 安装失败", "CLI install failed"),
-			Lines: []string{err.Error()},
+			Lines: errorLines,
 		}
 	}
 	// Highlight all output lines in green for success.
